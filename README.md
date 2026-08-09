@@ -1,17 +1,52 @@
-# ai_planner
+# 问道 WenDao
 
-A new Flutter project.
+个人全维度 AI 规划助手。根据你的身体、饮食、财务、生活状态，AI 智能规划健身训练、饮食计划和财务方案，全程跟踪、每日建议、定期总结。
 
-## Getting Started
+## ✨ 核心特色
 
-This project is a starting point for a Flutter application.
+### 🧠 本地智脑（RAG）
+- 纯算法检索（BM25 式打分 + 中文滑窗分词），无需本地 AI、无需好硬件
+- 书籍全文 + 大师知识库 + 个人数据统一索引，秒级检索
+- 预索引缓存 + 场景过滤 + 片段截断，Token 消耗降 50%+
 
-A few resources to get you started if this is your first Flutter project:
+### 🏯 道法术养行五层融合体系
+- **道**｜训练哲学：阴阳平衡、专气致柔、反者道之动、缘督以为经
+- **法**｜训练分期：筑基（体态纠正）→ 进阶（力量提升）→ 化境（意念控制）
+- **术**｜动作设计：每动作关联经络 + 筋膜链 + 穴位 + 呼吸法 + 导引术
+- **养**｜恢复养生：穴位按压、八段锦/易筋经放松、中医食疗配合
+- **行**｜生活节律：四季侧重、子午流注、情绪匹配、起居作息
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### 💪 健身训练
+- 苗振（诺亚第）体系：316呼吸法、犁式呼吸、三腔对位、脊柱中正
+- 器械感知：AI 根据健身房实际器械实时调整，缺器械自动变通替换
+- 训练记录跟踪，根据今日表现自动排下次方案
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 🥗 饮食营养
+- 饮食记录 + 热量计算
+- 中医食疗（四气五味归经）与运动营养结合
+
+### 💰 财务规划
+- 收支记录、预算管理、超支预警
+- 资产持仓（基金/ETF）与负债（花呗等）管理
+- 微信/支付宝账单 CSV 导入
+- 巴菲特 / 芒格 / 舍费尔 / 纳瓦尔 / 小而美大师智慧注入
+
+### 🌿 中医与历法
+- 身体评估：BMI / 体脂率 / 安全减脂预估
+- 生活状态记录（压力/精力/睡眠），情绪匹配训练类型
+
+### 🌐 联网搜索
+- 微信公众号 / Bing / 百度多源搜索，AI 综合分析
+
+## 🛠 技术栈
+Flutter · Provider · sqflite · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
+
+## 📁 目录结构
+- `lib/services/` AI引擎、本地智脑算法、联网搜索、账单导入
+- `lib/screens/` 训练/饮食/财务/知识库/AI 各界面
+- `books/` 内置书籍资源
+- `assets/books/` 提取后的书籍文本
+
+## 📝 说明
+- 纯本地存储，无需服务器，数据不出手机
+- AI 需自备 API Key（国内大模型均可）

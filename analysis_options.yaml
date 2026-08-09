@@ -1,0 +1,12 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - flutter_sdk/**
+    - "**/*.g.dart"
+  errors:
+    deprecated_member_use: info
+
+linter:
+  rules:
+    avoid_print: false

@@ -5,6 +5,67 @@ P1 后端平台部署手册。目标：Linux 服务器 + 域名 + cloudflared �
 
 ---
 
+## 零、一键部署（推荐）
+
+只需填一个配置文件，`deploy.sh` 全自动完成：装 Docker → 生成 `.env` → 建 Cloudflare 隧道+DNS → 启动 → 13 项验收 → 备份 cron。**无需**手到 Cloudflare 后台建隧道。
+
+### 1. 准备配置
+
+```bash
+cd /opt/wendao/server        # 上传代码到服务器后
+cp deploy.conf.example deploy.conf
+vi deploy.conf               # 只需填 3 项
+```
+
+`deploy.conf` 三个必填项：
+
+| 变量 | 说明 |
+|---|---|
+| `CF_API_TOKEN` | Cloudflare API Token（下方指引创建） |
+| `DOMAIN` | 你的域名，如 `example.com` |
+| `SUBDOMAIN` | 隧道入口前缀，如 `api` → 部署后为 `api.example.com` |
+
+**CF_API_TOKEN 创建**：Cloudflare Dashboard → My Profile → API Tokens → Create Token → 模板选 **Edit Cloudflare Tunnel**，Permissions 加 `Zone:DNS:Edit`、`Account:Cloudflare Tunnel:Edit`，Zone Resources 选你的域名 → 复制 token 填入。
+
+### 2. 执行部署
+
+```bash
+bash deploy.sh
+```
+
+可选参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--dry-run` | 只打印将执行的命令，不真正改动（演练） |
+| `--update` | 已部署过的日常更新（只重启+验收，跳过隧道/装 Docker） |
+| `--skip-docker` | 跳过 Docker 安装 |
+| `--skip-tunnel` | 跳过 Cloudflare 隧道/DNS（手工管理时用） |
+| `-h, --help` | 帮助 |
+
+**幂等**：重复执行安全——已有 `.env`/隧道/DNS/cron 都会复用或更新，不会重复创建。
+
+### 3. 验收
+
+脚本末尾自动跑 `scripts/acceptance.py`（13 项），全绿才算部署成功。也可手动：
+
+```bash
+python3 scripts/acceptance.py --base-url https://api.你的域名.com
+```
+
+### 4. 日常更新
+
+```bash
+cd /opt/wendao && git pull
+cd server && bash deploy.sh --update
+```
+
+> 隧道凭证、密钥等状态存在 `server/deploy/`（含 `tunnel_secret`、`deploy.state`）。**务必备份 `server/.env` 和 `server/deploy/`**，丢失 `.env` 会导致数据无法解密、隧道需重建。
+>
+> 下方「一～六」为手工部署步骤，仅作 `deploy.sh` 出错时的排查兜底参考，日常不必手动执行。
+
+---
+
 ## 一、前置条件
 
 | 项 | 要求 |

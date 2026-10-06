@@ -61,6 +61,8 @@ __pycache__/
 .venv/
 venv/
 server/.env
+server/deploy.conf
+server/deploy/
 
 # 临时文件
 *.tmp

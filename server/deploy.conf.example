@@ -1,0 +1,31 @@
+# ============================================================
+# 问道服务端 · 一键部署配置（deploy.conf）
+# 使用方法：复制本文件为 deploy.conf 并填写必填项，然后执行 bash deploy.sh
+#   cp deploy.conf.example deploy.conf && vi deploy.conf
+# ============================================================
+
+# ===== 必填 =====
+
+# Cloudflare API Token（只填这一个凭证，隧道全自动创建）
+# 创建方法：Cloudflare dashboard → 右上角头像 → My Profile → API Tokens → Create Token
+#   → 模板选 "Edit Cloudflare Tunnel" → Permissions 追加 Zone:DNS:Edit
+#   → Zone Resources 选你的域名 → Create → 复制生成的 token
+CF_API_TOKEN=""
+
+# 托管在 Cloudflare 的主域名（已添加到 Cloudflare 的站点）
+DOMAIN=""
+
+# 想使用的子域名 → 最终访问地址为 https://<SUBDOMAIN>.<DOMAIN>
+# 例：SUBDOMAIN="api" → https://api.example.com
+SUBDOMAIN=""
+
+# ===== 可选（留空则自动处理） =====
+
+# Cloudflare Account ID（留空自动通过 API 查询）
+CF_ACCOUNT_ID=""
+
+# 部署目录（服务器上的安装位置）
+DEPLOY_DIR="/opt/wendao"
+
+# 每日数据库备份时间（HH:MM，24 小时制）
+BACKUP_TIME="03:00"

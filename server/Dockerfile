@@ -7,7 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 使用国内镜像源（PyPI 官方源在国内网络下易超时），并开启超时重试
+ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -i ${PIP_INDEX} --timeout 60 --retries 5 -r requirements.txt
 
 COPY app ./app
 

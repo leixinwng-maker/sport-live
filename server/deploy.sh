@@ -146,7 +146,8 @@ ensure_env() {
   env_set JWT_SECRET "$jwt"
   env_set POSTGRES_PASSWORD "$dbpass"
   env_set DATABASE_URL "postgresql+asyncpg://wendao:${dbpass}@db:5432/wendao"
-  env_set AUTO_CREATE_TABLES "false"
+  # P1 未配 alembic 迁移，必须由应用启动时自动建表+种子数据
+  env_set AUTO_CREATE_TABLES "true"
   env_set LOGIN_RATE_LIMIT "10"
   env_set LOGIN_WINDOW_SECONDS "300"
   env_set SYNC_MAX_BATCH "500"

@@ -53,6 +53,15 @@ Thumbs.db
 # 测试
 test/.test_coverage.dart
 
+# Python / 服务端
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+server/.env
+
 # 临时文件
 *.tmp
 *.bak

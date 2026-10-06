@@ -1,0 +1,49 @@
+# 问道 WenDao 后端部署：postgres + api + cloudflared 隧道
+# 用法：cp .env.example .env && 编辑 .env && docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wendao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-wendao}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wendao}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wendao}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-wendao}
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 设置 JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-10}
+      PUSH_BATCH_LIMIT: ${PUSH_BATCH_LIMIT:-500}
+      PULL_PAGE_LIMIT: ${PULL_PAGE_LIMIT:-500}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
+      AUTO_CREATE_TABLES: ${AUTO_CREATE_TABLES:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN:?请在 .env 设置 CLOUDFLARED_TOKEN}
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

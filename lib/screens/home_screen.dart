@@ -7,8 +7,10 @@ import 'workout/workout_list_screen.dart';
 import 'diet/diet_list_screen.dart';
 import 'finance/finance_screen.dart';
 import 'life/life_status_screen.dart';
+import 'knowledge/knowledge_screen.dart';
 import 'ai/ai_screen.dart';
 import 'settings/settings_screen.dart';
+import 'health/health_archive_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -136,6 +138,8 @@ class DashboardScreen extends StatelessWidget {
                 _buildStatsRow(provider),
                 const SizedBox(height: 16),
                 _buildHealthAssessmentCard(context, provider),
+                const SizedBox(height: 16),
+                _buildHealthArchiveCard(context, provider),
                 const SizedBox(height: 16),
                 _buildTodayOverview(context, provider),
                 const SizedBox(height: 16),
@@ -740,6 +744,70 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  /// 健康档案入口卡片
+  Widget _buildHealthArchiveCard(BuildContext context, AppProvider provider) {
+    final hasProfile = provider.healthProfile != null &&
+        !provider.healthProfile!.isEmpty;
+    final metricCount = provider.healthMetrics.length;
+    final reportCount = provider.healthReports.length;
+
+    return Card(
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HealthArchiveScreen()),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: TaoistTheme.jadeGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.health_and_safety_outlined,
+                    size: 24, color: TaoistTheme.jadeGreen),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '健康档案',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: TaoistTheme.inkBlack,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      hasProfile
+                          ? '档案${hasProfile ? '已填' : ''} · 指标$metricCount条 · 报告$reportCount份'
+                          : '病史/过敏/体检报告 · 指标趋势 · AI解读',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: TaoistTheme.cloudGray,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: TaoistTheme.cloudGray),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTodayOverview(BuildContext context, AppProvider provider) {
     final today = DateTime.now();
     final dateStr = today.toIso8601String().substring(0, 10);
@@ -856,6 +924,37 @@ class DashboardScreen extends StatelessWidget {
                 icon: Icons.spa,
                 label: '记录状态',
                 screen: const LifeStatusScreen(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionButton(
+                context,
+                icon: Icons.auto_awesome,
+                label: 'AI对话',
+                screen: const AIScreen(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildQuickActionButton(
+                context,
+                icon: Icons.health_and_safety_outlined,
+                label: '健康档案',
+                screen: const HealthArchiveScreen(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildQuickActionButton(
+                context,
+                icon: Icons.menu_book_outlined,
+                label: '知识库',
+                screen: const KnowledgeScreen(),
               ),
             ),
           ],

@@ -320,7 +320,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     await _loadNotes();
   }
 
-  Future<void> _deleteNote(int id) async {
+  Future<void> _deleteNote(String id) async {
     final provider = Provider.of<AppProvider>(context, listen: false);
     await provider.deleteBookNote(id);
     await _loadNotes();

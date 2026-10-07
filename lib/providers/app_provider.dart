@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import '../models/user_profile.dart';
 import '../models/workout.dart';
 import '../models/diet.dart';
@@ -6,12 +7,17 @@ import '../models/finance.dart';
 import '../models/knowledge.dart';
 import '../models/life_status.dart';
 import '../models/ai_advice.dart';
+import '../models/health_profile.dart';
+import '../models/health_metric.dart';
+import '../models/health_report.dart';
 import '../services/database_helper.dart';
 import '../services/ai_engine.dart';
 import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
 import '../services/search_service.dart';
 import '../services/knowledge_engine.dart';
+import '../services/book_seeder.dart';
+import '../services/local_ocr_service.dart';
 import '../data/food_catalog_data.dart';
 import '../data/knowledge_seed_data.dart';
 
@@ -33,6 +39,11 @@ class AppProvider extends ChangeNotifier {
   List<Debt> debts = [];
   List<KnowledgeEntry> knowledgeEntries = [];
   List<Book> books = [];
+
+  // 健康档案
+  HealthProfile? healthProfile;
+  List<HealthMetric> healthMetrics = [];
+  List<HealthReport> healthReports = [];
 
   // 个人数据摘要缓存（按天复用，避免重复拼装）
   String _personalCacheDate = '';
@@ -61,6 +72,10 @@ class AppProvider extends ChangeNotifier {
       userProfile = await _db.getUserProfile();
       await _db.seedFoodCatalog(FoodCatalogData.foods);
       await _db.seedKnowledge(KnowledgeSeedData.entries);
+      // 内置书籍自动入库（仅首次，异步后台执行避免阻塞启动）
+      BookSeeder.seedIfNeeded(_db).then((count) {
+        if (count > 0) loadAllData();
+      });
       await loadAllData();
       lunarInfo = _lunarService.getTodayInfo();
     } catch (e) {
@@ -88,6 +103,10 @@ class AppProvider extends ChangeNotifier {
     debts = await _db.getDebts();
     knowledgeEntries = await _db.getKnowledgeEntries();
     books = await _db.getBooks();
+    // 健康档案数据
+    healthProfile = await _db.getHealthProfile();
+    healthMetrics = await _db.getHealthMetrics();
+    healthReports = await _db.getHealthReports();
     // 数据变更后重置个人数据摘要缓存
     _personalCacheDate = '';
     notifyListeners();
@@ -178,6 +197,31 @@ class AppProvider extends ChangeNotifier {
       }
     }
 
+    // 健康档案：病史/过敏/注意事项 + 近期健康指标
+    final hp = healthProfile;
+    if (hp != null && !hp.isEmpty) {
+      final parts = <String>[];
+      if (hp.chronicDiseases.isNotEmpty) parts.add('慢性病:${hp.chronicDiseases}');
+      if (hp.allergies.isNotEmpty) parts.add('过敏:${hp.allergies}');
+      if (hp.medications.isNotEmpty) parts.add('用药:${hp.medications}');
+      if (hp.surgeries.isNotEmpty) parts.add('手术:${hp.surgeries}');
+      if (hp.specialNotes.isNotEmpty) parts.add('注意:${hp.specialNotes}');
+      if (parts.isNotEmpty) {
+        buf.writeln('健康档案: ${parts.join('; ')}');
+      }
+    }
+    final recentMetrics = healthMetrics
+        .where((m) => m.date.isAfter(cutoff))
+        .toList();
+    if (recentMetrics.isNotEmpty) {
+      final metricsText = recentMetrics
+          .take(5)
+          .map((m) =>
+              '${m.date.month}/${m.date.day} ${m.type}${m.value}${m.unit ?? ''}')
+          .join('; ');
+      buf.writeln('近期健康指标: $metricsText');
+    }
+
     final text = buf.toString();
     _personalCacheDate = today;
     _personalCacheText = text;
@@ -208,7 +252,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteKnowledgeEntry(int id) async {
+  Future<void> deleteKnowledgeEntry(String id) async {
     await _db.deleteKnowledgeEntry(id);
     await loadAllData();
   }
@@ -219,16 +263,16 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteBook(int id) async {
+  Future<void> deleteBook(String id) async {
     await _db.deleteBook(id);
     await loadAllData();
   }
 
-  Future<List<BookNote>> getBookNotes(int bookId) async {
+  Future<List<BookNote>> getBookNotes(String bookId) async {
     return await _db.getBookNotes(bookId);
   }
 
-  Future<void> addBookNote(int bookId, String content) async {
+  Future<void> addBookNote(String bookId, String content) async {
     await _db.saveBookNote(BookNote(
       bookId: bookId,
       content: content,
@@ -236,7 +280,7 @@ class AppProvider extends ChangeNotifier {
     ));
   }
 
-  Future<void> deleteBookNote(int id) async {
+  Future<void> deleteBookNote(String id) async {
     await _db.deleteBookNote(id);
   }
 
@@ -324,7 +368,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteWorkout(int id) async {
+  Future<void> deleteWorkout(String id) async {
     await _db.deleteWorkout(id);
     await loadAllData();
   }
@@ -335,7 +379,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteDietRecord(int id) async {
+  Future<void> deleteDietRecord(String id) async {
     await _db.deleteDietRecord(id);
     await loadAllData();
   }
@@ -346,7 +390,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteFinanceRecord(int id) async {
+  Future<void> deleteFinanceRecord(String id) async {
     await _db.deleteFinanceRecord(id);
     await loadAllData();
   }
@@ -406,7 +450,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteAsset(int id) async {
+  Future<void> deleteAsset(String id) async {
     await _db.deleteAsset(id);
     await loadAllData();
   }
@@ -432,7 +476,7 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  Future<void> deleteDebt(int id) async {
+  Future<void> deleteDebt(String id) async {
     await _db.deleteDebt(id);
     await loadAllData();
   }
@@ -702,15 +746,95 @@ class AppProvider extends ChangeNotifier {
     required String baseUrl,
     required String apiKey,
     required String model,
+    String visionModel = '',
   }) async {
     await _ai.saveConfig(
       baseUrl: baseUrl,
       apiKey: apiKey,
       model: model,
+      visionModel: visionModel,
     );
     aiConfigured = true;
     notifyListeners();
   }
+
+  /// 本地 OCR 识别图片文字（免费离线，不依赖视觉模型）
+  Future<String> localOcrRecognize({
+    String? filePath,
+    Uint8List? bytes,
+  }) async {
+    return await LocalOcrService.instance.recognize(
+      filePath: filePath,
+      bytes: bytes,
+    );
+  }
+
+  // ============ 健康档案 ============
+  /// 保存健康档案信息
+  Future<void> saveHealthProfile(HealthProfile profile) async {
+    final id = await _db.saveHealthProfile(profile);
+    healthProfile = profile.copyWith(id: id);
+    notifyListeners();
+  }
+
+  /// 新增健康指标
+  Future<void> addHealthMetric(HealthMetric metric) async {
+    await _db.saveHealthMetric(metric);
+    await loadAllData();
+  }
+
+  /// 删除健康指标
+  Future<void> deleteHealthMetric(String id) async {
+    await _db.deleteHealthMetric(id);
+    await loadAllData();
+  }
+
+  /// 保存体检报告
+  Future<void> addHealthReport(HealthReport report) async {
+    await _db.saveHealthReport(report);
+    await loadAllData();
+  }
+
+  /// 更新体检报告（识别文字/AI解读结果）
+  Future<void> updateHealthReport(HealthReport report) async {
+    if (report.id == null) return;
+    await _db.saveHealthReport(report);
+    await loadAllData();
+  }
+
+  /// 删除体检报告
+  Future<void> deleteHealthReport(String id) async {
+    await _db.deleteHealthReport(id);
+    await loadAllData();
+  }
+
+  /// 生成体检报告 AI 解读
+  Future<String> analyzeHealthReport(HealthReport report) async {
+    final metricsText = healthMetrics
+        .where((m) => !m.date.isBefore(report.date.subtract(const Duration(days: 365))))
+        .map((m) => '${m.date.toString().substring(0, 10)} ${m.type} ${m.value} ${m.unit ?? ''}')
+        .join('\n');
+    return await _ai.analyzeHealthReport(
+      reportText: report.ocrText.isEmpty ? report.title : report.ocrText,
+      userProfile: _userProfileText(),
+      recentMetrics: metricsText,
+      knowledge: getBrainContext('体检报告 健康指标 养生', topN: 4),
+    );
+  }
+
+  String _userProfileText() {
+    final p = userProfile;
+    if (p == null) return '未填写';
+    return '身高${p.height}cm 体重${p.weight}kg 年龄${p.age} 性别${p.gender} '
+        '目标:${p.goal} BMI:${getBMI().toStringAsFixed(1)}';
+  }
+
+  /// 图片识别：识别体检报告图片文字（需配置视觉模型）
+  Future<String?> recognizeImage(String imageBase64) async {
+    return await _ai.recognizeImage(imageBase64: imageBase64);
+  }
+
+  bool get hasVisionModel => _ai.hasVisionModel;
 
   // ============ 联网搜索 ============
   /// 执行联网搜索（微信/Bing/百度多源）

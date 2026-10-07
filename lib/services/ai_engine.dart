@@ -2,6 +2,31 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 工具调用请求（由模型返回）
+class ToolCall {
+  final String id;
+  final String name;
+  final Map<String, dynamic> arguments;
+
+  const ToolCall({required this.id, required this.name, required this.arguments});
+}
+
+/// 模型响应：纯文本或工具调用
+class ChatResponse {
+  final String? text;
+  final List<ToolCall>? toolCalls;
+
+  const ChatResponse({this.text, this.toolCalls});
+}
+
+/// 模型不支持 function calling（tools 参数被拒绝）
+class ToolsUnsupportedException implements Exception {
+  final String message;
+  ToolsUnsupportedException([this.message = '当前模型不支持工具调用']);
+  @override
+  String toString() => message;
+}
+
 /// AI建议引擎 - 调用国内大模型API
 /// 支持：通义千问、文心一言、DeepSeek
 class AIEngine {
@@ -50,6 +75,101 @@ class AIEngine {
   /// 调用大模型
   /// [messages] 对话消息列表
   Future<String> chat(List<Map<String, String>> messages) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+
+    final url = '$_baseUrl/v1/chat/completions';
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': _model,
+        'messages': messages,
+        'temperature': 0.7,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      return data['choices'][0]['message']['content'] as String;
+    } else {
+      throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+    }
+  }
+
+  /// 智能体调用：带工具定义的多轮请求（OpenAI function calling 兼容格式）
+  /// 返回 [ChatResponse]：含 toolCalls 时由调用方执行工具后以 role:'tool' 回传
+  Future<ChatResponse> chatWithTools({
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>> tools,
+  }) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+
+    final url = '$_baseUrl/v1/chat/completions';
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': _model,
+        'messages': messages,
+        'tools': tools,
+        'tool_choice': 'auto',
+        'temperature': 0.7,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final message = data['choices'][0]['message'] as Map<String, dynamic>;
+      final toolCallsRaw = message['tool_calls'] as List?;
+      if (toolCallsRaw != null && toolCallsRaw.isNotEmpty) {
+        final calls = <ToolCall>[];
+        for (final tc in toolCallsRaw) {
+          final map = tc as Map<String, dynamic>;
+          final fn = (map['function'] ?? {}) as Map<String, dynamic>;
+          Map<String, dynamic> args = {};
+          final rawArgs = fn['arguments'];
+          if (rawArgs is String && rawArgs.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(rawArgs);
+              if (decoded is Map<String, dynamic>) args = decoded;
+            } catch (_) {}
+          } else if (rawArgs is Map<String, dynamic>) {
+            args = rawArgs;
+          }
+          calls.add(ToolCall(
+            id: (map['id'] ?? '') as String,
+            name: (fn['name'] ?? '') as String,
+            arguments: args,
+          ));
+        }
+        return ChatResponse(toolCalls: calls);
+      }
+      return ChatResponse(text: (message['content'] ?? '') as String);
+    } else if (response.statusCode == 400) {
+      // 部分模型/网关不支持 tools 参数，识别后由上层降级
+      final body = utf8.decode(response.bodyBytes);
+      final lower = body.toLowerCase();
+      if (lower.contains('tool') || lower.contains('function')) {
+        throw ToolsUnsupportedException();
+      }
+      throw Exception('AI请求失败: ${response.statusCode} $body');
+    } else {
+      throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+    }
+  }
+
+  /// 降级请求：不带 tools（消息里可能含注入的数据上下文）
+  Future<String> chatFallback(List<Map<String, dynamic>> messages) async {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
     }

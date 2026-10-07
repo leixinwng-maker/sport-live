@@ -10,6 +10,7 @@ import '../models/ai_advice.dart';
 import '../models/health_profile.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
+import '../services/cloud_api.dart';
 import '../services/database_helper.dart';
 import '../services/ai_engine.dart';
 import '../services/lunar_service.dart';
@@ -53,6 +54,9 @@ class AppProvider extends ChangeNotifier {
   bool isLoading = false;
   String? error;
 
+  // 会话状态（T4 登录门）：null=检查中；true=需登录；false=已登录或离线浏览
+  bool? needsLogin;
+
   // 历法
   final LunarService _lunarService = LunarService();
   LunarInfo? lunarInfo;
@@ -67,6 +71,16 @@ class AppProvider extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
+      // 恢复云端会话（T4 登录门）：有 token 直接进主界面（离线可看缓存），无 token 显示登录页
+      final cloud = CloudApi.instance;
+      await cloud.init();
+      needsLogin = !cloud.authenticated;
+      cloud.sessionExpired.listen((_) {
+        if (needsLogin != true) {
+          needsLogin = true;
+          notifyListeners();
+        }
+      });
       await _ai.init();
       aiConfigured = _ai.isConfigured;
       userProfile = await _db.getUserProfile();
@@ -82,6 +96,19 @@ class AppProvider extends ChangeNotifier {
       error = e.toString();
     }
     isLoading = false;
+    notifyListeners();
+  }
+
+  /// 登录/注册成功后回调：离开登录页。
+  void completeLogin() {
+    needsLogin = false;
+    notifyListeners();
+  }
+
+  /// 登出：仅清 token 会话；本地缓存清除由设置页"一键清除本地数据"负责（T6）。
+  Future<void> logout() async {
+    await CloudApi.instance.clearSession();
+    needsLogin = true;
     notifyListeners();
   }
 

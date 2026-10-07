@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'providers/app_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/lock/lock_screen.dart';
 import 'theme/taoist_theme.dart';
 
 void main() {
@@ -32,16 +33,18 @@ class MyApp extends StatelessWidget {
         theme: TaoistTheme.lightTheme,
         darkTheme: TaoistTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: Consumer<AppProvider>(
-          builder: (context, provider, _) {
-            final need = provider.needsLogin;
-            if (need == null) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-            return need ? const LoginScreen() : const HomeScreen();
-          },
+        home: AppLockGate(
+          child: Consumer<AppProvider>(
+            builder: (context, provider, _) {
+              final need = provider.needsLogin;
+              if (need == null) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              return need ? const LoginScreen() : const HomeScreen();
+            },
+          ),
         ),
       ),
     );

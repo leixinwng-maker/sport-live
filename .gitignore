@@ -67,3 +67,9 @@ server/deploy/
 # 临时文件
 *.tmp
 *.bak
+
+# 本地工具链与临时输出（体积大，不入库）
+android_sdk/
+jdk17/
+.analyze_out.txt
+.pubget_out.txt

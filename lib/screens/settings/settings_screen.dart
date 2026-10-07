@@ -3,7 +3,11 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/user_profile.dart';
-import '../../services/sync_service.dart';
+import '../../services/app_lock_service.dart';
+import '../../services/cloud_api.dart';
+import '../../services/database_helper.dart';
+import '../../services/sync_engine.dart';
+import 'cloud_sync_screen.dart';
 import '../ai/ai_screen.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../knowledge/book_library_screen.dart';
@@ -114,21 +118,82 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // 数据同步
+          // 账号
           Card(
             child: ListTile(
-              leading: const Icon(Icons.sync, color: TaoistTheme.bambooGreen),
-              title: const Text('数据同步'),
-              subtitle: const Text('局域网/云盘同步与备份'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SyncScreen(),
-                  ),
+              leading: const Icon(Icons.account_circle_outlined,
+                  color: TaoistTheme.jadeGreen),
+              title: Text(provider.needsLogin == false
+                  ? (CloudApi.instance.userEmail ?? '已登录')
+                  : '未登录'),
+              subtitle: const Text('云端账号'),
+              trailing: TextButton(
+                onPressed: () => _confirmLogout(context, provider),
+                child: const Text('退出登录'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 云同步
+          Card(
+            child: AnimatedBuilder(
+              animation: SyncEngine.instance,
+              builder: (context, _) {
+                final engine = SyncEngine.instance;
+                String sub;
+                if (provider.needsLogin != false) {
+                  sub = '登录后自动同步';
+                } else if (engine.isSyncing) {
+                  sub = '正在同步...';
+                } else if (engine.pendingCount > 0) {
+                  sub = '待上传 ${engine.pendingCount} 项';
+                } else {
+                  sub = '已同步';
+                }
+                return ListTile(
+                  leading: const Icon(Icons.sync,
+                      color: TaoistTheme.bambooGreen),
+                  title: const Text('云同步'),
+                  subtitle: Text(sub),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CloudSyncScreen(),
+                      ),
+                    );
+                  },
                 );
               },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 安全
+          Card(
+            child: AnimatedBuilder(
+              animation: AppLockService.instance,
+              builder: (context, _) => Column(
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.lock_outline,
+                        color: TaoistTheme.teaBrown),
+                    title: const Text('应用锁'),
+                    subtitle: const Text('打开应用或回前台超过1分钟时验证身份'),
+                    value: AppLockService.instance.enabled,
+                    onChanged: (val) => _toggleAppLock(context, val),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_sweep_outlined,
+                        color: Colors.redAccent),
+                    title: const Text('一键清除本地数据'),
+                    subtitle: const Text('删除本机缓存与密钥，云端数据不受影响'),
+                    onTap: () => _confirmWipeLocal(context, provider),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -144,6 +209,127 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 退出登录
+  Future<void> _confirmLogout(BuildContext context, AppProvider provider) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('退出登录'),
+        content: const Text(
+            '退出会停止同步并清空本机待传队列，云端数据保留，重新登录后自动拉取。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('退出')),
+        ],
+      ),
+    );
+    if (ok == true) await provider.logout();
+  }
+
+  /// 开启/关闭应用锁（开启时设置 6 位数字 PIN）
+  Future<void> _toggleAppLock(BuildContext context, bool enable) async {
+    if (!enable) {
+      await AppLockService.instance.disable();
+      return;
+    }
+    final pin = await _askPin(context, '设置应用锁 PIN（6位数字）');
+    if (pin == null || !context.mounted) return;
+    final again = await _askPin(context, '再次输入 PIN 确认');
+    if (again == null) return;
+    if (again != pin) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('两次输入不一致，未开启应用锁')),
+        );
+      }
+      return;
+    }
+    final bio = await AppLockService.instance.biometricsAvailable();
+    await AppLockService.instance.enable(pin: pin, biometric: bio);
+  }
+
+  Future<String?> _askPin(BuildContext context, String title) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            decoration: const InputDecoration(
+              hintText: '●●●●●●',
+              counterText: '',
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消')),
+            ElevatedButton(
+              onPressed: () {
+                final pin = controller.text.trim();
+                if (pin.length != 6 || int.tryParse(pin) == null) {
+                  Navigator.pop(dialogContext);
+                  return;
+                }
+                Navigator.pop(dialogContext, pin);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 一键清除本地数据：停引擎→清游标（重建后全量重拉）→删库与密钥→重启引擎
+  Future<void> _confirmWipeLocal(
+      BuildContext context, AppProvider provider) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除本地数据'),
+        content: const Text(
+            '将删除本机加密数据库与密钥并重建为空库，随后自动从云端重新同步。云端数据不受影响。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('清除并重建'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    SyncEngine.instance.stop();
+    await SyncEngine.instance.clearPullCursor();
+    await DatabaseHelper.instance.wipeLocalData();
+    SyncEngine.instance.start();
+    await provider.loadAllData();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本地数据已清除，正在从云端重新同步')),
+      );
+    }
   }
 }
 
@@ -490,313 +676,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// 数据同步页
-class SyncScreen extends StatefulWidget {
-  const SyncScreen({super.key});
-
-  @override
-  State<SyncScreen> createState() => _SyncScreenState();
-}
-
-class _SyncScreenState extends State<SyncScreen> {
-  final SyncService _syncService = SyncService();
-  final _lanServerController = TextEditingController();
-  final _webdavUrlController = TextEditingController();
-  final _webdavUserController = TextEditingController();
-  final _webdavPassController = TextEditingController();
-
-  String? _status;
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadConfig();
-  }
-
-  @override
-  void dispose() {
-    _lanServerController.dispose();
-    _webdavUrlController.dispose();
-    _webdavUserController.dispose();
-    _webdavPassController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadConfig() async {
-    final lanUrl = await _syncService.getLanServerUrl();
-    final webdav = await _syncService.getWebDAVConfig();
-    if (mounted) {
-      _lanServerController.text = lanUrl;
-      _webdavUrlController.text = webdav['url'] ?? '';
-      _webdavUserController.text = webdav['username'] ?? '';
-      _webdavPassController.text = webdav['password'] ?? '';
-    }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    setState(() => _status = message);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _startLanServer() async {
-    setState(() => _isLoading = true);
-    try {
-      await _syncService.startLanServer(8080);
-      _showMessage('局域网同步服务已启动，请让其他设备连接本机IP的8080端口');
-    } catch (e) {
-      _showMessage('启动失败: $e');
-    }
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _sendToLanServer() async {
-    setState(() => _isLoading = true);
-    try {
-      final dataJson = await _syncService.exportToJson();
-      await _syncService.sendToLanServer(
-        serverUrl: _lanServerController.text.trim(),
-        dataJson: dataJson,
-      );
-      _showMessage('数据已发送到局域网服务器');
-    } catch (e) {
-      _showMessage('同步失败: $e');
-    }
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _saveWebDAV() async {
-    await _syncService.saveWebDAVConfig(
-      url: _webdavUrlController.text.trim(),
-      username: _webdavUserController.text.trim(),
-      password: _webdavPassController.text.trim(),
-    );
-    _showMessage('WebDAV配置已保存');
-  }
-
-  Future<void> _uploadWebDAV() async {
-    setState(() => _isLoading = true);
-    try {
-      await _syncService.uploadToWebDAV();
-      _showMessage('数据已上传到云盘');
-    } catch (e) {
-      _showMessage('上传失败: $e');
-    }
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _downloadWebDAV() async {
-    setState(() => _isLoading = true);
-    try {
-      await _syncService.downloadFromWebDAV();
-      if (!mounted) return;
-      final provider = Provider.of<AppProvider>(context, listen: false);
-      await provider.loadAllData();
-      _showMessage('数据已从云盘下载');
-    } catch (e) {
-      _showMessage('下载失败: $e');
-    }
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _exportToFile() async {
-    try {
-      final path = await _syncService.exportToFile();
-      _showMessage('已导出到: $path');
-    } catch (e) {
-      _showMessage('导出失败: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('数据同步'),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (_status != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      _status!,
-                      style: const TextStyle(
-                        color: TaoistTheme.jadeGreen,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-
-                // ===== 局域网同步 =====
-                const Text(
-                  '局域网同步',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: TaoistTheme.inkBlack,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '在同一WiFi下，电脑端和手机端直接传输数据，无需互联网',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: TaoistTheme.cloudGray,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _startLanServer,
-                            icon: const Icon(Icons.router),
-                            label: const Text('启动本机同步服务'),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _lanServerController,
-                          decoration: const InputDecoration(
-                            labelText: '对方服务器地址',
-                            hintText: 'http://192.168.1.100:8080',
-                            prefixIcon: Icon(Icons.dns_outlined),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _sendToLanServer,
-                            icon: const Icon(Icons.send),
-                            label: const Text('发送数据到对方'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ===== WebDAV云盘同步 =====
-                const Text(
-                  '云盘同步（WebDAV）',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: TaoistTheme.inkBlack,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '支持坚果云、阿里云盘等支持WebDAV协议的云盘',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: TaoistTheme.cloudGray,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: _webdavUrlController,
-                          decoration: const InputDecoration(
-                            labelText: 'WebDAV地址',
-                            hintText: 'https://dav.jianguoyun.com/dav/',
-                            prefixIcon: Icon(Icons.cloud_outlined),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _webdavUserController,
-                          decoration: const InputDecoration(
-                            labelText: '账号',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _webdavPassController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: '密码',
-                            prefixIcon: Icon(Icons.lock_outline),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _saveWebDAV,
-                                child: const Text('保存配置'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _uploadWebDAV,
-                                child: const Text('上传数据'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _downloadWebDAV,
-                                child: const Text('下载数据'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ===== 本地备份 =====
-                const Text(
-                  '本地备份',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: TaoistTheme.inkBlack,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.file_download_outlined,
-                      color: TaoistTheme.jadeGreen,
-                    ),
-                    title: const Text('导出备份文件'),
-                    subtitle: const Text('将全部数据保存为JSON文件'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _exportToFile,
-                  ),
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
-    );
-  }
-}

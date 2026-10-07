@@ -1,5 +1,5 @@
 class AIAdvice {
-  final int? id;
+  final String? id;
   final DateTime createdAt;
   final String type; // 'workout' / 'diet' / 'finance' / 'comprehensive'
   final String content;

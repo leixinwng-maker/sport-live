@@ -1,6 +1,6 @@
 /// 知识库条目（大师理念/康复知识/中医养生等，供AI注入参考）
 class KnowledgeEntry {
-  final int? id;
+  final String? id;
   final String domain; // fitness / finance / tcm
   final String master; // 苗振 / 巴菲特 / 芒格 / 舍费尔 / 纳瓦尔 / 小而美 / 中医经典
   final String category; // 分类
@@ -49,7 +49,7 @@ class KnowledgeEntry {
 
 /// 书籍（中医/运动康复/健身等，本地存储供阅读）
 class Book {
-  final int? id;
+  final String? id;
   final String title;
   final String author;
   final String domain; // fitness / finance / tcm
@@ -90,8 +90,8 @@ class Book {
 
 /// 书籍摘录（金句/笔记）
 class BookNote {
-  final int? id;
-  final int bookId;
+  final String? id;
+  final String bookId;
   final String content;
   final DateTime createdAt;
 

@@ -1,5 +1,5 @@
 class UserProfile {
-  final int? id;
+  final String? id;
   final double height;
   final double weight;
   final int age;
@@ -66,7 +66,7 @@ class UserProfile {
   }
 
   UserProfile copyWith({
-    int? id,
+    String? id,
     double? height,
     double? weight,
     int? age,

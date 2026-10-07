@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 class Workout {
-  final int? id;
+  final String? id;
   final DateTime date;
   final String type;
   final List<Exercise> exercises;
@@ -54,7 +54,7 @@ class Workout {
   }
 
   Workout copyWith({
-    int? id,
+    String? id,
     DateTime? date,
     String? type,
     List<Exercise>? exercises,

@@ -1,5 +1,5 @@
 class LifeStatus {
-  final int? id;
+  final String? id;
   final DateTime date;
   final List<String> tags;
   final int energyScore; // 1-10 精力评分
@@ -38,7 +38,7 @@ class LifeStatus {
   }
 
   LifeStatus copyWith({
-    int? id,
+    String? id,
     DateTime? date,
     List<String>? tags,
     int? energyScore,

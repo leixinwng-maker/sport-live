@@ -1,5 +1,5 @@
 class FinanceRecord {
-  final int? id;
+  final String? id;
   final DateTime date;
   final String type; // 'income' 或 'expense'
   final String category;
@@ -38,7 +38,7 @@ class FinanceRecord {
   }
 
   FinanceRecord copyWith({
-    int? id,
+    String? id,
     DateTime? date,
     String? type,
     String? category,
@@ -57,7 +57,7 @@ class FinanceRecord {
 }
 
 class Budget {
-  final int? id;
+  final String? id;
   final String category;
   final double monthlyLimit;
   final int year;
@@ -94,7 +94,7 @@ class Budget {
 
 /// 资产持仓（理财/ETF/基金/股票等，快照式）
 class Asset {
-  final int? id;
+  final String? id;
   final String name; // 产品名称，如 煤炭ETF
   final String type; // ETF / 基金 / 股票 / 理财 / 存款
   final double principal; // 买入本金/成本
@@ -140,7 +140,7 @@ class Asset {
   }
 
   Asset copyWith({
-    int? id,
+    String? id,
     String? name,
     String? type,
     double? principal,
@@ -162,7 +162,7 @@ class Asset {
 
 /// 负债（花呗/信用卡/贷款等，余额式）
 class Debt {
-  final int? id;
+  final String? id;
   final String name; // 如 花呗
   final double amount; // 当前未还欠款
   final DateTime? dueDate; // 还款日
@@ -207,7 +207,7 @@ class Debt {
   }
 
   Debt copyWith({
-    int? id,
+    String? id,
     String? name,
     double? amount,
     DateTime? dueDate,

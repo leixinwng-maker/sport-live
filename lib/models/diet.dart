@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 class DietRecord {
-  final int? id;
+  final String? id;
   final DateTime date;
   final String mealType;
   final List<FoodItem> foods;
@@ -45,7 +45,7 @@ class DietRecord {
   }
 
   DietRecord copyWith({
-    int? id,
+    String? id,
     DateTime? date,
     String? mealType,
     List<FoodItem>? foods,

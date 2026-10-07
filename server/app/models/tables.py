@@ -271,9 +271,13 @@ SYNCED_TABLES: tuple[str, ...] = tuple(
 
 
 def _build_business_table(spec: TableSpec) -> Table:
-    columns: list[Column] = [Column("id", String(64), primary_key=True)]
+    # 客户端行 id 只保证「单用户内唯一」（本地 sqflite rowid 从 1 起），
+    # 跨用户会撞车，因此 user_scoped 表必须用 (user_id, id) 联合主键；
+    # 全局表（food_catalog）的 id 是服务端全局 id，保持单列主键。
+    columns: list[Column] = []
     if spec.user_scoped:
-        columns.append(Column("user_id", String(64), nullable=False, index=True))
+        columns.append(Column("user_id", String(64), primary_key=True))
+    columns.append(Column("id", String(64), primary_key=True))
     for c in spec.columns:
         columns.append(Column(c.column_name, c.type, nullable=not c.required))
     columns.extend(
@@ -334,8 +338,11 @@ sync_applied = Table(
 
 
 def payload_to_row(spec: TableSpec, data: dict[str, Any]) -> dict[str, Any]:
-    """客户端 payload → 数据库列值字典（仅业务列）。"""
-    return {spec.column_map[key].column_name: value for key, value in data.items()}
+    """客户端 payload → 数据库列值字典（仅业务列，值收敛为列的 Python 类型）。"""
+    return {
+        spec.column_map[key].column_name: _coerce_value(spec.column_map[key], value)
+        for key, value in data.items()
+    }
 
 
 def row_to_payload(spec: TableSpec, row: Any) -> dict[str, Any]:
@@ -343,12 +350,58 @@ def row_to_payload(spec: TableSpec, row: Any) -> dict[str, Any]:
     return {c.name: row[c.column_name] for c in spec.columns}
 
 
+def _coerce_value(col: ColumnSpec, value: Any) -> Any:
+    """把客户端值收敛到列的 Python 类型；无法收敛抛 TypeError。
+
+    SQLite 动态类型什么都能存，但 Postgres 严格类型会直接报错（500）。
+    在入口统一收敛 + 校验，让类型问题以 400 明确返回，且两种数据库行为一致。
+    """
+    if value is None:
+        return None
+    cls = col.type if isinstance(col.type, type) else type(col.type)
+    if issubclass(cls, Integer):
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            text = value.strip()
+            if text.lstrip("-").isdigit():
+                return int(text)
+        raise TypeError(f"expected integer, got {type(value).__name__}")
+    if issubclass(cls, Float):
+        if isinstance(value, bool):
+            raise TypeError(f"expected number, got {type(value).__name__}")
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                pass
+        raise TypeError(f"expected number, got {type(value).__name__}")
+    if issubclass(cls, (Text, String)):
+        if isinstance(value, str):
+            return value
+        raise TypeError(f"expected string, got {type(value).__name__}")
+    return value
+
+
 def validate_payload(spec: TableSpec, data: dict[str, Any], *, partial: bool = False) -> list[str]:
     """校验 payload 字段，返回错误列表（空即通过）。"""
     errors: list[str] = []
-    for key in data:
+    for key, value in data.items():
         if key not in spec.column_map:
             errors.append(f"unknown field: {key}")
+            continue
+        if value is None:
+            continue
+        try:
+            _coerce_value(spec.column_map[key], value)
+        except TypeError as exc:
+            errors.append(f"type mismatch: {key} ({exc})")
     if not partial:
         for key in spec.required_fields:
             if data.get(key) is None:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""P1 验收脚本：模拟客户端跑通全链路（8 项验收）。
+"""P1 验收脚本：模拟客户端跑通全链路（13 项验收）。
 
 用法（服务启动后）：
     python scripts/acceptance.py --base-url http://localhost:8000
@@ -25,6 +25,15 @@ def record(name: str, ok: bool, note: str = "") -> bool:
     results.append((name, PASS if ok else FAIL, note))
     print(f"[{PASS if ok else FAIL}] {name}" + (f" — {note}" if note else ""))
     return ok
+
+
+def push_results(r: httpx.Response) -> list[dict]:
+    """安全取 push 响应的 results 列表（异常响应不致脚本崩溃）。"""
+    try:
+        data = r.json()
+    except Exception:  # noqa: BLE001
+        return []
+    return data.get("results") or [] if isinstance(data, dict) else []
 
 
 def main() -> int:
@@ -66,11 +75,12 @@ def main() -> int:
         "op": "upsert",
         "base_version": 0,
         "updated_at": "2026-10-06T08:00:00Z",
-        "data": {"date": "2026-10-06", "type": "力量", "duration": 45, "intensity": "中", "exercises": "卧推"},
+        "data": {"date": "2026-10-06", "type": "力量", "duration": 45, "intensity": 3, "exercises": "卧推"},
     }
     r = client.post("/sync/push", json={"device_id": "acc-dev", "platform": "test", "changes": [change]}, headers=auth_a)
-    ok = r.status_code == 200 and r.json()["results"][0]["status"] == "applied"
-    record("5a. push 应用变更", ok, f"status={r.status_code}")
+    got = push_results(r)
+    ok = r.status_code == 200 and bool(got) and got[0].get("status") == "applied"
+    record("5a. push 应用变更", ok, f"status={r.status_code}" + ("" if ok else f" {r.text[:100]}"))
 
     r = client.post("/sync/pull", json={"device_id": "acc-dev"}, headers=auth_a)
     pulled = [c for c in r.json().get("changes", []) if c["id"] == "acc-w1"]
@@ -78,8 +88,9 @@ def main() -> int:
 
     # 6. 幂等：重放同一变更
     r = client.post("/sync/push", json={"device_id": "acc-dev", "changes": [change]}, headers=auth_a)
-    ok = r.status_code == 200 and r.json()["results"][0]["server_version"] == 1
-    record("6. 幂等重放（server_version 不变）", ok, str(r.json().get("results", [{}])[0]))
+    got = push_results(r)
+    ok = r.status_code == 200 and bool(got) and got[0].get("server_version") == 1
+    record("6. 幂等重放（server_version 不变）", ok, str(got[0] if got else r.text[:100]))
 
     # 7. 冲突：旧 base_version + 更旧逻辑时间 → 服务端胜
     stale = {
@@ -88,12 +99,13 @@ def main() -> int:
         "op": "upsert",
         "base_version": 0,
         "updated_at": "2026-10-01T00:00:00Z",
-        "data": {"date": "2026-10-01", "type": "有氧", "duration": 20, "intensity": "低", "exercises": "跑步"},
+        "data": {"date": "2026-10-01", "type": "有氧", "duration": 20, "intensity": 1, "exercises": "跑步"},
     }
     r = client.post("/sync/push", json={"device_id": "acc-dev", "changes": [stale]}, headers=auth_a)
-    res = r.json()["results"][0]
-    ok = res["status"] == "conflict" and res["server_record"] is not None
-    record("7. 冲突检测（返回服务端快照）", ok, f"status={res['status']}")
+    got = push_results(r)
+    res = got[0] if got else {}
+    ok = res.get("status") == "conflict" and res.get("server_record") is not None
+    record("7. 冲突检测（返回服务端快照）", ok, f"status={res.get('status', r.text[:100])}")
 
     # 8. 多用户隔离
     email_b = f"acceptance_b_{uuid.uuid4().hex[:8]}@example.com"

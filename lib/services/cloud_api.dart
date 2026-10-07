@@ -6,10 +6,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 云端 API 异常：code/message 来自服务端统一错误格式 {code, message}。
 class ApiException implements Exception {
-  ApiException(this.code, this.message);
+  ApiException(this.code, this.message, {this.statusCode});
 
   final String code;
   final String message;
+
+  /// HTTP 状态码（无响应时为 null）
+  final int? statusCode;
+
+  /// 4xx 客户端错误：自动重试无意义（401/403 会话问题另见 [isAuthError]）
+  bool get isClientError =>
+      statusCode != null && statusCode! >= 400 && statusCode! < 500;
+
+  /// 会话失效：触发登录门，不做退避重试
+  bool get isAuthError => statusCode == 401 || statusCode == 403;
 
   @override
   String toString() => message;
@@ -177,6 +187,54 @@ class CloudApi {
     }
   }
 
+  // ---------- 同步（P2-T5）----------
+
+  /// POST /sync/push：批量上传变更。
+  /// 返回 {results: [{table,id,status,server_version,conflict,server_record}], server_time}
+  Future<Map<String, dynamic>> pushChanges({
+    required String deviceId,
+    required String platform,
+    required List<Map<String, dynamic>> changes,
+  }) async {
+    try {
+      final res = await dio.post<Map<String, dynamic>>(
+        '/sync/push',
+        data: {
+          'device_id': deviceId,
+          'platform': platform,
+          'changes': changes,
+        },
+      );
+      return _data(res);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// POST /sync/pull：游标翻页拉取增量。
+  /// 返回 {changes: [{table,id,op,version,updated_at,data}], has_more, next_since, next_cursor_id}
+  Future<Map<String, dynamic>> pullChanges({
+    required String deviceId,
+    String? since,
+    String? cursorId,
+    int? limit,
+  }) async {
+    try {
+      final res = await dio.post<Map<String, dynamic>>(
+        '/sync/pull',
+        data: {
+          'device_id': deviceId,
+          'since': since,
+          'cursor_id': cursorId,
+          if (limit != null) 'limit': limit,
+        },
+      );
+      return _data(res);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
   // ---------- 内部 ----------
 
   Map<String, dynamic> _data(Response<Map<String, dynamic>?> res) {
@@ -238,12 +296,14 @@ class CloudApi {
   }
 
   ApiException _wrap(DioException e) {
+    final status = e.response?.statusCode;
     final data = e.response?.data;
     if (data is Map) {
       final msg = data['message'];
       final code = data['code'];
       if (msg is String && msg.isNotEmpty) {
-        return ApiException(code is String ? code : 'error', msg);
+        return ApiException(code is String ? code : 'error', msg,
+            statusCode: status);
       }
     }
     switch (e.type) {
@@ -251,10 +311,11 @@ class CloudApi {
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.connectionError:
-        return ApiException('network', '网络连接失败，请检查网络或服务器地址');
+        return ApiException('network', '网络连接失败，请检查网络或服务器地址',
+            statusCode: status);
       default:
-        final status = e.response?.statusCode;
-        return ApiException('server', '服务异常（${status ?? e.type.name}）');
+        return ApiException('server', '服务异常（${status ?? e.type.name}）',
+            statusCode: status);
     }
   }
 }

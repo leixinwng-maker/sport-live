@@ -415,6 +415,7 @@ class DatabaseHelper {
       );
       await _enqueue(txn, table, rowId, 'upsert', _businessFields(row));
     });
+    onLocalWrite?.call();
   }
 
   /// 用户数据统一删除：本地物理删 + 队列记录 delete（服务端置 deleted_at）。
@@ -424,6 +425,7 @@ class DatabaseHelper {
       await txn.delete(table, where: 'id = ?', whereArgs: [rowId]);
       await _enqueue(txn, table, rowId, 'delete', null);
     });
+    onLocalWrite?.call();
   }
 
   Future<void> _enqueue(Transaction txn, String table, String rowId,
@@ -472,6 +474,9 @@ class DatabaseHelper {
 
   // ============ 队列辅助（供 SyncEngine 使用）============
 
+  /// 本地有写入时由写路径触发；SyncEngine 启动时挂接，用于防抖调度同步
+  static void Function()? onLocalWrite;
+
   Future<List<Map<String, dynamic>>> getPendingOps({int limit = 200}) async {
     final db = await database;
     return db.query('sync_queue', orderBy: 'op_id ASC', limit: limit);
@@ -508,6 +513,72 @@ class DatabaseHelper {
   Future<int> getQueueCount() async {
     final db = await database;
     return _firstInt(await db.rawQuery('SELECT COUNT(*) FROM sync_queue'));
+  }
+
+  // ============ 服务端变更应用（供 SyncEngine：静默写，不入队）============
+
+  /// 取行当前同步态（push 组装 change 用）：行不存在返回 null
+  Future<Map<String, dynamic>?> getRowForSync(
+      String table, String rowId) async {
+    final db = await database;
+    final rows =
+        await db.query(table, where: 'id = ?', whereArgs: [rowId], limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return {
+      'data': _businessFields(row),
+      'base_version': (row['sync_version'] as int?) ?? 0,
+      'updated_at': row['sync_updated_at'] as String?,
+    };
+  }
+
+  /// 应用服务端 upsert（pull 增量 / 冲突覆盖）：合并写 + 更新同步列，不入队。
+  /// List/Map 值（服务端 JSON 列）收敛为 JSON 字符串以匹配本地 TEXT 列。
+  Future<void> applyServerRow(String table, String rowId,
+      Map<String, dynamic> data,
+      {required int version, String? updatedAt}) async {
+    final db = await database;
+    final colInfo = await db.rawQuery('PRAGMA table_info($table)');
+    final cols = colInfo.map((r) => r['name'] as String).toSet();
+    final row = <String, dynamic>{
+      for (final e in data.entries)
+        if (e.key != 'id' && cols.contains(e.key))
+          e.key:
+              (e.value is List || e.value is Map) ? jsonEncode(e.value) : e.value,
+    }
+      ..['id'] = rowId
+      ..['sync_version'] = version
+      ..['sync_updated_at'] = updatedAt;
+    final keys = row.keys.toList();
+    final placeholders = List.filled(keys.length, '?').join(', ');
+    final updateSet = keys
+        .where((c) => c != 'id' && c != 'sync_version')
+        .map((c) => '$c = excluded.$c')
+        .join(', ');
+    await db.rawInsert(
+      'INSERT INTO $table (${keys.join(', ')}) VALUES ($placeholders) '
+      'ON CONFLICT(id) DO UPDATE SET $updateSet',
+      [for (final k in keys) row[k]],
+    );
+  }
+
+  /// 应用服务端 delete：本地物理删，不入队
+  Future<void> applyServerDelete(String table, String rowId) async {
+    final db = await database;
+    await db.delete(table, where: 'id = ?', whereArgs: [rowId]);
+  }
+
+  /// push applied 后回写服务端版本号（作为下次 push 的 base_version）
+  Future<void> setRowVersion(String table, String rowId, int version) async {
+    final db = await database;
+    await db.update(table, {'sync_version': version},
+        where: 'id = ?', whereArgs: [rowId]);
+  }
+
+  /// 清空待传队列（登出 / 一键清除时用）
+  Future<void> clearQueue() async {
+    final db = await database;
+    await db.delete('sync_queue');
   }
 
   // ============ 用户信息操作 ============

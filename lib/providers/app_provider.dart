@@ -12,6 +12,7 @@ import '../models/health_metric.dart';
 import '../models/health_report.dart';
 import '../services/cloud_api.dart';
 import '../services/database_helper.dart';
+import '../services/sync_engine.dart';
 import '../services/ai_engine.dart';
 import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
@@ -78,9 +79,16 @@ class AppProvider extends ChangeNotifier {
       cloud.sessionExpired.listen((_) {
         if (needsLogin != true) {
           needsLogin = true;
+          // 会话失效：停同步引擎，待重新登录后由 completeLogin 重启
+          SyncEngine.instance.stop();
           notifyListeners();
         }
       });
+      // 已有云端会话：启动同步引擎（T5），远端数据落地后刷新界面
+      if (cloud.authenticated) {
+        SyncEngine.instance.onRemoteApplied = loadAllData;
+        SyncEngine.instance.start();
+      }
       await _ai.init();
       aiConfigured = _ai.isConfigured;
       userProfile = await _db.getUserProfile();
@@ -102,11 +110,18 @@ class AppProvider extends ChangeNotifier {
   /// 登录/注册成功后回调：离开登录页。
   void completeLogin() {
     needsLogin = false;
+    // 挂接同步引擎（T5）：远端数据落地后刷新界面，并立即首推首拉
+    SyncEngine.instance.onRemoteApplied = loadAllData;
+    SyncEngine.instance.start();
     notifyListeners();
   }
 
-  /// 登出：仅清 token 会话；本地缓存清除由设置页"一键清除本地数据"负责（T6）。
+  /// 登出：停同步引擎、清增量游标与待传队列（防止下个账号误传当前账号数据），再清 token 会话；
+  /// 本地缓存清除由设置页"一键清除本地数据"负责（T6）。
   Future<void> logout() async {
+    SyncEngine.instance.stop();
+    await SyncEngine.instance.clearPullCursor();
+    await _db.clearQueue();
     await CloudApi.instance.clearSession();
     needsLogin = true;
     notifyListeners();

@@ -38,15 +38,25 @@
 ### 🌐 联网搜索
 - 微信公众号 / Bing / 百度多源搜索，AI 综合分析
 
+### ☁️ 云同步与账号（P2）
+- 邮箱注册登录，FastAPI 云端（SQLite/加密备份）多端同步
+- 本地 SQLCipher 加密缓存，离线全功能可用，联网自动同步
+- 写入防抖批量推送 + 指数退避重试，拉取游标翻页续传
+- 冲突服务器时间戳裁决（LWW），多端改动不丢不重
+- 生物识别 / 6 位 PIN 应用锁，回后台超时自动重锁
+- 一键清除本地数据（云端保留，可随时重新拉取）
+
 ## 🛠 技术栈
-Flutter · Provider · sqflite · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
+Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · FastAPI + SQLite 云端 · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
 
 ## 📁 目录结构
-- `lib/services/` AI引擎、本地智脑算法、联网搜索、账单导入
-- `lib/screens/` 训练/饮食/财务/知识库/AI 各界面
+- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁
+- `lib/screens/` 训练/饮食/财务/知识库/AI/云同步/锁屏 各界面
+- `server/` FastAPI 云端服务（账号 auth + 双向同步 sync，Docker 一键部署）
 - `books/` 内置书籍资源
 - `assets/books/` 提取后的书籍文本
 
 ## 📝 说明
-- 纯本地存储，无需服务器，数据不出手机
-- AI 需自备 API Key（国内大模型均可）
+- 数据本地加密缓存 + 云端同步，离线全功能可用，登录后自动多端同步
+- 云端可自部署：`server/` 提供 Dockerfile 与 deploy.sh（详见 server/DEPLOY.md）
+- AI 需自备 API Key（国内大模型均可），本地保存，不上传云端

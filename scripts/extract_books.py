@@ -31,17 +31,12 @@ def extract_epub(path):
                 parts.append(strip_html(raw))
     return '\n\n'.join(p for p in parts if p)
 
-def process_file(filepath, domain):
+def process_file(filepath, domain, index):
     name = os.path.basename(filepath)
     base, ext = os.path.splitext(name)
-    # 简化文件名：去掉 z-library 等冗余后缀
-    clean = re.sub(r'\s*\(z-library.*?\)', '', base, flags=re.IGNORECASE)
-    clean = re.sub(r'\s*--\s*.*$', '', clean)
-    clean = clean.strip()
-    if len(clean) > 60:
-        clean = clean[:60]
-
-    out_name = f'{domain}_{clean}.txt'
+    # 短文件名 {domain}_{序号}.txt：避免中文长文件名经URL编码膨胀后
+    # 超出 Windows 路径长度限制（260字符）导致 web 构建失败
+    out_name = f'{domain}_{index}.txt'
     out_path = os.path.join(DST, out_name)
 
     if ext.lower() == '.epub':
@@ -61,6 +56,7 @@ for domain in ['fitness', 'finance', 'tcm']:
     if not os.path.isdir(folder):
         continue
     print(f'\n=== {domain} ===')
+    index = 0
     for name in sorted(os.listdir(folder)):
         filepath = os.path.join(folder, name)
         if not os.path.isfile(filepath):
@@ -68,7 +64,8 @@ for domain in ['fitness', 'finance', 'tcm']:
         ext = os.path.splitext(name)[1].lower()
         if ext in ('.epub', '.txt', '.md'):
             try:
-                process_file(filepath, domain)
+                index += 1
+                process_file(filepath, domain, index)
             except Exception as e:
                 print(f'  ERR {name}: {e}')
 

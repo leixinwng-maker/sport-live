@@ -73,3 +73,13 @@ android_sdk/
 jdk17/
 .analyze_out.txt
 .pubget_out.txt
+.build_out.txt
+.test_out.txt
+.kotlin-cache/
+.userhome/
+
+# 发布产物（构建后另存，不入库）
+*.apk
+*.tar.gz
+releases_windows.json
+问道_Windows_x64_*/

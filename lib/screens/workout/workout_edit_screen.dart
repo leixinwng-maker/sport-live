@@ -337,7 +337,7 @@ class _WorkoutEditScreenState extends State<WorkoutEditScreen> {
   }
 }
 
-class _ExerciseTile extends StatelessWidget {
+class _ExerciseTile extends StatefulWidget {
   final int index;
   final Exercise exercise;
   final ValueChanged<Exercise> onChanged;
@@ -351,7 +351,38 @@ class _ExerciseTile extends StatelessWidget {
   });
 
   @override
+  State<_ExerciseTile> createState() => _ExerciseTileState();
+}
+
+class _ExerciseTileState extends State<_ExerciseTile> {
+  late final TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.exercise.name);
+  }
+
+  @override
+  void didUpdateWidget(_ExerciseTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 外部数据变化时同步文本（如编辑已有记录）
+    if (oldWidget.exercise.name != widget.exercise.name &&
+        _nameController.text != widget.exercise.name) {
+      _nameController.text = widget.exercise.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final exercise = widget.exercise;
+    final index = widget.index;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: Padding(
@@ -382,7 +413,7 @@ class _ExerciseTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    controller: TextEditingController(text: exercise.name),
+                    controller: _nameController,
                     decoration: const InputDecoration(
                       hintText: '动作名称（如：杠铃卧推）',
                       isDense: true,
@@ -393,12 +424,12 @@ class _ExerciseTile extends StatelessWidget {
                       color: TaoistTheme.inkBlack,
                     ),
                     onChanged: (v) {
-                      onChanged(exercise.copyWith(name: v));
+                      widget.onChanged(exercise.copyWith(name: v));
                     },
                   ),
                 ),
                 IconButton(
-                  onPressed: onDelete,
+                  onPressed: widget.onDelete,
                   icon: const Icon(Icons.delete_outline, size: 20),
                   color: Colors.red.withValues(alpha: 0.7),
                 ),
@@ -412,7 +443,7 @@ class _ExerciseTile extends StatelessWidget {
                     label: '组数',
                     value: exercise.sets,
                     onChanged: (v) {
-                      onChanged(exercise.copyWith(sets: v));
+                      widget.onChanged(exercise.copyWith(sets: v));
                     },
                   ),
                 ),
@@ -422,7 +453,7 @@ class _ExerciseTile extends StatelessWidget {
                     label: '次数',
                     value: exercise.reps,
                     onChanged: (v) {
-                      onChanged(exercise.copyWith(reps: v));
+                      widget.onChanged(exercise.copyWith(reps: v));
                     },
                   ),
                 ),
@@ -432,7 +463,7 @@ class _ExerciseTile extends StatelessWidget {
                     label: '重量(kg)',
                     value: exercise.weight.toInt(),
                     onChanged: (v) {
-                      onChanged(exercise.copyWith(weight: v.toDouble()));
+                      widget.onChanged(exercise.copyWith(weight: v.toDouble()));
                     },
                   ),
                 ),

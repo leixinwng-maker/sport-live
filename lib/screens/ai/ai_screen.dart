@@ -751,6 +751,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   final _baseUrlController = TextEditingController();
   final _apiKeyController = TextEditingController();
   final _modelController = TextEditingController();
+  final _visionModelController = TextEditingController();
 
   String _selectedProvider = '通义千问';
 
@@ -758,18 +759,22 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
     '通义千问': {
       'baseUrl': 'https://dashscope.aliyuncs.com/compatible-mode',
       'model': 'qwen-turbo',
+      'visionModel': 'qwen-vl-plus',
     },
     'DeepSeek': {
       'baseUrl': 'https://api.deepseek.com',
       'model': 'deepseek-chat',
+      'visionModel': '',
     },
     '文心一言': {
       'baseUrl': 'https://qianfan.baidubce.com/v2',
       'model': 'ernie-3.5-8k',
+      'visionModel': '',
     },
     '自定义': {
       'baseUrl': '',
       'model': '',
+      'visionModel': '',
     },
   };
 
@@ -778,6 +783,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
+    _visionModelController.dispose();
     super.dispose();
   }
 
@@ -787,6 +793,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
       final config = _providers[provider]!;
       _baseUrlController.text = config['baseUrl'] ?? '';
       _modelController.text = config['model'] ?? '';
+      _visionModelController.text = config['visionModel'] ?? '';
     });
   }
 
@@ -805,6 +812,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
       model: _modelController.text.trim().isEmpty
           ? 'qwen-turbo'
           : _modelController.text.trim(),
+      visionModel: _visionModelController.text.trim(),
     );
 
     if (mounted) {
@@ -906,6 +914,23 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
               prefixIcon: Icon(Icons.memory),
             ),
           ),
+          const SizedBox(height: 16),
+          const Text(
+            '视觉模型（图片识别，可选）',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: TaoistTheme.teaBrown,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _visionModelController,
+            decoration: const InputDecoration(
+              hintText: 'qwen-vl-plus（留空则无法识别体检报告图片）',
+              prefixIcon: Icon(Icons.image_search),
+            ),
+          ),
           const SizedBox(height: 32),
           SizedBox(
             height: 48,
@@ -922,7 +947,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
-              '提示：\n1. 通义千问/DeepSeek/文心一言均支持OpenAI兼容接口\n2. 数据会发送到对应AI服务商，请勿包含敏感信息\n3. API Key仅保存在本地设备',
+              '提示：\n1. 通义千问/DeepSeek/文心一言均支持OpenAI兼容接口\n2. 数据会发送到对应AI服务商，请勿包含敏感信息\n3. API Key仅保存在本地设备\n4. DeepSeek不支持图片识别，如需识别体检报告图片，请在"视觉模型"填入通义千问视觉模型（如qwen-vl-plus），识别后可交给DeepSeek解读',
               style: TextStyle(
                 fontSize: 12,
                 color: TaoistTheme.cloudGray,

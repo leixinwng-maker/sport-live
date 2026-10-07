@@ -8,10 +8,12 @@ class AIEngine {
   static const String _baseUrlKey = 'ai_base_url';
   static const String _apiKeyKey = 'ai_api_key';
   static const String _modelKey = 'ai_model';
+  static const String _visionModelKey = 'ai_vision_model';
 
   String _baseUrl = '';
   String _apiKey = '';
   String _model = 'qwen-turbo';
+  String _visionModel = ''; // 视觉模型（可选），DeepSeek 无视觉，可配 qwen-vl-plus 等
 
   /// 初始化，从本地读取配置
   Future<void> init() async {
@@ -19,6 +21,7 @@ class AIEngine {
     _baseUrl = prefs.getString(_baseUrlKey) ?? '';
     _apiKey = prefs.getString(_apiKeyKey) ?? '';
     _model = prefs.getString(_modelKey) ?? 'qwen-turbo';
+    _visionModel = prefs.getString(_visionModelKey) ?? '';
   }
 
   /// 保存AI配置
@@ -26,17 +29,23 @@ class AIEngine {
     required String baseUrl,
     required String apiKey,
     required String model,
+    String visionModel = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_baseUrlKey, baseUrl);
     await prefs.setString(_apiKeyKey, apiKey);
     await prefs.setString(_modelKey, model);
+    await prefs.setString(_visionModelKey, visionModel);
     _baseUrl = baseUrl;
     _apiKey = apiKey;
     _model = model;
+    _visionModel = visionModel;
   }
 
   bool get isConfigured => _baseUrl.isNotEmpty && _apiKey.isNotEmpty;
+
+  /// 是否已配置视觉模型
+  bool get hasVisionModel => _visionModel.isNotEmpty;
 
   /// 调用大模型
   /// [messages] 对话消息列表
@@ -65,6 +74,86 @@ class AIEngine {
     } else {
       throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
     }
+  }
+
+  /// 图片识别：把图片交给视觉模型提取文字内容（OCR）
+  /// [imageBase64] 图片的 base64 编码（不含 data: 前缀）
+  /// [prompt] 识别要求，默认提取体检报告文字
+  /// 说明：DeepSeek 不支持图片，需配置视觉模型（如 qwen-vl-plus / qwen-vl-max）；
+  /// 未配置视觉模型时返回 null，由上层提示用户。
+  Future<String?> recognizeImage({
+    required String imageBase64,
+    String prompt =
+        '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。',
+  }) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+    if (!hasVisionModel) {
+      return null; // 未配置视觉模型
+    }
+
+    final url = '$_baseUrl/v1/chat/completions';
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': _visionModel,
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': prompt},
+              {
+                'type': 'image_url',
+                'image_url': {'url': 'data:image/jpeg;base64,$imageBase64'},
+              },
+            ],
+          },
+        ],
+        'temperature': 0.1,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      return data['choices'][0]['message']['content'] as String;
+    } else {
+      throw Exception('图片识别失败: ${response.statusCode} ${response.body}');
+    }
+  }
+
+  /// 体检报告解读：结合报告文字 + 健康指标 + 用户档案给出建议
+  Future<String> analyzeHealthReport({
+    required String reportText,
+    required String userProfile,
+    required String recentMetrics,
+    String? knowledge,
+  }) async {
+    final messages = [
+      {
+        'role': 'system',
+        'content': '你是一位融合现代医学检验、中医养生和运动康复的私人健康顾问。'
+            '请对用户提供的体检报告数据给出专业解读。要求：\n'
+            '1. 逐项解读异常指标：数值、参考范围、临床意义（正常/偏高/偏低）\n'
+            '2. 对异常项给出生活干预建议：饮食调整（结合中医食疗四气五味）、运动建议、作息建议\n'
+            '3. 关联用户身体参数（BMI/体脂/年龄/性别）给出个性化解读\n'
+            '4. 若指标存在冲突或互相影响（如血脂与脂肪肝），说明关联\n'
+            '5. 重要提示：本解读仅供参考，不构成医疗诊断，建议异常指标及时就医复查\n'
+            '输出格式：先用 Markdown 分节呈现异常指标表格，再给生活方式建议，最后给健康提醒。\n'
+            '${knowledge != null && knowledge.isNotEmpty ? "以下是本地智脑检索到的中医养生/运动康复知识，请结合其中理念给出建议：\n$knowledge" : ""}',
+      },
+      {
+        'role': 'user',
+        'content': '用户身体档案：$userProfile\n\n'
+            '近期健康指标：${recentMetrics.isEmpty ? "无记录" : recentMetrics}\n\n'
+            '体检报告内容：$reportText',
+      },
+    ];
+    return await chat(messages);
   }
 
   /// 生成每日建议

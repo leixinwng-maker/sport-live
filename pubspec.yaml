@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
+  sqlite3_flutter_libs: ^0.5.20
   path: ^1.8.3
   path_provider: ^2.1.1
   http: ^1.1.0
@@ -18,8 +20,16 @@ dependencies:
   intl: ^0.18.1
   cupertino_icons: ^1.0.6
   dio: ^5.4.0
+  # P2 云端化新增：UUID 主键 / 安全存储 / 生物识别锁 / SQLCipher 加密 / 网络状态感知
+  uuid: ^4.5.1
+  flutter_secure_storage: ^9.2.2
+  local_auth: ^2.3.0
+  sqflite_sqlcipher: ^3.1.0
+  connectivity_plus: ^6.0.5
   lunar: ^1.7.8
   csv: ^8.0.0
+  file_picker: ^8.1.7
+  google_mlkit_text_recognition: ^0.16.0
 
 dev_dependencies:
   flutter_test:

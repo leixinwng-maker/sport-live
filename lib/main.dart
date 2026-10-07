@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'providers/agent_provider.dart';
 import 'providers/app_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -25,8 +26,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppProvider()..init(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppProvider()..init()),
+        ChangeNotifierProxyProvider<AppProvider, AgentProvider>(
+          create: (_) => AgentProvider(),
+          update: (context, app, agent) => agent!..attach(app),
+        ),
+      ],
       child: MaterialApp(
         title: '问道 · 生活规划',
         debugShowCheckedModeBanner: false,

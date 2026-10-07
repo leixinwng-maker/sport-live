@@ -27,6 +27,9 @@ class AppProvider extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper.instance;
   final AIEngine _ai = AIEngine();
 
+  /// AI 引擎（供智能体服务复用同一配置实例）
+  AIEngine get aiEngine => _ai;
+
   // 用户信息
   UserProfile? userProfile;
 

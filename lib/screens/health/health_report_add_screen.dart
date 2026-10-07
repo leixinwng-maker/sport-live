@@ -46,7 +46,7 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
     });
   }
 
-  /// 本地 OCR 识别图片文字（免费离线，不依赖视觉模型）
+  /// 识别图片文字：优先视觉模型（识别更准），未配置或失败时降级本地 OCR
   Future<void> _recognize() async {
     if (_filePath == null) return;
     setState(() {
@@ -56,49 +56,52 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
     try {
       final provider = context.read<AppProvider>();
       if (_fileType == 'pdf') {
-        // PDF 无法本地 OCR，提示手动录入
+        // PDF 无法按图片送视觉模型，提示手动录入
         setState(() {
           _recognizing = false;
-          _lastError = 'PDF 报告暂不支持本地识别，请手动录入关键指标，或选择图片格式报告';
+          _lastError = 'PDF 报告暂不支持识别，请手动录入关键指标，或选择图片格式报告';
         });
         return;
       }
       final bytes = await File(_filePath!).readAsBytes();
-      String text;
-      try {
-        // 优先本地 OCR（Android ML Kit / iOS Vision，免费离线）
-        text = await provider.localOcrRecognize(bytes: bytes);
-      } catch (e) {
-        // 当前平台不支持本地 OCR 时，降级到视觉模型（若已配置）
-        if (provider.hasVisionModel) {
-          final b64 = base64Encode(bytes);
+      String? text;
+
+      // 优先视觉模型（需在「AI服务配置」填写视觉模型，如 qwen-vl-plus）
+      if (provider.hasVisionModel) {
+        final b64 = base64Encode(bytes);
+        try {
           final visionText = await provider.recognizeImage(b64);
-          if (visionText == null || visionText.trim().isEmpty) {
-            setState(() {
-              _recognizing = false;
-              _lastError = '视觉模型未能识别出文字，请确认图片清晰或手动录入';
-            });
-            return;
+          if (visionText != null && visionText.trim().isNotEmpty) {
+            text = visionText;
           }
-          text = visionText;
-        } else {
-          setState(() {
-            _recognizing = false;
-            _lastError = '本地OCR暂不支持当前平台，且未配置视觉模型。'
-                '可到「AI服务配置」填写视觉模型（如 qwen-vl-plus），或手动录入报告内容';
-          });
-          return;
+        } catch (_) {
+          // 视觉模型调用失败（网络/服务异常），降级本地 OCR
         }
       }
-      if (text.trim().isEmpty) {
+
+      // 未配置视觉模型，或识别失败/结果为空时，降级本地 OCR（免费离线）
+      if (text == null) {
+        try {
+          final ocrText = await provider.localOcrRecognize(bytes: bytes);
+          if (ocrText.trim().isNotEmpty) text = ocrText;
+        } catch (_) {
+          // 当前平台不支持本地 OCR
+        }
+      }
+
+      if (text == null || text.trim().isEmpty) {
         setState(() {
           _recognizing = false;
-          _lastError = '未能识别出文字，请确认图片清晰（光线充足、文字端正），或手动录入';
+          _lastError = provider.hasVisionModel
+              ? '未能识别出文字，请确认图片清晰（光线充足、文字端正），或手动录入'
+              : '未配置视觉模型且本地OCR不可用。'
+                  '可到「AI服务配置」填写视觉模型（如 qwen-vl-plus），或手动录入报告内容';
         });
         return;
       }
+      final recognizedText = text.trim();
       setState(() {
-        _ocrText = text.trim();
+        _ocrText = recognizedText;
         _recognizing = false;
       });
       if (!mounted) return;

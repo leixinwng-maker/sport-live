@@ -198,9 +198,9 @@ void main() {
     expect(await service.executeTool('get_recent_workouts', {'days': '3'}),
         '最近 3 天没有训练记录');
 
-    // 工具表：16 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 + P6-A 用药安全 1），schema 结构与 required 完整
+    // 工具表：17 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 + P6-A 用药安全 1 + P6-C 补剂常识 1），schema 结构与 required 完整
     final schemas = service.toolSchemas;
-    expect(schemas.length, 16);
+    expect(schemas.length, 17);
     final names = schemas.map((s) => (s['function'] as Map)['name']).toSet();
     expect(names, {
       'get_user_profile',
@@ -219,6 +219,7 @@ void main() {
       'search_literature',
       'search_condition_exercise',
       'search_otc_safety',
+      'lookup_supplement',
     });
     final search =
         schemas.firstWhere((s) => (s['function'] as Map)['name'] == 'search_knowledge');

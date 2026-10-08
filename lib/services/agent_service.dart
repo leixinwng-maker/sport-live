@@ -183,7 +183,18 @@ class AgentService {
         '4. 出现胸痛、呼吸困难、意识改变、呕血黑便、高热不退、剧烈头痛伴呕吐、严重过敏（皮疹伴气促）等红旗症状时，'
         '首要回答是尽快就医或拨打急救电话，不得以用药建议替代就医\n'
         '5. 涉及多药同服、复方制剂成分叠加、中西药联用时，提示核对成分表并咨询药师；'
-        'AI 用药建议不替代医生或药师的专业判断';
+        'AI 用药建议不替代医生或药师的专业判断\n\n'
+        '补剂常识规范（涉及维生素、矿物质、蛋白粉、肌酸、咖啡因等膳食补充剂时必须遵守）：\n'
+        '1. 先调用 lookup_supplement 检索本地补剂常识条目，再基于结果作答；'
+        '严禁凭印象推荐品牌、剂量或用法，严禁编造成分、数值或出处\n'
+        '2. 只作「成分、推荐摄入量、可耐受最高摄入量与一般性安全提示」，'
+        '绝不作诊断、绝不开具个体化补充方案、绝不承诺或暗示任何疗效；'
+        '不得把补剂表述为可治疗或改善某种疾病\n'
+        '3. 每条信息必须注明出处（来源名称与链接）；本地库检索不到时如实说明无本地依据，'
+        '可给一般性膳食建议但须声明依据不足\n'
+        '4. 涉及药物相互作用、孕产哺乳、儿童青少年、老年及慢性病（尤其肾功能不全、肝病）人群时，'
+        '只提示「咨询医师或药师」，不给具体剂量结论\n'
+        '5. 补剂不能替代均衡饮食与药物治疗；回答时保持中性，不夸大、不诱导购买';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -323,6 +334,25 @@ class AgentService {
               },
             },
             requiredParams: ['query']),
+        _fn(
+            'lookup_supplement',
+            '查询本地补剂常识条目：维生素D、Omega-3（鱼油）、镁、锌、铁、钙、维生素C、'
+                '复合维生素、肌酸、乳清蛋白、咖啡因等常见膳食补充剂的推荐摄入量、'
+                '可耐受最高摄入量、一般性安全提示与常见相互作用。'
+                '只给成分与剂量常识，不含诊断、个体化补充方案与疗效承诺',
+            params: {
+              'query': {
+                'type': 'string',
+                'description': '补剂名、成分或问题，如：维生素D 每天多少、鱼油 出血、'
+                    '镁 上限、乳清蛋白 乳糖不耐受、咖啡因 运动前',
+              },
+              'topic': {
+                'type': 'string',
+                'description': '条目组（可选，用于收敛到具体补剂）：维生素D、Omega-3、镁、锌、'
+                    '铁、钙、维生素C、复合维生素、肌酸、乳清蛋白、咖啡因',
+              },
+            },
+            requiredParams: ['query']),
       ];
 
   Map<String, dynamic> _fn(
@@ -363,6 +393,7 @@ class AgentService {
     'search_literature': '文献检索',
     'search_condition_exercise': '疾病运动',
     'search_otc_safety': '用药安全',
+    'lookup_supplement': '补剂常识',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -448,6 +479,15 @@ class AgentService {
         final hits = p.searchOtcSafety(query,
             topic: topic.isEmpty ? null : topic, topN: 4);
         return _clip(_formatOtcSafety(hits, '$topic $query'.trim()));
+      case 'lookup_supplement':
+        final query = (args['query'] ?? '').toString().trim();
+        final topic = (args['topic'] ?? '').toString().trim();
+        if (query.isEmpty && topic.isEmpty) {
+          return 'query 参数不能为空';
+        }
+        final hits = p.searchSupplement(query,
+            topic: topic.isEmpty ? null : topic, topN: 4);
+        return _clip(_formatSupplement(hits, '$topic $query'.trim()));
       default:
         return '未知工具：$name';
     }
@@ -694,6 +734,37 @@ class AgentService {
       if (e.url.isNotEmpty) sb.write('\n链接：${e.url}');
     }
     sb.write('\n\n$_otcDisclaimer');
+    return sb.toString();
+  }
+
+  /// 补剂常识信息的固定免责话术（P6-C，安全合规硬要求）
+  static const String _supplementDisclaimer =
+      '以上为一般性膳食补充剂常识（成分、推荐摄入量与安全提示），不构成补充方案或医疗建议，'
+      '也不能替代均衡饮食与医生、药师的专业判断。保健食品不是药物，不能代替药物治疗疾病；'
+      '请按标签推荐量服用、勿超量叠加；孕妇、哺乳期、儿童青少年、老年人及慢性病（尤其肾功能不全、肝病）'
+      '人群，或正在服药者，请务必先咨询医师或药师。如出现不适请立即停用并就医。';
+
+  /// 补剂常识条目格式化：按来源口径排序，逐条附出处与链接，末尾固定免责话术。
+  /// 未命中时不编造，明确提示无本地依据并优先建议咨询医师或药师。
+  String _formatSupplement(List<EvidenceEntry> list, String query) {
+    if (list.isEmpty) {
+      return '本地补剂常识库暂无与「$query」相关的条目。'
+          '请勿编造成分、推荐量、上限或出处；应如实说明无本地依据，'
+          '可给一般性膳食建议但须声明依据不足，并建议咨询医师或药师。';
+    }
+    final sorted = [...list]..sort((a, b) {
+        final ra = _evidenceRank[a.evidenceLevel] ?? 9;
+        final rb = _evidenceRank[b.evidenceLevel] ?? 9;
+        return ra.compareTo(rb);
+      });
+    final sb = StringBuffer('补剂常识检索结果（本地库，来源口径：指南＝官方文件（NIH ODS/FDA）＞专家＝专业学会共识（ISSN/EFSA））：');
+    for (final e in sorted) {
+      sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
+      sb.write('\n要点：${e.recommendation}');
+      sb.write('\n出处：${e.source}');
+      if (e.url.isNotEmpty) sb.write('\n链接：${e.url}');
+    }
+    sb.write('\n\n$_supplementDisclaimer');
     return sb.toString();
   }
 

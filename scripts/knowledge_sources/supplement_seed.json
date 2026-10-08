@@ -1,0 +1,270 @@
+{
+  "version": "1.0.0",
+  "description": "常见补剂常识种子：面向「成分、推荐摄入量、可耐受最高摄入量（UL）、一般性安全提示与相互作用」的条目集，复用 EvidenceEntry 结构（domain 固定为「补剂」）。内容来自美国政府公开文献（NIH ODS 消费者事实清单、FDA 消费者资讯）与专业学会公开立场文件（ISSN）的要点人工摘录改写，非原文照搬；evidenceLevel 取「指南」（政府/官方文件）或「专家」（专业学会共识）。本库只给成分、剂量与一般性安全提示，不作诊断、不承诺疗效；涉及药物相互作用、孕产哺乳、儿童青少年、老年及慢性病人群，一律建议咨询医师或药师。凡官方未设定或未取得明确来源的数据一律不写。",
+  "entries": [
+    {
+      "id": "supp-vitamin-d-rda",
+      "domain": "补剂",
+      "condition": "维生素D",
+      "topic": "维生素D 推荐摄入量 600IU 800IU 1-70岁 71岁以上 换算 微克 RDA",
+      "recommendation": "维生素 D 的推荐摄入量按年龄区分：1–70 岁人群每日 15 μg（600 IU），71 岁以上每日 20 μg（800 IU）。维生素 D 的国际单位与微克换算关系为 1 μg = 40 IU。是否需额外补充应结合日照、饮食与个体情况，必要时咨询医生。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）维生素 D 消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminD-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-vitamin-d-ul",
+      "domain": "补剂",
+      "condition": "维生素D",
+      "topic": "维生素D 可耐受最高摄入量 UL 4000IU 100微克 中毒 高钙血症 肾结石 过量",
+      "recommendation": "维生素 D 的成人可耐受最高摄入量（UL）为每日 100 μg（4000 IU），长期超过该水平可能带来风险。过量补充可致高钙血症，进而出现恶心、乏力、多尿等表现，并可能造成肾结石乃至肾功能损害。补充剂不宜自行长期大剂量服用。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）维生素 D 消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminD-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-vitamin-d-interaction",
+      "domain": "补剂",
+      "condition": "维生素D",
+      "topic": "维生素D 相互作用 药物 减脂药 抗癫痫药 糖皮质激素 噻嗪类利尿剂 血钙",
+      "recommendation": "部分药物会影响维生素 D 的吸收或代谢，例如部分减脂药物、抗癫痫药、糖皮质激素等；噻嗪类利尿剂与维生素 D 合用可能升高血钙。正在服药者、孕期哺乳期人群、婴幼儿及老年人，补充前应咨询医生或药师，由专业人员判断是否需要以及补充多少。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）维生素 D 消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminD-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-omega3-intake",
+      "domain": "补剂",
+      "condition": "Omega-3",
+      "topic": "Omega-3 鱼油 EPA DHA ALA 摄入量 适宜摄入量 AI 男性1.6g 女性1.1g FDA 5g 心血管",
+      "recommendation": "Omega-3 中只有 α-亚麻酸（ALA）设有每日适宜摄入量（AI）：成年男性 1.6 g、成年女性 1.1 g；EPA 与 DHA 目前没有官方推荐的每日摄入量。美国 FDA 认为每日摄入不超过 5 g 的 EPA+DHA 通常安全。部分心血管疾病人群在医生指导下可能使用约 1 g/日的 EPA+DHA。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）Omega-3 脂肪酸消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-omega3-bleeding",
+      "domain": "补剂",
+      "condition": "Omega-3",
+      "topic": "Omega-3 鱼油 出血风险 抗凝药 抗血小板药 相互作用 手术前 停用",
+      "recommendation": "高剂量鱼油（EPA+DHA）可能增加出血倾向，与抗凝药或抗血小板药合用时尤需注意。计划手术者应提前告知医生正在服用的补充剂。正在使用抗凝、抗血小板药物，或有出血性疾病者，补充前须咨询医生或药师。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）Omega-3 脂肪酸消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-magnesium-rda",
+      "domain": "补剂",
+      "condition": "镁",
+      "topic": "镁 推荐摄入量 男性400 420mg 女性310 320mg 膳食来源 坚果 绿叶蔬菜",
+      "recommendation": "镁的推荐摄入量按性别与年龄区分：成年男性约每日 400–420 mg，成年女性约每日 310–320 mg。多数人可通过均衡饮食获得，全谷物、坚果、绿叶蔬菜与豆类是良好来源。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）镁消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Magnesium-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-magnesium-ul-interaction",
+      "domain": "补剂",
+      "condition": "镁",
+      "topic": "镁 补充剂 可耐受最高摄入量 350mg 腹泻 相互作用 双膦酸盐 抗生素 利尿剂 质子泵抑制剂",
+      "recommendation": "镁的可耐受最高摄入量（UL）为每日 350 mg，且此限量仅针对补充剂与药物来源的镁，不含食物中的镁。补充剂过量最常引起腹泻和胃肠不适。镁可与双膦酸盐、部分抗生素、利尿剂及质子泵抑制剂等药物发生相互作用，影响药效；正在服药者补充前应咨询医生或药师。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）镁消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Magnesium-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-zinc-rda",
+      "domain": "补剂",
+      "condition": "锌",
+      "topic": "锌 推荐摄入量 男性11mg 女性8mg 儿童腹泻 20mg 10-14天 WHO UNICEF",
+      "recommendation": "锌的推荐摄入量为成年男性约每日 11 mg、成年女性约每日 8 mg。世界卫生组织与联合国儿童基金会建议，儿童腹泻期间可在专业指导下每日补充锌 20 mg，连续 10–14 天。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）锌消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Zinc-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-zinc-ul-interaction",
+      "domain": "补剂",
+      "condition": "锌",
+      "topic": "锌 可耐受最高摄入量 40mg 相互作用 喹诺酮 四环素 铁 铜缺乏 免疫 血脂",
+      "recommendation": "锌的成人可耐受最高摄入量（UL）为每日 40 mg，长期大剂量补充可致免疫功能下降、铜缺乏及血脂异常。锌与喹诺酮类、四环素类抗生素同服会相互影响吸收，通常需错开服用时间；每日较大剂量的铁也会降低锌的吸收。正在服药或需长期服用者应咨询医生或药师。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）锌消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Zinc-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-iron-rda",
+      "domain": "补剂",
+      "condition": "铁",
+      "topic": "铁 推荐摄入量 男性8mg 女性18mg 孕期27mg 缺铁 血常规 检查",
+      "recommendation": "铁的推荐摄入量为成年男性约每日 8 mg、19–50 岁女性约每日 18 mg、孕期约每日 27 mg。是否缺铁应通过血常规与铁代谢检查判断，不建议在未确诊的情况下自行长期补铁；孕期补铁应咨询医生。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）铁消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Iron-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-iron-ul-toxicity",
+      "domain": "补剂",
+      "condition": "铁",
+      "topic": "铁 可耐受最高摄入量 45mg 儿童误服 中毒 器官衰竭 相互作用 左甲状腺素 钙",
+      "recommendation": "铁的成人可耐受最高摄入量（UL）为每日 45 mg。铁过量可造成严重损害，急性铁中毒在幼儿中尤其危险，含铁补充剂须妥善存放、避免儿童误服。铁还会影响左甲状腺素、部分抗生素等的吸收，与钙剂也宜错开服用；服药者应咨询医生或药师。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）铁消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Iron-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-calcium-rda",
+      "domain": "补剂",
+      "condition": "钙",
+      "topic": "钙 推荐摄入量 1000mg 1200mg 女性51-70岁 71岁以上 老年人 膳食",
+      "recommendation": "钙的推荐摄入量为 19–50 岁人群约每日 1000 mg，女性 51–70 岁及 71 岁以上人群约每日 1200 mg。奶制品、豆制品与深绿色蔬菜是良好来源，是否需额外补充应结合膳食摄入评估。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）钙消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Calcium-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-calcium-ul-absorption",
+      "domain": "补剂",
+      "condition": "钙",
+      "topic": "钙 可耐受最高摄入量 2500mg 2000mg 单次500mg 吸收 相互作用 左甲状腺素 喹诺酮",
+      "recommendation": "钙的可耐受最高摄入量（UL）为 19–50 岁每日 2500 mg、51 岁以上每日 2000 mg。单次补充不超过约 500 mg 时吸收利用最佳，故分次服用优于一次大量服用。钙会与左甲状腺素、喹诺酮类抗生素等发生相互作用，通常需错开服用时间；服药者应咨询医生或药师。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）钙消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/Calcium-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-vitamin-c-rda",
+      "domain": "补剂",
+      "condition": "维生素C",
+      "topic": "维生素C 推荐摄入量 男性90mg 女性75mg 吸烟者 额外35mg 水果蔬菜",
+      "recommendation": "维生素 C 的推荐摄入量为成年男性约每日 90 mg、成年女性约每日 75 mg；吸烟者建议在此基础上额外增加约 35 mg。新鲜蔬菜水果是主要来源，均衡饮食通常可满足需要。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）维生素 C 消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminC-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-vitamin-c-ul-interaction",
+      "domain": "补剂",
+      "condition": "维生素C",
+      "topic": "维生素C 可耐受最高摄入量 2000mg 腹泻 恶心 相互作用 化疗 放疗 血色病 铁过载",
+      "recommendation": "维生素 C 的成人可耐受最高摄入量（UL）为每日 2000 mg，超过此量易引起腹泻、恶心等胃肠不适。高剂量维生素 C 可能影响某些治疗或与部分药物相互作用；血色病（铁过载）等人群应慎用。正在接受治疗或服药者，补充前应咨询医生。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）维生素 C 消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminC-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-mvm-definition",
+      "domain": "补剂",
+      "condition": "复合维生素",
+      "topic": "复合维生素 多种维生素矿物质 无标准配方 MVM 适用人群 膳食不足 孕期 素食",
+      "recommendation": "复合维生素/矿物质补充剂没有统一的标准配方，各产品所含成分与剂量差异较大。通常在膳食摄入不足、食欲差、严格素食时，医生可能建议补充；处于特定生理阶段（如孕期）者，补充前应咨询医生。它不能替代均衡饮食。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）复合维生素/矿物质补充剂消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/MVMS-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-mvm-risk",
+      "domain": "补剂",
+      "condition": "复合维生素",
+      "topic": "复合维生素 风险 维生素A β-胡萝卜素 吸烟者 孕期 华法林 维生素K 相互作用 叠加",
+      "recommendation": "服用复合维生素时须注意与其他补充剂或强化食品叠加后，不要超过各营养素的可耐受最高摄入量。吸烟者及既往吸烟者应避免含大剂量 β-胡萝卜素和维生素 A 的产品；孕期摄入过量维生素 A 可能增加胎儿出生缺陷风险。含维生素 K 的产品会影响华法林等抗凝药的效果，服用此类药物者使用前须咨询医生。",
+      "evidenceLevel": "指南",
+      "source": "美国国立卫生研究院膳食补充剂办公室（NIH ODS）复合维生素/矿物质补充剂消费者事实清单",
+      "url": "https://ods.od.nih.gov/factsheets/MVMS-Consumer/",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-creatine-dosing",
+      "domain": "补剂",
+      "condition": "肌酸",
+      "topic": "肌酸 一水肌酸 负荷 5g 维持 3-5g 用法 剂量 ISSN 体重",
+      "recommendation": "一水肌酸是研究最充分的肌酸形式。国际运动营养学会（ISSN）给出的方案为：可先进行 5–7 天的负荷期（约 0.3 g/kg 体重/日，分次服用），随后进入维持期 3–5 g/日；也可不负荷，直接每日约 3 g 持续数周逐步饱和。具体用量应结合体重与个体情况；肾病患者或有基础疾病者使用前须咨询医生。",
+      "evidenceLevel": "专家",
+      "source": "国际运动营养学会（ISSN）关于肌酸补充安全性与有效性的立场声明（2017）",
+      "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0173-z",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    },
+    {
+      "id": "supp-creatine-safety",
+      "domain": "补剂",
+      "condition": "肌酸",
+      "topic": "肌酸 安全性 水潴留 体重增加 胃肠不适 肾功能 长期 副作用",
+      "recommendation": "在健康人群中，按推荐剂量服用一水肌酸的常见副作用为轻度水潴留导致的体重增加以及胃肠不适，分次或随餐服用可减轻。ISSN 认为健康人群长期使用未见明确危害；但肾功能不全者及孕期哺乳期人群不应自行使用，须先咨询医生。本条只作一般性安全提示，不作疗效承诺。",
+      "evidenceLevel": "专家",
+      "source": "国际运动营养学会（ISSN）关于肌酸补充安全性与有效性的立场声明（2017）",
+      "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0173-z",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    },
+    {
+      "id": "supp-whey-protein-intake",
+      "domain": "补剂",
+      "condition": "乳清蛋白",
+      "topic": "乳清蛋白 蛋白粉 摄入量 1.4-2.0g/kg 单次20-40g 力量训练 亮氨酸 蛋白质",
+      "recommendation": "对进行规律力量训练者，ISSN 等机构建议每日蛋白质总摄入约 1.4–2.0 g/kg 体重，乳清蛋白可作为便捷的蛋白来源之一。单次摄入约 20–40 g 蛋白质（或约 0.25 g/kg 体重）有利于肌肉蛋白合成，可每 3–4 小时一次。是否需要以及用多少，取决于日常膳食蛋白摄入总量。",
+      "evidenceLevel": "专家",
+      "source": "国际运动营养学会（ISSN）关于蛋白质与运动的立场声明（2017）",
+      "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0177-8",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    },
+    {
+      "id": "supp-whey-protein-caution",
+      "domain": "补剂",
+      "condition": "乳清蛋白",
+      "topic": "乳清蛋白 禁忌 牛奶蛋白过敏 乳糖不耐受 肾病 肾功能不全 浓缩 分离",
+      "recommendation": "牛奶蛋白过敏者应避免使用含乳清蛋白的产品。乳糖不耐受者服用浓缩乳清蛋白（WPC）可能出现腹胀、腹泻等不适，可考虑分离乳清蛋白（WPI）等乳糖含量更低的形式。肾功能不全等慢性肾病患者使用蛋白粉前必须咨询医生，不可自行加量。",
+      "evidenceLevel": "专家",
+      "source": "国际运动营养学会（ISSN）关于蛋白质与运动的立场声明（2017）",
+      "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0177-8",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    },
+    {
+      "id": "supp-caffeine-safe-limit",
+      "domain": "补剂",
+      "condition": "咖啡因",
+      "topic": "咖啡因 每日 400mg 安全 上限 FDA 过量 1200mg 中毒 心悸 失眠 戒断",
+      "recommendation": "美国 FDA 指出，健康成年人每日摄入不超过 400 mg 咖啡因通常不会产生危险的负面效应；短时间内摄入约 1200 mg 则可能出现中毒表现。过量症状包括心率增快、心悸、血压升高、失眠、焦虑、手抖、胃部不适、恶心和头痛。若想减少摄入，应循序渐进，突然停用可能引起戒断性头痛等不适。",
+      "evidenceLevel": "指南",
+      "source": "美国食品药品监督管理局（FDA）消费者资讯：多少咖啡因算过量",
+      "url": "https://www.fda.gov/consumers/consumer-updates/spilling-beans-how-much-caffeine-too-much",
+      "license": "美国政府作品，属公共领域（17 U.S.C. §105）；条目化改写，未照搬原文"
+    },
+    {
+      "id": "supp-caffeine-performance",
+      "domain": "补剂",
+      "condition": "咖啡因",
+      "topic": "咖啡因 运动表现 3-6mg/kg 运动前60分钟 ISSN 剂量 个体差异",
+      "recommendation": "国际运动营养学会（ISSN）指出，咖啡因可在多种运动项目中提升表现，常用有效剂量约为 3–6 mg/kg 体重，运动前约 60 分钟摄入；较低剂量（约 2 mg/kg）也可能有效，更高剂量并不带来更多益处。个体对咖啡因的反应差异较大，应从小剂量开始测试耐受性。",
+      "evidenceLevel": "专家",
+      "source": "国际运动营养学会（ISSN）关于咖啡因与运动表现的立场声明（2021）",
+      "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-020-00383-4",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    },
+    {
+      "id": "supp-caffeine-caution",
+      "domain": "补剂",
+      "condition": "咖啡因",
+      "topic": "咖啡因 儿童 青少年 能量饮料 孕期 哺乳期 200mg EFSA 相互作用 药物 代谢",
+      "recommendation": "儿童与青少年应避免能量饮料（美国儿科学会观点）。欧洲食品安全局（EFSA）认为，孕期与哺乳期人群每日咖啡因摄入不超过约 200 mg 不引起安全担忧。部分药物会影响咖啡因的代谢，吸烟会加快其代谢、孕期与口服避孕药则会减慢代谢。对咖啡因敏感、有心血管疾病、失眠或焦虑问题者应限制摄入，并咨询医生。",
+      "evidenceLevel": "专家",
+      "source": "欧洲食品安全局（EFSA）关于咖啡因安全性的科学意见（2015）",
+      "url": "https://efsa.onlinelibrary.wiley.com/doi/10.2903/j.efsa.2015.4102",
+      "license": "开放获取（Open Access）；条目化改写，标注出处"
+    }
+  ]
+}

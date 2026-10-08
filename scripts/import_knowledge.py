@@ -25,6 +25,9 @@ assets/data/evidence_kb.json，供 App 启动时离线加载进本地智脑 RAG�
 - otc_safety_seed.json：国家卫健委《新冠病毒感染者居家治疗常用药参考表》
   （政府公开发布，官方媒体刊载全文）与 NMPA《第二批国家非处方药化学药品使用
   说明书目录》（官方公开发布）要点条目化改写，未复制整篇说明书
+- supplement_seed.json：NIH ODS 消费者事实清单 / FDA 消费者资讯（美国政府作品，
+  公共领域）与 ISSN 立场声明、EFSA 科学意见（开放获取）要点条目化改写，
+  未照搬原文；只给成分、剂量与一般性安全提示，不作诊断、不承诺疗效
 """
 import io
 import json
@@ -47,6 +50,11 @@ EVIDENCE_LEVELS = ('指南推荐', '系统评价', 'RCT')
 # 故独立设白名单：指南＝官方文件（如卫健委参考表）；专家＝NMPA 说明书范本。
 OTC_SAFETY_DOMAIN = '用药安全'
 OTC_SAFETY_LEVELS = ('指南', '专家')
+
+# 补剂条目：性质为「官方摄入参考与安全提示」与「专业学会共识」，同样不适配临床证据三级分级。
+# 独立设白名单：指南＝政府/官方文件（NIH ODS、FDA）；专家＝专业学会共识（ISSN、EFSA）。
+SUPPLEMENT_DOMAIN = '补剂'
+SUPPLEMENT_LEVELS = ('指南', '专家')
 
 # 第二层：运动类别白名单（与 ExerciseExampleEntry.category 对应）
 CONDITION_CATEGORIES = ('有氧', '抗阻', '柔韧', '平衡', '身心')
@@ -96,6 +104,29 @@ def validate_otc_safety(entries, evidence_ids):
         if e.get('evidenceLevel') not in OTC_SAFETY_LEVELS:
             problems.append('otcSafety id=%s 证据等级非法: %s（允许 %s）'
                             % (eid, e.get('evidenceLevel'), '/'.join(OTC_SAFETY_LEVELS)))
+    return problems
+
+
+def validate_supplements(entries, reserved_ids):
+    """补剂校验：9 必填 + domain 固定 + 独立等级白名单 + 与既有数组 id 不重复。"""
+    problems = []
+    seen = set()
+    for i, e in enumerate(entries):
+        for k in EVIDENCE_REQUIRED:
+            if not str(e.get(k, '')).strip():
+                problems.append('supplements[%d] id=%s 缺少字段 %s' % (i, e.get('id'), k))
+        eid = e.get('id', '')
+        if eid in seen:
+            problems.append('supplements 重复 id: %s' % eid)
+        if eid in reserved_ids:
+            problems.append('supplements id 与 evidence/otcSafety 冲突: %s' % eid)
+        seen.add(eid)
+        if e.get('domain') != SUPPLEMENT_DOMAIN:
+            problems.append('supplements id=%s domain 必须为「%s」，实际: %s'
+                            % (eid, SUPPLEMENT_DOMAIN, e.get('domain')))
+        if e.get('evidenceLevel') not in SUPPLEMENT_LEVELS:
+            problems.append('supplements id=%s 证据等级非法: %s（允许 %s）'
+                            % (eid, e.get('evidenceLevel'), '/'.join(SUPPLEMENT_LEVELS)))
     return problems
 
 
@@ -159,6 +190,7 @@ def main():
     ex = load_json(os.path.join(SRC_DIR, 'exercise_seed.json'))
     ce = load_json(os.path.join(SRC_DIR, 'condition_exercise_seed.json'))
     otc = load_json(os.path.join(SRC_DIR, 'otc_safety_seed.json'))
+    supp = load_json(os.path.join(SRC_DIR, 'supplement_seed.json'))
 
     # 第一层（疾病 → 类别 + 剂量）与既有证据条目同构，统一并入 evidence
     evidence = list(ev['entries']) + list(ce.get('entries', []))
@@ -166,12 +198,14 @@ def main():
     exercises = ex['exercises']
     condition_exercises = ce['conditionExercises']
     otc_safety = list(otc.get('entries', []))
+    supplements = list(supp.get('entries', []))
     exercise_names = {x.get('name') for x in exercises}
     evidence_ids = {e.get('id') for e in evidence}
 
     problems = []
     problems += validate_evidence(evidence)
     problems += validate_otc_safety(otc_safety, evidence_ids)
+    problems += validate_supplements(supplements, evidence_ids | {e.get('id') for e in otc_safety})
     problems += validate_met(met_rows)
     problems += validate_exercises(exercises)
     problems += validate_condition_exercises(condition_exercises, exercise_names)
@@ -213,15 +247,25 @@ def main():
         {'name': '国家药监局《第二批国家非处方药化学药品使用说明书目录》',
          'url': 'https://www.nmpa.gov.cn/wwwroot/otc2h/otc2xyml.htm',
          'license': '官方公开发布；仅条目化改写，未复制整篇说明书'},
+        {'name': '美国国立卫生研究院膳食补充剂办公室（NIH ODS）膳食补充剂消费者事实清单',
+         'url': 'https://ods.od.nih.gov/factsheets/list-all/',
+         'license': '美国政府作品，属公共领域（17 U.S.C. §105）；仅条目化改写，未照搬原文'},
+        {'name': '美国食品药品监督管理局（FDA）消费者资讯：多少咖啡因算过量',
+         'url': 'https://www.fda.gov/consumers/consumer-updates/spilling-beans-how-much-caffeine-too-much',
+         'license': '美国政府作品，属公共领域（17 U.S.C. §105）；仅条目化改写，未照搬原文'},
+        {'name': '欧洲食品安全局（EFSA）关于咖啡因安全性的科学意见（2015）',
+         'url': 'https://efsa.onlinelibrary.wiley.com/doi/10.2903/j.efsa.2015.4102',
+         'license': '开放获取；仅条目化改写，标注出处'},
     ]
 
     out = {
-        'version': '1.2.0',
+        'version': '1.3.0',
         'generatedAt': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目。构建期导入，App 内零网络依赖。',
+        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目。构建期导入，App 内零网络依赖。',
         'sources': sources,
         'evidence': evidence,
         'otcSafety': otc_safety,
+        'supplements': supplements,
         'met': met_rows,
         'exercises': exercises,
         'conditionExercises': condition_exercises,
@@ -235,6 +279,7 @@ def main():
     print('已生成 %s' % os.path.relpath(OUT_PATH, ROOT))
     print('  evidence            = %d 条' % len(evidence))
     print('  otcSafety           = %d 条' % len(otc_safety))
+    print('  supplements         = %d 条' % len(supplements))
     print('  met                 = %d 条' % len(met_rows))
     print('  exercises           = %d 条' % len(exercises))
     print('  conditionExercises  = %d 条' % len(condition_exercises))

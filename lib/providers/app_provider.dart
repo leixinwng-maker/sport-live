@@ -64,6 +64,12 @@ class AppProvider extends ChangeNotifier {
   /// 避免安全结论外溢到循证/疾病运动等域。
   List<EvidenceEntry> otcSafetyEntries = [];
 
+  /// P6-C 常见补剂常识条目（独立数组，domain 固定为「补剂」）。
+  /// 与 evidenceEntries 分开存放，检索时严格限定 domain=='补剂'，
+  /// 避免补剂结论外溢到循证/疾病运动/用药安全等域。
+  /// 只给成分、剂量与一般性安全提示，不作诊断、不承诺疗效。
+  List<EvidenceEntry> supplementEntries = [];
+
   /// 循证联网检索开关（默认关闭）。
   /// 控制两类外发请求：
   /// - P4-T3：食物条码联网查询 Open Food Facts
@@ -191,11 +197,12 @@ class AppProvider extends ChangeNotifier {
       if (knowledgeEntries.isNotEmpty ||
           books.isNotEmpty ||
           evidenceEntries.isNotEmpty ||
-          otcSafetyEntries.isNotEmpty) {
+          otcSafetyEntries.isNotEmpty ||
+          supplementEntries.isNotEmpty) {
         KnowledgeEngine.retrieve(
             entries: knowledgeEntries,
             books: books,
-            evidence: [...evidenceEntries, ...otcSafetyEntries],
+            evidence: [...evidenceEntries, ...otcSafetyEntries, ...supplementEntries],
             query: '',
             topN: 1);
       }
@@ -231,12 +238,17 @@ class AppProvider extends ChangeNotifier {
           .whereType<Map>()
           .map((e) => EvidenceEntry.fromMap(Map<String, dynamic>.from(e)))
           .toList();
+      supplementEntries = ((map['supplements'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => EvidenceEntry.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       evidenceEntries = [];
       metTable = [];
       exerciseRefs = [];
       conditionExerciseExamples = [];
       otcSafetyEntries = [];
+      supplementEntries = [];
       error = '循证知识库加载失败：$e';
     }
   }
@@ -307,7 +319,7 @@ class AppProvider extends ChangeNotifier {
     final chunks = KnowledgeEngine.retrieve(
       entries: knowledgeEntries,
       books: books,
-      evidence: [...evidenceEntries, ...otcSafetyEntries],
+      evidence: [...evidenceEntries, ...otcSafetyEntries, ...supplementEntries],
       query: query,
       topN: topN,
       domains: domains,
@@ -469,6 +481,50 @@ class AppProvider extends ChangeNotifier {
     final seen = <String>[];
     for (final e in otcSafetyEntries) {
       if (e.domain == '用药安全' && e.condition.isNotEmpty &&
+          !seen.contains(e.condition)) {
+        seen.add(e.condition);
+      }
+    }
+    return seen;
+  }
+
+  /// P6-C 补剂常识检索（全部本地离线）。
+  ///
+  /// **严格限定 `domain == '补剂'`**，绝不外溢到循证/疾病运动/用药安全等域。
+  /// 条目只给成分、推荐摄入量、可耐受最高摄入量与一般性安全提示，
+  /// 不返回任何个体化剂量方案或疗效承诺；涉及相互作用与特殊人群一律提示咨询医师或药师。
+  ///
+  /// [query] 用户问题（补剂名、成分、用量、相互作用、人群等）。
+  /// [topic] 可选：限定条目组（如「维生素D」「Omega-3」「镁」「锌」「铁」「钙」
+  ///   「维生素C」「复合维生素」「肌酸」「乳清蛋白」「咖啡因」），用于把检索收敛到具体补剂。
+  List<EvidenceEntry> searchSupplement(String query,
+      {String? topic, int topN = 3}) {
+    final q = query.trim();
+    final tp = (topic ?? '').trim();
+    if (q.isEmpty && tp.isEmpty) return const [];
+    final scored = <MapEntry<EvidenceEntry, double>>[];
+    for (final e in supplementEntries) {
+      if (e.domain != '补剂') continue;
+      var score = KnowledgeEngine.relevance(e.searchText, q);
+      // 条目组精确匹配视为强相关（用户已指定补剂）
+      if (tp.isNotEmpty) {
+        if (e.condition.contains(tp) || tp.contains(e.condition)) {
+          score = score * 3.0 + 1.0;
+        } else {
+          score = score * 0.1;
+        }
+      }
+      if (score > 0.001) scored.add(MapEntry(e, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 补剂条目组清单（去重后按种子顺序），供工具层提示可用 topic。
+  List<String> get supplementTopics {
+    final seen = <String>[];
+    for (final e in supplementEntries) {
+      if (e.domain == '补剂' && e.condition.isNotEmpty &&
           !seen.contains(e.condition)) {
         seen.add(e.condition);
       }

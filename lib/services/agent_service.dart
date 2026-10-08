@@ -164,9 +164,18 @@ class AgentService {
         '2. 证据强度排序：指南推荐 > 系统评价/Meta 分析 > 单篇 RCT；'
         '优先引用强度更高的证据，强度偏低时须说明\n'
         '3. 每条循证建议必须注明出处（来源名称与链接），严禁编造文献、期刊、数据或结论\n'
-        '4. 本地库检索不到相关内容时，明确说明"本地库无相关证据"，'
-        '可给一般性建议但须声明依据不足，不要伪装成有文献支持\n'
-        '5. 涉及用药、诊断、急症时提示及时就医，AI 建议不替代医生诊疗';
+        '4. 本地库检索不到相关内容时，可调用 search_literature 联网检索开源医学文献'
+        '（Europe PMC / OpenAlex，仅元数据与链接；需用户开启「循证文献联网检索」，默认关闭）；'
+        '联网结果仍无命中，须明确说明"本地库与外网均无相关证据"，'
+        '可给一般性建议但须声明依据不足，不要伪装成有文献支持。'
+        '引用外网文献时必须原样标注标题、期刊、年份与链接，严禁编造标题、期刊或 DOI\n'
+        '5. 涉及用药、诊断、急症时提示及时就医，AI 建议不替代医生诊疗\n'
+        '6. 【证据越级禁令】「疾病—运动」类问题必须调用 search_condition_exercise，'
+        '并严格区分两层：第一层（疾病→运动类别与剂量，FITT-VP）为强证据，'
+        '第二层（运动类别→具体动作示例）为弱证据，仅作选动作参考。'
+        '严禁表述为「某个动作（如硬拉、卧推）能改善/治疗某疾病」，'
+        '也不得由第二层动作反推疗效或把两层混为一谈。'
+        '凡给出运动处方，必须一并标注禁忌人群与就医提示';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -249,6 +258,45 @@ class AgentService {
             params: {
               'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
             }),
+        _fn(
+            'search_literature',
+            '联网检索开源医学文献（Europe PMC 主源 + OpenAlex 补源）：'
+                '返回标题、作者、期刊、年份、DOI、许可与链接（仅元数据，不含正文）。'
+                '用于本地循证库检索不到时的补充；需用户开启「循证文献联网检索」，默认关闭',
+            params: {
+              'query': {'type': 'string', 'description': '检索词或问题，如：高血压 有氧运动'},
+              'condition': {
+                'type': 'string',
+                'description': '疾病或健康目标（可选），如：高血压、2型糖尿病、骨质疏松',
+              },
+              'year_from': {
+                'type': 'integer',
+                'description': '仅返回此年份及以后的文献（可选），如 2015',
+              },
+            },
+            requiredParams: ['query']),
+        _fn(
+            'search_condition_exercise',
+            '查询「疾病—运动」两层建议：第一层为疾病/人群对应的运动类别与剂量（FITT-VP，'
+                '强证据，来源为权威指南）；第二层为该运动类别下的具体动作示例与一般性禁忌'
+                '（弱证据，仅供选动作参考）。两层结果必须分开表述，'
+                '严禁把具体动作与疾病疗效直接挂钩',
+            params: {
+              'condition': {
+                'type': 'string',
+                'description': '疾病或人群，如：高血压、2型糖尿病、骨质疏松、膝骨关节炎、'
+                    '非特异性腰痛、帕金森病、卒中后、慢阻肺、老年人、孕期、抑郁焦虑',
+              },
+              'category': {
+                'type': 'string',
+                'description': '运动类别（可选，显式指定时直接筛选第二层）：有氧、抗阻、柔韧、平衡、身心',
+              },
+              'level': {
+                'type': 'string',
+                'description': '证据级别提示（可选），如：指南推荐',
+              },
+            },
+            requiredParams: ['condition']),
       ];
 
   Map<String, dynamic> _fn(
@@ -286,6 +334,8 @@ class AgentService {
     'query_exercise': '动作库',
     'lookup_food': '食物营养',
     'get_wearable_summary': '穿戴数据',
+    'search_literature': '文献检索',
+    'search_condition_exercise': '疾病运动',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -348,6 +398,20 @@ class AgentService {
         return _clip(await _lookupFood(args));
       case 'get_wearable_summary':
         return _clip(await _wearableSummary(_daysArg(args, 7)));
+      case 'search_literature':
+        return _clip(await _searchLiterature(args));
+      case 'search_condition_exercise':
+        final condition = (args['condition'] ?? '').toString().trim();
+        if (condition.isEmpty) return 'condition 参数不能为空';
+        final category = (args['category'] ?? '').toString().trim();
+        final level = (args['level'] ?? '').toString().trim();
+        final res = p.searchConditionExercise(
+          condition,
+          category: category.isEmpty ? null : category,
+          level: level.isEmpty ? null : level,
+          topN: 4,
+        );
+        return _clip(_formatConditionExercise(res, condition));
       default:
         return '未知工具：$name';
     }
@@ -360,6 +424,15 @@ class AgentService {
     if (raw is num) days = raw.toInt();
     if (raw is String) days = int.tryParse(raw) ?? fallback;
     return days.clamp(1, 90);
+  }
+
+  /// 可选整数参数解析（缺省返回 null，不设默认值）
+  int? _intArg(Map<String, dynamic> args, String key) {
+    final raw = args[key];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw.trim());
+    return null;
   }
 
   String _clip(String text) {
@@ -503,6 +576,57 @@ class AgentService {
     return sb.toString();
   }
 
+  /// 运动健康信息的固定免责话术（P5 疾病—运动，安全合规硬要求）
+  static const String _exerciseDisclaimer =
+      '本内容为一般性运动健康信息，不构成医疗建议。具体运动方案请遵医嘱，'
+      '并在专业人员指导下进行；运动中若出现胸痛、眩晕、呼吸困难、异常心悸等不适，'
+      '请立即停止并就医。';
+
+  /// 「疾病—运动」两层结果格式化：先强证据（疾病→类别+剂量），
+  /// 后弱证据（类别→动作示例）。两段以显式标题隔开并附固定免责话术，
+  /// 从输出结构上杜绝「某动作改善某病」的证据越级。
+  String _formatConditionExercise(
+      ConditionExerciseResult res, String condition) {
+    if (res.isEmpty) {
+      return '本地库暂无「$condition」的疾病—运动条目。'
+          '请勿编造数据或结论；可如实说明该问题缺乏本地循证依据，'
+          '并建议咨询医生或运动康复专业人士。';
+    }
+    final sb = StringBuffer();
+    if (res.evidence.isNotEmpty) {
+      final sorted = [...res.evidence]..sort((a, b) {
+          final ra = _evidenceRank[a.evidenceLevel] ?? 9;
+          final rb = _evidenceRank[b.evidenceLevel] ?? 9;
+          return ra.compareTo(rb);
+        });
+      sb.write('第一层｜疾病/人群 → 运动类别与剂量（强证据，来源：权威指南，'
+          '按强度：指南推荐>系统评价>RCT）：');
+      for (final e in sorted) {
+        sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
+        sb.write('\n建议：${e.recommendation}');
+        sb.write('\n出处：${e.source}');
+        if (e.url.isNotEmpty) sb.write('\n链接：${e.url}');
+      }
+    } else {
+      sb.write('第一层｜本地库暂无「$condition」对应的高强度证据，'
+          '切勿编造疾病与运动的关联结论。');
+    }
+    if (res.examples.isNotEmpty) {
+      sb.write('\n\n第二层｜运动类别 → 动作示例与一般性注意'
+          '（弱证据，仅供选动作参考，**不代表对上述疾病有疗效**）：');
+      for (final x in res.examples) {
+        sb.write('\n- 【${x.category}】示例动作：${x.examples.join('、')}');
+        if (x.cues.isNotEmpty) sb.write('\n  要领：${x.cues}');
+        if (x.cautions.isNotEmpty) {
+          sb.write('\n  注意：${x.cautions.join('；')}');
+        }
+        if (x.source.isNotEmpty) sb.write('\n  出处：${x.source}');
+      }
+    }
+    sb.write('\n\n$_exerciseDisclaimer');
+    return sb.toString();
+  }
+
   /// 食物查询：本地库优先；条码在开关开启时联网（OFF），失败回落并标注
   Future<String> _lookupFood(Map<String, dynamic> args) async {
     final p = provider!;
@@ -534,6 +658,67 @@ class AgentService {
           '${f.caloriesPer100g.round()}kcal / '
           '蛋白质${f.proteinPer100g}g / 脂肪${f.fatPer100g}g / 碳水${f.carbsPer100g}g');
     }
+    return sb.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // P5 文献联网检索工具（本地循证库优先，联网需显式开启）
+  // ---------------------------------------------------------------------------
+
+  /// 文献检索：本地循证库优先；本地无命中且开关开启时联网（Europe PMC + OpenAlex）
+  ///
+  /// 合规：只返回元数据与链接，不缓存正文；未开启开关时明确提示，绝不静默联网。
+  Future<String> _searchLiterature(Map<String, dynamic> args) async {
+    final p = provider!;
+    final query = (args['query'] ?? '').toString().trim();
+    final condition = (args['condition'] ?? '').toString().trim();
+    if (query.isEmpty && condition.isEmpty) return 'query 参数不能为空';
+    final term = '$condition $query'.trim();
+    final yearFrom = _intArg(args, 'year_from');
+
+    // 1) 本地循证库优先，命中即回，避免不必要的外发检索词
+    final local = p.searchEvidence(query, condition: condition, topN: 3);
+    if (local.isNotEmpty) return _formatEvidence(local, term);
+
+    // 2) 本地无命中：联网需显式开启
+    if (!p.evidenceOnlineSearch) {
+      return '本地循证库无「$term」相关证据。'
+          '联网文献检索需先在「设置 → 循证文献联网检索」开启（默认关闭）；'
+          '开启后可从 Europe PMC / OpenAlex 检索开源医学文献（仅元数据与链接）。';
+    }
+
+    final refs = await p.searchLiteratureOnline(
+      term,
+      limit: 5,
+      yearFrom: yearFrom,
+    );
+    if (refs.isEmpty) {
+      return '本地循证库与联网源（Europe PMC / OpenAlex）均无「$term」相关文献。'
+          '请勿编造文献、期刊或 DOI；可如实说明该问题缺乏公开文献依据。';
+    }
+    return _formatLiterature(refs, term);
+  }
+
+  String _formatLiterature(List<LiteratureRef> list, String query) {
+    if (list.isEmpty) {
+      return '联网文献检索无结果（检索：$query）。请勿编造文献；'
+          '可如实说明该问题暂未检索到公开文献。';
+    }
+    final sb = StringBuffer(
+        '开源医学文献检索结果（Europe PMC / OpenAlex，仅元数据，检索：$query）：');
+    for (final r in list) {
+      final year = r.year > 0 ? '${r.year}' : '年份未标注';
+      final journal = r.journal.isNotEmpty ? r.journal : '期刊未标注';
+      final authors = r.authors.isEmpty ? '' : '｜${r.authors}';
+      sb.write('\n\n- ${r.title}');
+      sb.write('\n  $journal｜$year$authors');
+      if (r.doi.isNotEmpty) sb.write('\n  DOI：${r.doi}');
+      sb.write('\n  许可：${r.licenseLabel}');
+      if (r.source.isNotEmpty) sb.write('\n  来源：${r.source}');
+      if (r.url.isNotEmpty) sb.write('\n  链接：${r.url}');
+      if (r.pdfUrl.isNotEmpty) sb.write('\n  OA 全文：${r.pdfUrl}');
+    }
+    sb.write('\n\n提示：以上为文献元数据（非结论）。引用时须逐条核对原文，严禁编造或夸大。');
     return sb.toString();
   }
 

@@ -172,7 +172,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // 循证联网检索（P4-T3，默认关闭）
+          // 循证联网检索（P4-T3 食物条码 / P5 文献检索，默认关闭）
           Card(
             child: SwitchListTile(
               secondary: const Icon(Icons.science_outlined,
@@ -180,7 +180,8 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('循证文献联网检索'),
               subtitle: Text(
                 provider.evidenceOnlineSearch
-                    ? '已开启：食物条码可联网查询 Open Food Facts'
+                    ? '已开启：食物条码可联网查询 Open Food Facts；'
+                        '本地循证库无命中时可联网检索开源医学文献（Europe PMC / OpenAlex，仅元数据）'
                     : '已关闭（默认）：全部走本地库，不产生任何网络请求',
               ),
               value: provider.evidenceOnlineSearch,

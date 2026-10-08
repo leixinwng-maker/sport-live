@@ -181,3 +181,142 @@ class ExerciseRef {
         cues: (map['cues'] ?? '').toString(),
       );
 }
+
+/// 运动类别 → 具体动作示例（P5 第二层，弱证据）
+///
+/// 仅提供「示例动作名称 + 一般性注意」，**不提供任何疗效主张**，
+/// 绝不表述为「某动作改善某病」。动作名称须能在 [ExerciseRef] 库中找到。
+class ExerciseExampleEntry {
+  /// 运动类别：有氧 / 抗阻 / 柔韧 / 平衡 / 身心
+  final String category;
+
+  /// 动作中文名（须能在动作库中找到）
+  final List<String> examples;
+
+  /// 通用动作要领（自撰改写）
+  final String cues;
+
+  /// 禁忌 / 注意（须可溯源到指南或常识性安全原则）
+  final List<String> cautions;
+
+  /// 出处（动作来源 + 禁忌来源）
+  final String source;
+
+  final String url;
+  final String license;
+
+  ExerciseExampleEntry({
+    required this.category,
+    required this.examples,
+    this.cues = '',
+    this.cautions = const [],
+    this.source = '',
+    this.url = '',
+    this.license = '',
+  });
+
+  /// 参与检索的文本（类别 + 动作名 + 要领）
+  String get searchText => '$category ${examples.join(' ')} $cues';
+
+  Map<String, dynamic> toMap() => {
+        'category': category,
+        'examples': examples,
+        'cues': cues,
+        'cautions': cautions,
+        'source': source,
+        'url': url,
+        'license': license,
+      };
+
+  factory ExerciseExampleEntry.fromMap(Map<String, dynamic> map) =>
+      ExerciseExampleEntry(
+        category: (map['category'] ?? '').toString(),
+        examples: ((map['examples'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        cues: (map['cues'] ?? '').toString(),
+        cautions: ((map['cautions'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        source: (map['source'] ?? '').toString(),
+        url: (map['url'] ?? '').toString(),
+        license: (map['license'] ?? '').toString(),
+      );
+}
+
+/// 「疾病—运动」检索结果：两层结构，强证据在前、弱证据在后。
+class ConditionExerciseResult {
+  /// 第一层：疾病/人群 → 运动类别 + 剂量（强证据，domain='疾病运动'）
+  final List<EvidenceEntry> evidence;
+
+  /// 第二层：运动类别 → 动作示例 + 禁忌（弱证据，永不含疗效主张）
+  final List<ExerciseExampleEntry> examples;
+
+  const ConditionExerciseResult({
+    this.evidence = const [],
+    this.examples = const [],
+  });
+
+  bool get isEmpty => evidence.isEmpty && examples.isEmpty;
+}
+
+/// 开源医学文献条目（P5 联网文献检索）
+///
+/// 合规要点（硬约束，详见 docs/research/2026-10-08-p5-literature-databases-research.md）：
+/// - **只承载「元数据 + 链接」**，不含摘要或正文原文 —— 规避出版商摘要版权；
+///   要点由模型按需改写，本地不落正文、不再分发，符合「不整篇转载」底线。
+/// - [license] 逐条标注，用于判断该文是否可再分发；NC（非商用）条目在服务层已过滤。
+class LiteratureRef {
+  /// 论文标题（已去标签与结尾句点）
+  final String title;
+
+  /// 作者（最多 3 位，超出以「等」结尾）
+  final String authors;
+
+  /// 期刊 / 来源名
+  final String journal;
+
+  /// 发表年份（0 表示未知）
+  final int year;
+
+  /// DOI（不含 https://doi.org/ 前缀，可为空）
+  final String doi;
+
+  /// 是否开放获取
+  final bool isOpenAccess;
+
+  /// 许可标识，如 cc by / cc0 / cc by-nd；空表示未标注
+  final String license;
+
+  /// 著录 / 原文落地页链接（始终为合法可访问地址）
+  final String url;
+
+  /// 合法开放获取全文直链（无则为空）—— 仅指 OA 版本，不含订阅版正文
+  final String pdfUrl;
+
+  /// 来源库：Europe PMC / OpenAlex
+  final String source;
+
+  /// 被引次数（用于判断证据影响力，0 表示未知）
+  final int citations;
+
+  const LiteratureRef({
+    required this.title,
+    this.authors = '',
+    this.journal = '',
+    this.year = 0,
+    this.doi = '',
+    this.isOpenAccess = false,
+    this.license = '',
+    this.url = '',
+    this.pdfUrl = '',
+    this.source = '',
+    this.citations = 0,
+  });
+
+  /// 许可显示：有标注则大写（如 CC BY）；未标注时按开放状态给中文描述
+  String get licenseLabel {
+    if (license.isNotEmpty) return license.toUpperCase();
+    return isOpenAccess ? '开放获取（许可未标注）' : '非开放获取';
+  }
+}

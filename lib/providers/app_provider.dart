@@ -22,6 +22,7 @@ import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
 import '../services/search_service.dart';
 import '../services/food_lookup_service.dart';
+import '../services/literature_lookup_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
@@ -55,8 +56,14 @@ class AppProvider extends ChangeNotifier {
   List<MetEntry> metTable = [];
   List<ExerciseRef> exerciseRefs = [];
 
-  /// P4-T3 循证文献联网检索开关（默认关闭）。
-  /// 仅控制食物条码的 Open Food Facts 联网查询；关闭时全部走本地库。
+  /// P5 第二层：运动类别 → 动作示例 + 禁忌（弱证据，永不与疾病疗效挂钩）
+  List<ExerciseExampleEntry> conditionExerciseExamples = [];
+
+  /// 循证联网检索开关（默认关闭）。
+  /// 控制两类外发请求：
+  /// - P4-T3：食物条码联网查询 Open Food Facts
+  /// - P5：本地循证库无命中时联网检索开源医学文献（Europe PMC / OpenAlex，仅元数据）
+  /// 关闭时全部走本地库，不产生任何网络请求。
   bool evidenceOnlineSearch = false;
   static const String _kEvidenceOnline = 'evidence_online_search';
 
@@ -208,10 +215,17 @@ class AppProvider extends ChangeNotifier {
           .whereType<Map>()
           .map((e) => ExerciseRef.fromMap(Map<String, dynamic>.from(e)))
           .toList();
+      conditionExerciseExamples =
+          ((map['conditionExercises'] as List?) ?? const [])
+              .whereType<Map>()
+              .map((e) =>
+                  ExerciseExampleEntry.fromMap(Map<String, dynamic>.from(e)))
+              .toList();
     } catch (e) {
       evidenceEntries = [];
       metTable = [];
       exerciseRefs = [];
+      conditionExerciseExamples = [];
       error = '循证知识库加载失败：$e';
     }
   }
@@ -261,6 +275,17 @@ class AppProvider extends ChangeNotifier {
       }
     }
     return item;
+  }
+
+  // ============ P5 文献联网检索（Europe PMC + OpenAlex，元数据 only） ============
+
+  /// 联网检索开源医学文献（Europe PMC 主源 + OpenAlex 补源）。
+  /// 仅在开关开启时发起网络请求；失败返回空列表，由调用方回落本地循证库。
+  /// 合规：只取「元数据 + 链接」，不落正文；NC（非商用）许可条目在服务层已过滤。
+  Future<List<LiteratureRef>> searchLiteratureOnline(String query,
+      {int limit = 5, int? yearFrom}) async {
+    if (!evidenceOnlineSearch) return const [];
+    return LiteratureLookupService.search(query, limit: limit, yearFrom: yearFrom);
   }
 
   // ============ 知识库 ============
@@ -346,6 +371,54 @@ class AppProvider extends ChangeNotifier {
     }
     scored.sort((a, b) => b.value.compareTo(a.value));
     return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// P5「疾病—运动」两层检索（全部本地离线）。
+  ///
+  /// 严格遵守证据分层，**两层结果绝不合并、绝不互相推导**：
+  /// - 第一层（强证据）：疾病/人群 → 运动类别 + 剂量。仅在 `domain='疾病运动'`
+  ///   的条目内检索，避免外溢到营养/中医等其他域。
+  /// - 第二层（弱证据）：运动类别 → 动作示例 + 一般性禁忌。**不含任何疗效主张**，
+  ///   不得表述为「某动作改善某病」。
+  ///
+  /// [condition] 疾病/人群关键词（如「高血压」）。
+  /// [category] 可选：用户显式指定运动类别（有氧/抗阻/柔韧/平衡/身心）时，
+  /// 直接按类别筛选第二层；未指定时以第一层命中的类别做关联。
+  /// [level] 可选：证据级别提示（仅用于展示标注，不参与硬筛）。
+  ConditionExerciseResult searchConditionExercise(String condition,
+      {String? category, String? level, int topN = 3}) {
+    final cond = condition.trim();
+    final cat = (category ?? '').trim();
+
+    // 第一层：强证据，限定 domain='疾病运动'
+    final strong = <EvidenceEntry>[];
+    if (cond.isNotEmpty) {
+      for (final e in searchEvidence(cond, condition: cond, topN: 60)) {
+        if (e.domain != '疾病运动') continue;
+        strong.add(e);
+        if (strong.length >= topN) break;
+      }
+    }
+
+    // 第二层：弱证据。显式类别优先，否则按第一层 topic 中的类别关联
+    final wanted = <String>{};
+    if (cat.isNotEmpty) {
+      wanted.add(cat);
+    } else {
+      for (final e in strong) {
+        for (final c in const ['有氧', '抗阻', '柔韧', '平衡', '身心']) {
+          if (e.topic.contains(c)) wanted.add(c);
+        }
+      }
+    }
+    final weak = <ExerciseExampleEntry>[];
+    if (wanted.isNotEmpty) {
+      for (final x in conditionExerciseExamples) {
+        if (wanted.contains(x.category)) weak.add(x);
+      }
+    }
+
+    return ConditionExerciseResult(evidence: strong, examples: weak);
   }
 
   /// 获取最近个人数据摘要（训练/饮食/财务/状态），供智脑自动带入

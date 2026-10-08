@@ -90,8 +90,11 @@ class KnowledgeIndex {
     // 3. 循证库条目（静态导入自 assets/data/evidence_kb.json，始终参与检索）
     for (final ev in evidence) {
       final full = ev.searchText;
+      // 用药安全条目与循证条目同构，但来源不同：按域标注 source，
+      // 让注入文本能区分「用药安全」与「循证库」。
+      final fromOtc = ev.domain == '用药安全';
       chunks.add(_IndexedChunk(
-        source: '循证库',
+        source: fromOtc ? '用药安全' : '循证库',
         title: '${ev.condition}（${ev.evidenceLevel}）',
         content: ev.recommendation,
         domain: ev.domain,

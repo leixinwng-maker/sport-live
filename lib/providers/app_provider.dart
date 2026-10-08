@@ -59,6 +59,11 @@ class AppProvider extends ChangeNotifier {
   /// P5 第二层：运动类别 → 动作示例 + 禁忌（弱证据，永不与疾病疗效挂钩）
   List<ExerciseExampleEntry> conditionExerciseExamples = [];
 
+  /// P6-A 家庭用药安全条目（独立数组，domain 固定为「用药安全」）。
+  /// 与 evidenceEntries 分开存放，检索时严格限定 domain=='用药安全'，
+  /// 避免安全结论外溢到循证/疾病运动等域。
+  List<EvidenceEntry> otcSafetyEntries = [];
+
   /// 循证联网检索开关（默认关闭）。
   /// 控制两类外发请求：
   /// - P4-T3：食物条码联网查询 Open Food Facts
@@ -185,11 +190,12 @@ class AppProvider extends ChangeNotifier {
     Future(() {
       if (knowledgeEntries.isNotEmpty ||
           books.isNotEmpty ||
-          evidenceEntries.isNotEmpty) {
+          evidenceEntries.isNotEmpty ||
+          otcSafetyEntries.isNotEmpty) {
         KnowledgeEngine.retrieve(
             entries: knowledgeEntries,
             books: books,
-            evidence: evidenceEntries,
+            evidence: [...evidenceEntries, ...otcSafetyEntries],
             query: '',
             topN: 1);
       }
@@ -221,11 +227,16 @@ class AppProvider extends ChangeNotifier {
               .map((e) =>
                   ExerciseExampleEntry.fromMap(Map<String, dynamic>.from(e)))
               .toList();
+      otcSafetyEntries = ((map['otcSafety'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => EvidenceEntry.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       evidenceEntries = [];
       metTable = [];
       exerciseRefs = [];
       conditionExerciseExamples = [];
+      otcSafetyEntries = [];
       error = '循证知识库加载失败：$e';
     }
   }
@@ -296,7 +307,7 @@ class AppProvider extends ChangeNotifier {
     final chunks = KnowledgeEngine.retrieve(
       entries: knowledgeEntries,
       books: books,
-      evidence: evidenceEntries,
+      evidence: [...evidenceEntries, ...otcSafetyEntries],
       query: query,
       topN: topN,
       domains: domains,
@@ -419,6 +430,50 @@ class AppProvider extends ChangeNotifier {
     }
 
     return ConditionExerciseResult(evidence: strong, examples: weak);
+  }
+
+  /// P6-A 家庭用药安全检索（全部本地离线）。
+  ///
+  /// **严格限定 `domain == '用药安全'`**，绝不外溢到循证/疾病运动等域，
+  /// 也绝不返回任何具体处方或个体化剂量——安全条目本身只给「禁用/慎用/遵医嘱」
+  /// 与说明书级通识结论。检索为空时返回空列表，由工具层兜底并提示就医。
+  ///
+  /// [query] 用户问题（药名、成分、症状、场景等）。
+  /// [topic] 可选：限定条目组（退热镇痛/中成药退热/咽痛/止咳化痰/干咳/鼻部症状/
+  ///   恶心呕吐/用药安全通识），用于把检索收敛到具体用药场景。
+  List<EvidenceEntry> searchOtcSafety(String query,
+      {String? topic, int topN = 3}) {
+    final q = query.trim();
+    final tp = (topic ?? '').trim();
+    if (q.isEmpty && tp.isEmpty) return const [];
+    final scored = <MapEntry<EvidenceEntry, double>>[];
+    for (final e in otcSafetyEntries) {
+      if (e.domain != '用药安全') continue;
+      var score = KnowledgeEngine.relevance(e.searchText, q);
+      // 条目组精确匹配视为强相关（用户已指定用药场景）
+      if (tp.isNotEmpty) {
+        if (e.condition.contains(tp)) {
+          score = score * 3.0 + 1.0;
+        } else {
+          score = score * 0.1;
+        }
+      }
+      if (score > 0.001) scored.add(MapEntry(e, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 用药安全条目组清单（去重后按种子顺序），供工具层提示可用 topic。
+  List<String> get otcSafetyTopics {
+    final seen = <String>[];
+    for (final e in otcSafetyEntries) {
+      if (e.domain == '用药安全' && e.condition.isNotEmpty &&
+          !seen.contains(e.condition)) {
+        seen.add(e.condition);
+      }
+    }
+    return seen;
   }
 
   /// 获取最近个人数据摘要（训练/饮食/财务/状态），供智脑自动带入

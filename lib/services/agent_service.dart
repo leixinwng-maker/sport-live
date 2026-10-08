@@ -175,7 +175,15 @@ class AgentService {
         '第二层（运动类别→具体动作示例）为弱证据，仅作选动作参考。'
         '严禁表述为「某个动作（如硬拉、卧推）能改善/治疗某疾病」，'
         '也不得由第二层动作反推疗效或把两层混为一谈。'
-        '凡给出运动处方，必须一并标注禁忌人群与就医提示';
+        '凡给出运动处方，必须一并标注禁忌人群与就医提示\n\n'
+        '用药安全规范（涉及退热、止咳、鼻塞、咽痛、胃肠不适等家庭用药时必须遵守）：\n'
+        '1. 先调用 search_otc_safety 检索本地用药安全条目，再基于结果作答；严禁凭印象推荐药品、剂量或用法\n'
+        '2. 只作答「用药安全常识」，绝不作诊断、绝不开具处方、绝不给出个体化剂量（尤其儿童、孕产、哺乳、老年、慢病人群，只给「禁用/慎用/遵医嘱」结论）\n'
+        '3. 每条建议必须注明出处（来源名称与链接）；本地库检索不到时，如实说明无本地依据，不得编造药品、成分或规定\n'
+        '4. 出现胸痛、呼吸困难、意识改变、呕血黑便、高热不退、剧烈头痛伴呕吐、严重过敏（皮疹伴气促）等红旗症状时，'
+        '首要回答是尽快就医或拨打急救电话，不得以用药建议替代就医\n'
+        '5. 涉及多药同服、复方制剂成分叠加、中西药联用时，提示核对成分表并咨询药师；'
+        'AI 用药建议不替代医生或药师的专业判断';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -297,6 +305,24 @@ class AgentService {
               },
             },
             requiredParams: ['condition']),
+        _fn(
+            'search_otc_safety',
+            '查询家庭用药安全条目：退热镇痛、中成药退热、咽痛、止咳化痰、干咳、'
+                '鼻部症状、恶心呕吐、用药安全通识等场景的用药禁忌、联用风险、'
+                '特殊人群与就医提示。只给安全常识与结论，不含诊断、处方与个体化剂量',
+            params: {
+              'query': {
+                'type': 'string',
+                'description': '药名、成分、症状或场景，如：对乙酰氨基酚、布洛芬、'
+                    '藿香正气水 头孢、孕妇 用药、儿童 退热',
+              },
+              'topic': {
+                'type': 'string',
+                'description': '条目组（可选，用于收敛到具体用药场景）：退热镇痛、'
+                    '中成药退热、咽痛、止咳化痰、干咳、鼻部症状、恶心呕吐、用药安全通识',
+              },
+            },
+            requiredParams: ['query']),
       ];
 
   Map<String, dynamic> _fn(
@@ -336,6 +362,7 @@ class AgentService {
     'get_wearable_summary': '穿戴数据',
     'search_literature': '文献检索',
     'search_condition_exercise': '疾病运动',
+    'search_otc_safety': '用药安全',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -412,6 +439,15 @@ class AgentService {
           topN: 4,
         );
         return _clip(_formatConditionExercise(res, condition));
+      case 'search_otc_safety':
+        final query = (args['query'] ?? '').toString().trim();
+        final topic = (args['topic'] ?? '').toString().trim();
+        if (query.isEmpty && topic.isEmpty) {
+          return 'query 参数不能为空';
+        }
+        final hits = p.searchOtcSafety(query,
+            topic: topic.isEmpty ? null : topic, topN: 4);
+        return _clip(_formatOtcSafety(hits, '$topic $query'.trim()));
       default:
         return '未知工具：$name';
     }
@@ -523,9 +559,12 @@ class AgentService {
   // ---------------------------------------------------------------------------
 
   /// 证据强度排序权重（越小越强）：指南推荐 > 系统评价 > 单篇 RCT
+  /// 「指南」「专家」为用药安全条目专用口径（指南＝官方文件；专家＝说明书范本）
   static const Map<String, int> _evidenceRank = {
     '指南推荐': 0,
+    '指南': 0,
     '系统评价': 1,
+    '专家': 1,
     'RCT': 2,
   };
 
@@ -624,6 +663,37 @@ class AgentService {
       }
     }
     sb.write('\n\n$_exerciseDisclaimer');
+    return sb.toString();
+  }
+
+  /// 家庭用药安全信息的固定免责话术（P6-A，安全合规硬要求）
+  static const String _otcDisclaimer =
+      '以上为一般性家庭用药安全信息，不构成用药建议或医疗建议，也不能替代医生或药师的专业判断。'
+      '具体用药请仔细阅读药品说明书并遵医嘱；如出现胸痛、呼吸困难、意识改变、呕血黑便、高热不退、'
+      '剧烈头痛伴呕吐或严重过敏等表现，请立即就医或拨打急救电话。';
+
+  /// 用药安全条目格式化：按来源口径排序，逐条附出处与链接，末尾固定免责话术。
+  /// 未命中时不编造，明确提示无本地依据并优先建议就医。
+  String _formatOtcSafety(List<EvidenceEntry> list, String query) {
+    if (list.isEmpty) {
+      return '本地用药安全库暂无与「$query」相关的条目。'
+          '请勿编造药品、成分、剂量或规定；应如实说明无本地依据，'
+          '并建议用户阅读药品说明书、咨询医生或药师；'
+          '若症状明显或持续加重，优先建议尽快就医。';
+    }
+    final sorted = [...list]..sort((a, b) {
+        final ra = _evidenceRank[a.evidenceLevel] ?? 9;
+        final rb = _evidenceRank[b.evidenceLevel] ?? 9;
+        return ra.compareTo(rb);
+      });
+    final sb = StringBuffer('家庭用药安全检索结果（本地库，来源口径：指南＝官方文件＞专家＝说明书范本）：');
+    for (final e in sorted) {
+      sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
+      sb.write('\n要点：${e.recommendation}');
+      sb.write('\n出处：${e.source}');
+      if (e.url.isNotEmpty) sb.write('\n链接：${e.url}');
+    }
+    sb.write('\n\n$_otcDisclaimer');
     return sb.toString();
   }
 

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/agent_service.dart';
 import 'app_provider.dart';
+import 'wearable_provider.dart';
 
 /// 一条智能体聊天消息
 class ChatMessage {
@@ -82,6 +83,13 @@ class AgentProvider extends ChangeNotifier {
       _loaded = true;
       _load();
     }
+  }
+
+  /// 由 main.dart 的 ProxyProvider 注入 WearableProvider（幂等）
+  ///
+  /// 供 `get_wearable_summary` 工具读取穿戴数据摘要；未注入时该工具返回"未就绪"。
+  void attachWearable(WearableProvider wearable) {
+    _agentService?.wearable = wearable;
   }
 
   /// 发送用户消息（编排 agent 循环，UI 通过 toolStatus 观察查询进度）

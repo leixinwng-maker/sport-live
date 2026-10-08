@@ -19,7 +19,10 @@ android {
         applicationId = "com.wendao.ai_planner"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = maxOf(flutter.minSdkVersion, 23)
+        // P4-C：health 插件（Health Connect）声明 minSdk 26，Health Connect 本身也要求 Android 8.0+，
+        // 故此处将下限提升到 26（覆盖绝大多数在用设备），而非用 tools:overrideLibrary 强行降级
+        // ——后者会导致运行期崩溃。
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

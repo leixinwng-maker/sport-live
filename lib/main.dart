@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'providers/agent_provider.dart';
 import 'providers/app_provider.dart';
+import 'providers/wearable_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/lock/lock_screen.dart';
@@ -29,9 +30,13 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppProvider()..init()),
-        ChangeNotifierProxyProvider<AppProvider, AgentProvider>(
+        // P4-C 穿戴数据：仅探测可用性，不弹授权（授权须先经单独同意页）
+        ChangeNotifierProvider(create: (_) => WearableProvider()..init()),
+        // 智能体同时依赖 AppProvider（业务数据）与 WearableProvider（穿戴摘要）
+        ChangeNotifierProxyProvider2<AppProvider, WearableProvider, AgentProvider>(
           create: (_) => AgentProvider(),
-          update: (context, app, agent) => agent!..attach(app),
+          update: (context, app, wearable, agent) =>
+              agent!..attach(app)..attachWearable(wearable),
         ),
       ],
       child: MaterialApp(

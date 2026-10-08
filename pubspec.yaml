@@ -31,6 +31,8 @@ dependencies:
   csv: ^8.0.0
   file_picker: ^8.1.7
   google_mlkit_text_recognition: ^0.16.0
+  # P4-C 运动健康数据接入：Health Connect（Android）/ HealthKit（iOS）
+  health: ^13.3.1
 
 dev_dependencies:
   flutter_test:

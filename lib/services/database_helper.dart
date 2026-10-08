@@ -18,9 +18,10 @@ import '../models/ai_advice.dart';
 import '../models/health_profile.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
+import '../models/wearable.dart';
 import 'db_platform.dart';
 
-/// P2 云端化数据层（schema v7）。
+/// P2 云端化数据层（schema v8）。
 ///
 /// 设计要点（详见 docs/superpowers/specs/2026-10-07-p2-cloud-client-design.md）：
 /// - 服务器是唯一真相源，本地库只是展示缓存 + 待传队列；
@@ -58,7 +59,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 7,
+        version: 8,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -68,7 +69,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 7,
+        version: 8,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -122,7 +123,7 @@ class DatabaseHelper {
     await factory.deleteDatabase(f);
   }
 
-  // ============ schema v7 ============
+  // ============ schema v8 ============
 
   Future<void> _createTables(Database db, int version) async {
     // ---- 用户数据表（走云端同步：UUID 主键 + sync_version / sync_updated_at）----
@@ -340,6 +341,30 @@ class DatabaseHelper {
       )
     ''');
 
+    // ---- 穿戴数据快照表（本地专用，绝不进云、绝不入 sync_queue）----
+    //
+    // 合规（PIPL 敏感个人信息）：健康数据模块默认不参与云同步，
+    // 因此本表无 sync_version / sync_updated_at，且写入路径不使用 _upsertSynced，
+    // 保证「同步队列」中永远不含穿戴原始记录。
+    // 去重键 id = 数据类型 + 起始时间（见 WearableSample.dedupId）。
+    await db.execute('''
+      CREATE TABLE wearable_samples (
+        id TEXT PRIMARY KEY,
+        data_type TEXT NOT NULL,
+        label TEXT NOT NULL,
+        metric_type TEXT,
+        value REAL,
+        unit TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        source_name TEXT,
+        source_device_id TEXT,
+        recording_method TEXT,
+        extra TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
     // ---- 待传队列（同步引擎上传源）----
 
     await db.execute('''
@@ -362,6 +387,10 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_advice_date ON ai_advice(created_at)');
     await db.execute('CREATE INDEX idx_metrics_date ON health_metrics(date)');
     await db.execute('CREATE INDEX idx_reports_date ON health_reports(date)');
+    await db.execute(
+        'CREATE INDEX idx_wearable_start ON wearable_samples(start_time)');
+    await db.execute(
+        'CREATE INDEX idx_wearable_type ON wearable_samples(data_type)');
     await db.execute(
         'CREATE INDEX idx_queue_table ON sync_queue(table_name, row_id)');
   }
@@ -1010,6 +1039,67 @@ class DatabaseHelper {
 
   Future<void> deleteHealthMetric(String id) async {
     await _deleteSynced('health_metrics', id);
+  }
+
+  // ============ 穿戴数据快照（本地专用，不参与云同步）============
+  //
+  // 合规：本组方法**不使用** _upsertSynced / _deleteSynced，
+  // 因此不会写入 sync_queue，穿戴原始记录永不出本机。
+
+  /// 批量落库（按 id 去重 Upsert；重复同步只刷数值不新增行）
+  ///
+  /// 返回本次实际写入的行数。
+  Future<int> saveWearableSamples(List<WearableSample> samples) async {
+    if (samples.isEmpty) return 0;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final s in samples) {
+        await txn.insert(
+          'wearable_samples',
+          s.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    return samples.length;
+  }
+
+  /// 查询快照（默认按起始时间倒序；最多返回 [limit] 条）
+  Future<List<WearableSample>> getWearableSamples({
+    DateTime? from,
+    DateTime? to,
+    String? dataType,
+    int? limit,
+  }) async {
+    final db = await database;
+    String? where;
+    final args = <dynamic>[];
+    if (from != null) {
+      where = 'start_time >= ?';
+      args.add(from.toIso8601String());
+    }
+    if (to != null) {
+      where = where == null ? 'start_time <= ?' : '$where AND start_time <= ?';
+      args.add(to.toIso8601String());
+    }
+    if (dataType != null) {
+      where = where == null ? 'data_type = ?' : '$where AND data_type = ?';
+      args.add(dataType);
+    }
+    final maps = await db.query(
+      'wearable_samples',
+      where: where,
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'start_time DESC',
+      limit: limit,
+    );
+    return maps.map((m) => WearableSample.fromMap(m)).toList();
+  }
+
+  /// 清除全部穿戴快照（撤回授权 / 用户主动删除时调用）
+  Future<void> clearWearableSamples() async {
+    final db = await database;
+    await db.delete('wearable_samples');
   }
 
   // ============ 体检报告操作 ============

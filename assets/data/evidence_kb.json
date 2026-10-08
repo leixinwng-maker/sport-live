@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
-  "generatedAt": "2026-10-07T21:15:08",
-  "description": "问道 P4 循证知识底座：指南/系统评价的证据条目 + MET 强度表 + 动作库。构建期导入，App 内零网络依赖。",
+  "version": "1.1.0",
+  "generatedAt": "2026-10-08T13:46:52",
+  "description": "问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联。构建期导入，App 内零网络依赖。",
   "sources": [
     {
       "name": "美国身体活动指南第2版（2018）",
@@ -19,6 +19,11 @@
       "license": "官方免费公开；全书版权归人民卫生出版社，仅条目化改写"
     },
     {
+      "name": "ACSM 运动测试与运动处方指南",
+      "url": "https://www.acsm.org/",
+      "license": "引用要点，未逐字复制；仅内部知识库使用"
+    },
+    {
       "name": "《中国居民膳食指南(2022)》",
       "url": "http://dg.cnsoc.org/",
       "license": "宝塔/准则免费公开；全书版权归人民卫生出版社"
@@ -31,7 +36,22 @@
     {
       "name": "Free Exercise DB",
       "url": "https://github.com/yuhonas/free-exercise-db",
-      "license": "Unlicense（公共领域）"
+      "license": "Unlicense（公共领域）；仅取动作分类结构，中文名与要点为自撰改写，媒体不收录"
+    },
+    {
+      "name": "hasaneyldrm/exercises-dataset",
+      "url": "https://github.com/hasaneyldrm/exercises-dataset",
+      "license": "数据部分 MIT（依据仓库 NOTICE/README 判定）；仅取数据（中文说明/肌群/器械），不取图片与动图（媒体版权为 Gym visual ©，未收录）"
+    },
+    {
+      "name": "EXMO（Exercise Model Ontology）",
+      "url": "https://github.com/exmo-project",
+      "license": "CC-BY-4.0（署名）；仅作内部结构参考，不打包分发 EXMO 本体；如引用类名须署名"
+    },
+    {
+      "name": "DOID（Human Disease Ontology）",
+      "url": "https://disease-ontology.org/",
+      "license": "CC0（公共领域）；仅用于疾病名称规范化对齐"
     },
     {
       "name": "ISSN Position Stands",
@@ -528,6 +548,446 @@
       "source": "中医经典《黄帝内经》· 子午流注学说（养生实践用）",
       "url": "https://www.chinacdc.cn/",
       "license": "古籍公有领域；本条为现代实践摘要"
+    },
+    {
+      "id": "ce-hypertension-aerobic",
+      "domain": "疾病运动",
+      "condition": "高血压",
+      "topic": "有氧 血压 中等强度 每周5-7天 累计150分钟 FITT",
+      "recommendation": "有氧运动是高血压非药物治疗的核心。FITT-VP：频率——每周 5-7 天，尽量每天；强度——中等强度（40%-59% 储备心率，主观感觉“稍累但能说话”）；时间——每次 30-60 分钟，可分次累计（每次不少于 10 分钟）；类型——快走、慢跑、骑行、游泳等大肌群节律性活动；总量——每周累计 150-300 分钟；进阶——先加时间再加强度。禁忌与注意：静息血压未控制（≥180/110 mmHg）时先就医、暂缓中高强度训练；避免憋气用力与最大重量试举；服用降压药者运动后可能血压偏低，注意缓慢起身。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-hypertension-resistance",
+      "domain": "疾病运动",
+      "condition": "高血压",
+      "topic": "抗阻 力量训练 非连续日 憋气 Valsalva 血压",
+      "recommendation": "抗阻训练可作为有氧补充，进一步降低静息血压。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度，约 60%-70% 1RM；时间——每次 20-30 分钟；类型——覆盖胸背腿肩臂核心的多关节动作（如坐姿深蹲、腿举、高位下拉等）；总量——每个大肌群 2-4 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：全程自然呼吸，严格避免憋气用力（Valsalva）与最大重量试举，后者会引起血压骤升；血压未控制（≥180/110 mmHg）或有主动脉夹层、视网膜病变者，须经医生评估后再决定。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-hypertension-mindbody",
+      "domain": "疾病运动",
+      "condition": "高血压",
+      "topic": "身心 呼吸训练 放松 减压 太极 血压",
+      "recommendation": "身心运动可作为高血压辅助手段，有助于降低交感张力、缓解压力。FITT-VP：频率——每周 3-5 天；强度——低至中等；时间——每次 20-40 分钟；类型——腹式呼吸、渐进式肌肉放松、太极拳、八段锦等；总量——可与有氧同日进行；进阶——逐步延长练习时间。禁忌与注意：此类运动不能替代降压药物，不可擅自减药停药；练习中出现头晕、胸闷、心悸应立即停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-hypertension-flexibility",
+      "domain": "疾病运动",
+      "condition": "高血压",
+      "topic": "柔韧 拉伸 关节活动度 血压 热身",
+      "recommendation": "柔韧性练习用于维持关节活动度并作为运动前后热身/整理。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——拉伸至有牵拉感但不疼痛；时间——每个动作静态保持 15-30 秒，重复 2-4 次；类型——大肌群静态拉伸与关节活动度练习；总量——每次 10 分钟左右；进阶——随柔韧性提高逐步增加幅度。禁忌与注意：拉伸时保持正常呼吸，避免憋气；不在血压未控制状态下进行大幅度头低位或用力憋气类拉伸。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-t2dm-aerobic",
+      "domain": "疾病运动",
+      "condition": "2型糖尿病",
+      "topic": "有氧 血糖 餐后血糖 胰岛素敏感性 减少久坐",
+      "recommendation": "有氧运动可提升胰岛素敏感性、帮助控制血糖。FITT-VP：频率——每周 3-7 天，两次运动间隔不超过 2 天（胰岛素敏感性改善在停止运动 48-72 小时后消退）；强度——中等至高强度（40%-89% 储备心率）；时间——每次 30-60 分钟；类型——快走、骑行、游泳、划船机等；总量——每周累计 150-300 分钟中等强度；进阶——先延长时长再提高强度。特别建议：减少久坐，每 30 分钟起身活动；餐后 30-60 分钟进行 15-30 分钟轻度活动（如散步）可显著削峰。禁忌与注意：使用胰岛素或促泌剂者需防范运动相关低血糖，随身携带快速升糖食品；血糖过高伴酮症时应先就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-t2dm-resistance",
+      "domain": "疾病运动",
+      "condition": "2型糖尿病",
+      "topic": "抗阻 力量训练 肌肉量 血糖 胰岛素敏感性",
+      "recommendation": "抗阻训练可增加肌肉量、改善胰岛素敏感性，与有氧同等重要。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等起步（50%-69% 1RM），循序渐进至较大强度；时间——每次 20-30 分钟；类型——覆盖胸背腿肩臂核心的复合动作（如腿举、高位下拉、坐姿深蹲等）；总量——每个大肌群 2-4 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：合并糖尿病周围神经病变者注意足部保护与平衡训练，避免足部外伤与负重过量；合并未控制增殖性视网膜病变者避免憋气与大负荷；运动前后监测血糖。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-t2dm-flexibility",
+      "domain": "疾病运动",
+      "condition": "2型糖尿病",
+      "topic": "柔韧 拉伸 关节活动度 肩周 糖尿病",
+      "recommendation": "柔韧性练习有助于维持关节活动度，糖尿病患者的肩关节活动受限较为常见。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——有牵拉感、不疼痛；时间——每个动作静态保持 15-30 秒、重复 2-4 次；类型——肩、髋、踝等大关节静态拉伸；总量——每次 10-15 分钟；进阶——逐步增加幅度与部位覆盖。禁忌与注意：合并周围神经病变者足部感觉减退，拉伸时避免用力过度造成损伤；不在血糖过高伴酮症时进行。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-t2dm-balance",
+      "domain": "疾病运动",
+      "condition": "2型糖尿病",
+      "topic": "平衡 周围神经病变 足部保护 跌倒预防",
+      "recommendation": "合并周围神经病变的糖尿病患者的平衡能力下降、跌倒风险升高，应加入平衡训练。FITT-VP：频率——每周 2-3 天以上；强度——低至中等，逐步增加不稳定程度；时间——每次 10-20 分钟；类型——单腿站立、脚跟脚尖走、重心转移等；总量——可与抗阻或有氧同日进行；进阶——由扶墙到独立、由睁眼到闭眼。禁忌与注意：训练环境须防滑，必要时有支撑物与陪伴；足部有溃疡、感染或感觉丧失时须先处理足部问题；不在低血糖状态下训练。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/diabeticnerveproblems.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-dyslipidemia-aerobic",
+      "domain": "疾病运动",
+      "condition": "血脂异常",
+      "topic": "有氧 甘油三酯 HDL 胆固醇 每周150-300分钟",
+      "recommendation": "有氧运动对血脂异常有明确改善作用，其中对甘油三酯的改善最明显。FITT-VP：频率——每周 3-5 天；强度——中等至高强度；时间——单次 30-60 分钟；类型——快走、慢跑、骑行、游泳等大肌群有氧；总量——每周 150-300 分钟中等强度，若以改善血脂为主要目标可向 250-300 分钟靠拢；进阶——先加时间再加强度。禁忌与注意：运动对甘油三酯改善最明显（约下降 10%-20%），对 HDL 有轻度提升、对 LDL 影响较小，须同时配合膳食脂肪结构调整；合并胸痛、心悸等症状者应先就医评估。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-dyslipidemia-resistance",
+      "domain": "疾病运动",
+      "condition": "血脂异常",
+      "topic": "抗阻 力量训练 血脂 肌肉量",
+      "recommendation": "抗阻训练可作为血脂管理的组成部分，与有氧联合效果更佳。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度起步，逐步进阶；时间——每次 20-30 分钟；类型——覆盖大肌群的多关节动作；总量——每个大肌群 2-4 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：全程自然呼吸，避免憋气用力；合并心血管疾病或未控制高血压者须经医生评估后再决定强度。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-osteoporosis-aerobic",
+      "domain": "疾病运动",
+      "condition": "骨质疏松与骨量减少",
+      "topic": "有氧 负重 冲击性 骨密度 步行 爬楼",
+      "recommendation": "负重与适度冲击性有氧有助于维持或提升骨密度。FITT-VP：频率——每周 3-5 天；强度——中等强度，骨量减少者可加入低量跳跃类冲击；时间——每次 30-60 分钟；类型——快走、爬楼、跑步机步行、跳绳（骨量减少人群）；总量——每周累计 150-300 分钟；进阶——由步行逐步过渡到坡度步行或低冲击跳跃。禁忌与注意：已确诊骨质疏松或既往脆性骨折者避免高冲击跳跃与躯干大幅屈曲加旋转；严重骨质疏松者须在专业指导下进行；运动环境须防跌倒。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-osteoporosis-resistance",
+      "domain": "疾病运动",
+      "condition": "骨质疏松与骨量减少",
+      "topic": "抗阻 力量训练 骨密度 脊柱保护 髋部",
+      "recommendation": "抗阻训练对骨骼产生机械负荷，是骨健康的重要刺激。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等至较大强度，逐步进阶；时间——每次 20-40 分钟；类型——覆盖髋、脊柱、下肢的负重动作（如腿举、坐姿深蹲、站姿提踵等）；总量——每个大肌群 2-3 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：避免脊柱大幅度屈曲与旋转动作（如传统仰卧起坐、负重转体），以降低椎体压缩性骨折风险；全程脊柱中立、平稳呼吸；严重骨质疏松或有骨折史者须经医生与康复师评估后再决定。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-osteoporosis-balance",
+      "domain": "疾病运动",
+      "condition": "骨质疏松与骨量减少",
+      "topic": "平衡 跌倒预防 重心转移 下肢稳定",
+      "recommendation": "平衡训练可降低跌倒与骨折风险，是骨质疏松人群的必要组成部分。FITT-VP：频率——每周 2-3 天以上；强度——低至中等，逐步增加难度；时间——每次 10-20 分钟，可分散进行；类型——单腿站立、脚跟脚尖走、重心转移、坐立转换等；总量——可与力量训练同日进行；进阶——由双手扶稳到单手、再到独立，由睁眼到闭眼。禁忌与注意：训练须在防滑地面、有扶手或陪伴的条件下进行；既往有跌倒史或平衡障碍明显者，须先经专业评估。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 老年人章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-osteoporosis-flexibility",
+      "domain": "疾病运动",
+      "condition": "骨质疏松与骨量减少",
+      "topic": "柔韧 脊柱伸展 关节活动度 避免屈曲",
+      "recommendation": "柔韧性练习有助于维持体态与关节活动度，但需规避不利于脊柱的动作。FITT-VP：频率——每周 2-3 天以上；强度——有牵拉感、不疼痛；时间——每个动作静态保持 15-30 秒、重复 2-4 次；类型——以脊柱中立位的伸展与胸椎活动度为主；总量——每次 10-15 分钟；进阶——逐步增加幅度。禁忌与注意：避免躯干向前大幅屈曲、避免含旋转的爆发性拉伸；动作中保持平稳呼吸，如出现背部疼痛应立即停止。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/osteoporosis.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-oa-aerobic",
+      "domain": "疾病运动",
+      "condition": "骨关节炎（髋/膝）",
+      "topic": "有氧 低冲击 水中运动 关节负荷 膝骨关节炎",
+      "recommendation": "低冲击有氧可改善关节功能与疼痛，是骨关节炎的基础治疗之一。FITT-VP：频率——每周 3-5 天；强度——中等强度，以运动时疼痛不显著加重为度；时间——每次 20-45 分钟，可从每次 10 分钟分段开始；类型——步行、固定自行车、椭圆机、游泳或水中步行；总量——每周累计 150 分钟；进阶——先加时间再加强度。禁忌与注意：急性肿胀、关节明显发热或疼痛加重期暂停并就医；避免高冲击跳跃、深蹲至最低位等增加关节负荷的动作；如运动后疼痛持续超过 2 小时，应下调强度。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-oa-resistance",
+      "domain": "疾病运动",
+      "condition": "骨关节炎（髋/膝）",
+      "topic": "抗阻 肌力 股四头肌 关节稳定 膝骨关节炎",
+      "recommendation": "肌力训练可减轻关节负荷、改善功能，是膝/髋骨关节炎的关键非药物干预。FITT-VP：频率——每周 2-3 天，非连续日；强度——低至中等强度起步，以不引起关节明显疼痛为度；时间——每次 20-30 分钟；类型——股四头肌、臀肌与髋外展肌为重点（如靠墙静蹲、腿屈伸、臀桥、直腿抬高等）；总量——每个肌群 2-3 组、每组 10-15 次；进阶——先加次数再加负荷。禁忌与注意：避免关节活动范围末端的大负荷与深屈膝位；急性炎症期暂停并在医生指导下处理；疼痛评分明显升高时应减量而非硬撑。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-oa-flexibility",
+      "domain": "疾病运动",
+      "condition": "骨关节炎（髋/膝）",
+      "topic": "柔韧 关节活动度 拉伸 膝骨关节炎",
+      "recommendation": "柔韧性练习用于维持关节活动度、缓解僵硬。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——牵拉感明显但不疼痛；时间——每个动作保持 15-30 秒、重复 2-4 次；类型——股四头肌、腘绳肌、小腿与髋部拉伸；总量——每次 10 分钟；进阶——逐步增加幅度。禁忌与注意：不在关节急性肿胀期做大幅度拉伸；拉伸中如关节出现刺痛应立即停止；避免暴力压膝下压类动作。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/osteoarthritis.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-lbp-aerobic",
+      "domain": "疾病运动",
+      "condition": "非特异性腰痛",
+      "topic": "有氧 低冲击 步行 避免久坐 腰痛",
+      "recommendation": "对非特异性腰痛，保持活动优于卧床，低冲击有氧可减轻疼痛与失能。FITT-VP：频率——每周 3-5 天，最好每天；强度——低至中等，以疼痛可耐受为度；时间——每次 20-40 分钟，可分段累计；类型——步行、固定自行车、椭圆机、水中运动；总量——每周累计 150 分钟；进阶——逐步增加时长与坡度。禁忌与注意：急性期以缓解疼痛、保持轻度活动为主，避免长时间卧床；出现下肢放射痛加重、麻木无力、大小便功能异常等“红旗征象”须立即就医；避免突然的躯干前屈加旋转搬重物。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-lbp-resistance",
+      "domain": "疾病运动",
+      "condition": "非特异性腰痛",
+      "topic": "抗阻 核心稳定 死虫 鸟狗 腰背肌力",
+      "recommendation": "核心稳定与腰背肌力训练可改善非特异性腰痛的疼痛与功能。FITT-VP：频率——每周 2-3 天以上；强度——低至中等，强调动作质量；时间——每次 15-25 分钟；类型——核心稳定类（死虫式、鸟狗式、平板支撑）与髋臀肌力（臀桥、髋外展）；总量——每个动作 2-3 组、每组 8-15 次或静态保持 15-30 秒；进阶——先延长保持时间、增加重复，再考虑增加负荷。禁忌与注意：训练中保持脊柱中立与平稳呼吸；疼痛加剧则减量或暂停；急性期、伴神经根症状者须先经医生或康复师评估。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-lbp-flexibility",
+      "domain": "疾病运动",
+      "condition": "非特异性腰痛",
+      "topic": "柔韧 脊柱活动度 腘绳肌 髋部 腰痛",
+      "recommendation": "柔韧性练习可作为腰痛的辅助手段，重点在髋与脊柱的温和活动度。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——温和牵拉、不引发疼痛；时间——每个动作保持 15-30 秒、重复 2-3 次；类型——猫牛式、仰卧脊柱扭转、髋屈肌与腘绳肌拉伸；总量——每次 10 分钟；进阶——随耐受逐步增加幅度。禁忌与注意：避免在疼痛方向做大幅度屈曲或后伸；不做弹振式拉伸与快速扭转；运动中或运动后疼痛明显加重应停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/backpain.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-parkinson-aerobic",
+      "domain": "疾病运动",
+      "condition": "帕金森病",
+      "topic": "有氧 步态 耐力 步行 帕金森",
+      "recommendation": "有氧运动可改善帕金森病患者的耐力、步态与整体功能。FITT-VP：频率——每周 3-5 天；强度——中等强度（40%-59% 储备心率），体能允许时可加入较大强度间歇；时间——每次 30-40 分钟；类型——快走、跑步机步行（可结合步幅与步频提示）、固定自行车、椭圆机；总量——每周累计 150-300 分钟；进阶——逐步提高时长与强度。禁忌与注意：存在“冻结步态”或平衡障碍者需有人陪伴并在安全环境运动；注意体位性低血压，起身缓慢；运动时间宜与药物“开期”配合以取得更好效果。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-parkinson-resistance",
+      "domain": "疾病运动",
+      "condition": "帕金森病",
+      "topic": "抗阻 力量训练 肌力 帕金森 肌肉量",
+      "recommendation": "抗阻训练有助于帕金森病患者维持肌力与功能，减缓肌少症进展。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度起步，逐步进阶；时间——每次 20-30 分钟；类型——覆盖上下肢大肌群的动作（如腿举、坐姿深蹲、坐姿器械划船等）；总量——每个大肌群 2-3 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：优先在动作相对稳定的“开期”训练；使用器械或有陪伴以降低跌倒与失衡风险；避免过度疲劳与憋气用力。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-parkinson-balance",
+      "domain": "疾病运动",
+      "condition": "帕金森病",
+      "topic": "平衡 敏捷 重心转移 跌倒预防 帕金森",
+      "recommendation": "平衡与敏捷训练对降低帕金森病患者的跌倒风险尤为重要。FITT-VP：频率——每周 2-3 天以上；强度——低至中等，渐进提高难度；时间——每次 20-30 分钟；类型——重心转移、单腿站立、跨步与转身练习、太极式练习；总量——可与其他训练同日进行；进阶——由有支撑到独立、由静态到动态。禁忌与注意：必须在安全环境并有人保护下进行，防止跌倒；合并严重平衡障碍者须经康复师评估后制定方案。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-parkinson-flexibility",
+      "domain": "疾病运动",
+      "condition": "帕金森病",
+      "topic": "柔韧 关节活动度 僵硬 帕金森 拉伸",
+      "recommendation": "柔韧性练习有助于缓解僵硬、维持躯干与肩髋活动度。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——温和牵拉、不疼痛；时间——每个动作保持 15-30 秒、重复 2-3 次；类型——躯干旋转、肩部环绕、髋与小腿拉伸；总量——每次 10-15 分钟；进阶——逐步增加幅度与方向多样性。禁忌与注意：动作应缓慢有控制，避免快速扭转导致失衡；训练时保持支撑与保护。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/parkinsonsdisease.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-stroke-aerobic",
+      "domain": "疾病运动",
+      "condition": "卒中后（稳定期）",
+      "topic": "有氧 稳定期 耐力 步行 卒中康复",
+      "recommendation": "卒中后稳定期患者进行有氧训练可改善心肺耐力与步行能力。FITT-VP：频率——每周 3-5 天；强度——低至中等强度起步（约 40%-60% 储备心率），有条件时监测心率与自觉疲劳；时间——每次 20-40 分钟，可分次累计；类型——步行、固定自行车、卧式自行车、坐姿有氧；总量——每周累计 120-150 分钟；进阶——逐步延长时间与强度。禁忌与注意：须在病情稳定、经医生评估后开始；训练中监测血压与不适症状，出现胸痛、明显气促、头晕须立即停止；平衡障碍者需有陪伴与防护。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-stroke-resistance",
+      "domain": "疾病运动",
+      "condition": "卒中后（稳定期）",
+      "topic": "抗阻 肌力 患侧 任务导向 卒中康复",
+      "recommendation": "抗阻与任务导向性训练可改善卒中后患侧肌力与功能活动。FITT-VP：频率——每周 2-3 天，非连续日；强度——低至中等强度起步，以不引起异常代偿为度；时间——每次 20-30 分钟；类型——患侧肌群的力量训练与功能性任务（坐立转换、登阶等）；总量——每个肌群 2-3 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：须在康复专业人员指导下进行，避免异常运动模式固化；合并心血管疾病者监测血压与心率；训练中出现不适立即停止。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-stroke-balance",
+      "domain": "疾病运动",
+      "condition": "卒中后（稳定期）",
+      "topic": "平衡 姿势控制 转移训练 跌倒预防 卒中康复",
+      "recommendation": "平衡与姿势控制训练是卒中后康复的核心内容，可降低跌倒风险。FITT-VP：频率——每周 3 天以上；强度——低至中等，渐进增加难度；时间——每次 20-30 分钟；类型——坐位与站立重心转移、坐立转换、单腿站立、跨步训练；总量——可与其他训练同日进行；进阶——由双侧支撑到患侧负重、由稳定平面到不稳定平面。禁忌与注意：须有专人保护并使用扶手等辅助器具；训练环境须防滑无障碍；出现头晕、血压波动时应暂停。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-copd-aerobic",
+      "domain": "疾病运动",
+      "condition": "慢性阻塞性肺疾病",
+      "topic": "有氧 步行 骑车 运动耐受 慢阻肺 肺康复",
+      "recommendation": "有氧训练是肺康复的核心，可改善慢阻肺患者的运动耐力与呼吸困难。FITT-VP：频率——每周 3-5 天；强度——以呼吸困难评分（Borg 3-5 级，“中度气促”）为度，或 60%-80% 峰值功率；时间——每次 20-40 分钟，可从每次 5-10 分钟分段累计起步；类型——步行、跑步机步行、固定自行车、卧式自行车；总量——每周累计 150 分钟；进阶——逐步延长时间与强度。禁忌与注意：建议在肺康复或专业人员指导下进行；训练中可使用缩唇呼吸；出现明显气促加重、发绀、胸痛须立即停止；急性加重期暂停训练。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-copd-resistance",
+      "domain": "疾病运动",
+      "condition": "慢性阻塞性肺疾病",
+      "topic": "抗阻 力量训练 呼吸肌 慢阻肺 肺康复",
+      "recommendation": "抗阻训练可改善慢阻肺患者的外周肌力与功能能力。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度起步（约 60%-70% 1RM），逐步进阶；时间——每次 20-30 分钟；类型——上下肢大肌群动作（如坐姿深蹲、腿举、高位下拉、坐姿器械划船等）；总量——每个肌群 2-3 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：训练中配合呼吸节奏（用力时呼气），避免憋气；重度患者需氧疗或监护者须在专业指导下进行；出现气促明显加重应立即停止。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-copd-mindbody",
+      "domain": "疾病运动",
+      "condition": "慢性阻塞性肺疾病",
+      "topic": "身心 呼吸训练 缩唇呼吸 腹式呼吸 慢阻肺",
+      "recommendation": "呼吸训练有助于改善慢阻肺患者的呼吸效率与气促感受。FITT-VP：频率——每天 1-2 次；强度——低强度、以放松与协调为目标；时间——每次 10-20 分钟；类型——缩唇呼吸、腹式呼吸、呼吸操、八段锦等舒缓练习；总量——可与有氧、抗阻同日进行；进阶——逐步延长呼气时间与练习时长。禁忌与注意：训练中如出现头晕、气促加重应停止并休息；呼吸训练不能替代药物治疗与肺康复计划，须遵医嘱。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/copd.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-older-balance",
+      "domain": "疾病运动",
+      "condition": "老年人",
+      "topic": "平衡 跌倒预防 单腿站立 重心转移 下肢稳定",
+      "recommendation": "平衡训练是老年人预防跌倒的关键内容。FITT-VP：频率——每周 3 天以上；强度——低至中等，渐进提高难度；时间——每次 20-30 分钟；类型——单腿站立、脚跟脚尖走、重心转移、坐立转换、太极式练习；总量——可与力量训练同日进行；进阶——由双手扶持到单手、再到独立，由睁眼到闭眼。禁忌与注意：须在防滑地面、有扶手或陪伴的条件下进行；有跌倒史、头晕或平衡障碍者应先经专业评估；避免快速转身与突然变向。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 老年人章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-older-resistance",
+      "domain": "疾病运动",
+      "condition": "老年人",
+      "topic": "抗阻 力量训练 肌少症 非连续日 老年人",
+      "recommendation": "抗阻训练可对抗肌少症、维持功能独立性，是老年人运动处方的必备部分。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度起步（约 60%-70% 1RM），循序渐进；时间——每次 20-30 分钟；类型——覆盖上下肢与核心的动作（如坐姿深蹲、腿举、坐姿器械划船、站姿提踵等）；总量——每个肌群 2-3 组、每组 10-15 次；进阶——先加次数再加负荷。禁忌与注意：初次训练宜在指导下进行、先学习动作模式；避免憋气用力；合并心肺疾病者须经医生评估；注意训练环境安全防跌倒。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 老年人章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-older-aerobic",
+      "domain": "疾病运动",
+      "condition": "老年人",
+      "topic": "有氧 中等强度 累计150分钟 快走 心肺",
+      "recommendation": "中等强度有氧可改善老年人心肺功能与整体健康。FITT-VP：频率——每周 3-5 天，最好每天；强度——中等强度（“能说话但不能唱歌”）；时间——每次 30 分钟，可分次累计（每次不少于 10 分钟）；类型——快走、固定自行车、卧式自行车、水中运动、爬楼机；总量——每周累计 150-300 分钟；进阶——先加时长、后加强度。禁忌与注意：体弱或有慢病者可从每次 5-10 分钟起步、逐步累计；运动中注意补水与避免极端气温；出现胸痛、头晕、心悸应立即停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 老年人章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-older-flexibility",
+      "domain": "疾病运动",
+      "condition": "老年人",
+      "topic": "柔韧 拉伸 关节活动度 老年人 体态",
+      "recommendation": "柔韧性练习可维持老年人关节活动度与日常活动能力。FITT-VP：频率——每周 2-3 天以上，最好每天；强度——温和牵拉、不疼痛；时间——每个动作保持 15-30 秒、重复 2-4 次；类型——肩、髋、膝、踝与躯干的温和拉伸；总量——每次 10 分钟；进阶——逐步增加幅度。禁忌与注意：动作缓慢有控制，避免弹振式拉伸；建议坐位或在有支撑的条件下进行，防止失衡跌倒；关节置换术后者须经医生评估。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 老年人章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-pregnancy-aerobic",
+      "domain": "疾病运动",
+      "condition": "孕期（无禁忌）",
+      "topic": "有氧 中等强度 每周150分钟 孕期 安全",
+      "recommendation": "无医学禁忌的孕妇进行中等强度有氧运动对母婴均有益。FITT-VP：频率——每周 3-5 天，最好每天；强度——中等强度（“能说话但不能唱歌”，或按医生建议的心率区间）；时间——每次 20-30 分钟，可从每次 10 分钟起步；类型——步行、固定自行车、游泳、孕妇瑜伽中的有氧部分；总量——每周累计至少 150 分钟；进阶——随孕周调整，以舒适安全为先。禁忌与注意：开始前须经产科医生评估；避免有跌倒风险、冲击性、仰卧位长时间、高温环境与腹部受压的动作；出现阴道出血、规律宫缩、破水、头晕、胸痛、小腿疼痛肿胀须立即停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 孕产章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-pregnancy-resistance",
+      "domain": "疾病运动",
+      "condition": "孕期（无禁忌）",
+      "topic": "抗阻 盆底 核心 轻负荷 孕期 安全",
+      "recommendation": "孕期可进行轻至中等负荷的抗阻训练，有助于维持肌力与体态。FITT-VP：频率——每周 2-3 天，非连续日；强度——轻至中等负荷，避免最大用力；时间——每次 20 分钟；类型——多以大肌群、坐姿或有支撑的动作与盆底肌练习为主；总量——每个肌群 2 组、每组 10-12 次；进阶——维持而非追求进阶，随孕周适当减量。禁忌与注意：须经产科医生评估后开始；避免仰卧时间过长、憋气用力、腹压骤增与平衡风险高的动作；孕中期后避免大幅度后仰与仰卧负重；出现腹痛、出血、宫缩须立即停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 孕产章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-pregnancy-flexibility",
+      "domain": "疾病运动",
+      "condition": "孕期（无禁忌）",
+      "topic": "柔韧 拉伸 骨盆 腰背 孕期 安全",
+      "recommendation": "孕期柔韧性练习可缓解腰背不适、维持活动度。FITT-VP：频率——每周 2-3 天以上；强度——温和牵拉、不疼痛；时间——每个动作保持 15-30 秒、重复 2-3 次；类型——以骨盆、腰背与髋部温和拉伸为主，可结合孕妇瑜伽；总量——每次 10-15 分钟；进阶——随孕周调整幅度，以舒适为限。禁忌与注意：孕期激素使韧带松弛，避免过度拉伸与大幅度扭转；避免仰卧与俯卧长时间停留；如有不适立即停止并咨询医生。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/pregnancy.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-mental-aerobic",
+      "domain": "疾病运动",
+      "condition": "心理健康（抑郁/焦虑）",
+      "topic": "有氧 情绪 中等强度 每周150分钟 抑郁 焦虑",
+      "recommendation": "有氧运动可改善轻中度抑郁与焦虑症状，是重要的辅助干预。FITT-VP：频率——每周 3-5 天，最好每天；强度——中等强度（“稍累但可对话”），抑郁人群也可从低强度起步；时间——每次 30-45 分钟；类型——快走、慢跑、骑行、球类、舞蹈等有节奏的活动；总量——每周累计 150-300 分钟；进阶——先保证规律性，再逐步增加强度。禁忌与注意：运动不能替代规范的精神科诊疗与药物，不可擅自停药；重度抑郁、有自伤或自杀风险者须先接受专业治疗；出现明显身体不适须停止并就医。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/depression.html",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-mental-resistance",
+      "domain": "疾病运动",
+      "condition": "心理健康（抑郁/焦虑）",
+      "topic": "抗阻 力量训练 情绪 抑郁 自我效能",
+      "recommendation": "抗阻训练对改善情绪与自我效能亦有积极作用，可作为有氧的补充。FITT-VP：频率——每周 2-3 天，非连续日；强度——中等强度起步，逐步进阶；时间——每次 20-30 分钟；类型——覆盖大肌群的复合动作（如坐姿深蹲、腿举、高位下拉、坐姿器械划船等）；总量——每个肌群 2-3 组、每组 8-12 次；进阶——先加次数再加负荷。禁忌与注意：训练应在安全环境、必要时有人陪同；不替代精神科治疗与药物；若训练中出现明显情绪波动或身体不适，应暂停并咨询专业人员。",
+      "evidenceLevel": "指南推荐",
+      "source": "美国身体活动指南第2版（2018）· 慢性疾病章节",
+      "url": "https://health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf",
+      "license": "美国政府作品，公有领域"
+    },
+    {
+      "id": "ce-mental-mindbody",
+      "domain": "疾病运动",
+      "condition": "心理健康（抑郁/焦虑）",
+      "topic": "身心 瑜伽 太极 正念 放松 焦虑",
+      "recommendation": "身心练习可作为焦虑与压力的辅助调节手段。FITT-VP：频率——每周 3-5 天，可每天；强度——低强度、以放松为目标；时间——每次 15-30 分钟；类型——瑜伽基础体式、太极拳、八段锦、正念呼吸、渐进式肌肉放松；总量——可与其他运动同日进行；进阶——逐步延长练习时间与专注度。禁忌与注意：身心练习不能替代规范的精神科诊疗与药物；练习中出现明显情绪反应或身体不适应停止并咨询专业人员；重度抑郁或存在自伤风险者须优先接受专业治疗。",
+      "evidenceLevel": "指南推荐",
+      "source": "MedlinePlus · 美国国家医学图书馆",
+      "url": "https://medlineplus.gov/anxiety.html",
+      "license": "美国政府作品，公有领域"
     }
   ],
   "met": [
@@ -1411,6 +1871,1268 @@
       "equipment": "自重",
       "level": "初级",
       "cues": "弹力带套膝上或踝，半蹲横向移动，强化臀中肌与稳定性。"
+    },
+    {
+      "name": "上斜杠铃卧推",
+      "nameEn": "Incline Barbell Bench Press",
+      "muscle": "胸",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "凳角约 30°-45°，杠铃落于锁骨下方，主攻上胸。"
+    },
+    {
+      "name": "下斜杠铃卧推",
+      "nameEn": "Decline Barbell Bench Press",
+      "muscle": "胸",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "双腿固定，杠铃落于下胸，肘略收，主攻下胸。"
+    },
+    {
+      "name": "下斜哑铃卧推",
+      "nameEn": "Decline Dumbbell Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "哑铃沿下胸轨迹推起，顶端不锁死，保持胸肌张力。"
+    },
+    {
+      "name": "器械推胸",
+      "nameEn": "Chest Press Machine",
+      "muscle": "胸",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐稳靠背，把手推至手臂近伸直，缓慢还原至胸侧。"
+    },
+    {
+      "name": "单臂哑铃卧推",
+      "nameEn": "Single-arm Dumbbell Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "单侧完成，核心抗旋，适合纠正左右不平衡。"
+    },
+    {
+      "name": "上斜俯卧撑",
+      "nameEn": "Incline Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "手撑高处，角度越大越省力，适合初学者与康复期。"
+    },
+    {
+      "name": "下斜俯卧撑",
+      "nameEn": "Decline Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "双脚垫高，重心前移，对上胸与肩前束刺激更大。"
+    },
+    {
+      "name": "钻石俯卧撑",
+      "nameEn": "Diamond Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "双手成菱形置于胸下，偏重三头与胸内侧，肘贴身。"
+    },
+    {
+      "name": "仰卧哑铃飞鸟",
+      "nameEn": "Dumbbell Fly",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肘微屈固定，两臂画弧下放至胸肌充分拉伸，勿过深。"
+    },
+    {
+      "name": "反握引体向上",
+      "nameEn": "Chin-up",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "反握与肩同宽，下拉时更多动用肱二头，胸口贴近杠。"
+    },
+    {
+      "name": "弹力带辅助引体",
+      "nameEn": "Band-assisted Pull-up",
+      "muscle": "背",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带兜住脚或膝提供助力，逐步降低助力进阶。"
+    },
+    {
+      "name": "窄握高位下拉",
+      "nameEn": "Close-grip Lat Pulldown",
+      "muscle": "背",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "V 形把手，拉至胸上，肘向下向后，增加背阔肌下缘参与。"
+    },
+    {
+      "name": "T 杠划船",
+      "nameEn": "T-Bar Row",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "俯身背挺直，拉向腹部，肩胛后收，控制离心。"
+    },
+    {
+      "name": "反向划船",
+      "nameEn": "Inverted Row",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "身体绷直成一线，胸口拉向横杆，靠背部发力。"
+    },
+    {
+      "name": "直臂下压",
+      "nameEn": "Straight-arm Pulldown",
+      "muscle": "背",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "手臂近伸直，靠背阔肌下压，感受背阔肌全程张力。"
+    },
+    {
+      "name": "坐姿器械划船",
+      "nameEn": "Machine Row",
+      "muscle": "背",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "胸口贴垫，拉至腹前，肩胛主动收紧。"
+    },
+    {
+      "name": "直立划船",
+      "nameEn": "Upright Row",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "握距略宽于肩，沿身体上提至胸高，肩不适者慎做。"
+    },
+    {
+      "name": "俯卧挺身",
+      "nameEn": "Superman",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "俯卧同时抬起对侧手脚，激活竖脊肌与臀肌。"
+    },
+    {
+      "name": "单臂绳索划船",
+      "nameEn": "Single-arm Cable Row",
+      "muscle": "背",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "单侧拉向髋侧，躯干稳定少旋转，肩胛后收到位。"
+    },
+    {
+      "name": "徒手深蹲",
+      "nameEn": "Bodyweight Squat",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "双脚与肩同宽，髋膝同屈下蹲至大腿平行，膝随脚尖方向。"
+    },
+    {
+      "name": "高脚杯深蹲",
+      "nameEn": "Goblet Squat",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "抱哑铃于胸前，躯干直立下蹲，是学习深蹲模式的入门动作。"
+    },
+    {
+      "name": "箱式深蹲",
+      "nameEn": "Box Squat",
+      "muscle": "腿",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "下蹲轻触凳面再起，控制深度，适合学习蹲姿与提升离心控制。"
+    },
+    {
+      "name": "史密斯深蹲",
+      "nameEn": "Smith Machine Squat",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "轨迹固定，脚可略前移，注意膝与脚尖方向一致。"
+    },
+    {
+      "name": "哈克深蹲",
+      "nameEn": "Hack Squat",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "背部贴垫，下放至大腿平行，靠股四头发力蹬起。"
+    },
+    {
+      "name": "单腿腿举",
+      "nameEn": "Single-leg Press",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "单侧蹬起，踝膝髋对齐，纠正双侧力量差异。"
+    },
+    {
+      "name": "反向箭步蹲",
+      "nameEn": "Reverse Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "后撤步下沉，前腿发力站起，膝部压力小于前向箭步。"
+    },
+    {
+      "name": "行走箭步蹲",
+      "nameEn": "Walking Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "交替向前迈步下沉，躯干直立，膝盖不过度前移。"
+    },
+    {
+      "name": "侧向箭步蹲",
+      "nameEn": "Lateral Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "向侧方跨步屈髋下沉，另一腿伸直，练内收肌与髋灵活性。"
+    },
+    {
+      "name": "台阶登阶",
+      "nameEn": "Step-up",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "整脚踩上台面，靠上侧腿发力站起，避免蹬地借力。"
+    },
+    {
+      "name": "坐姿提踵",
+      "nameEn": "Seated Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "膝屈 90° 下重点刺激比目鱼肌，顶端收缩略停。"
+    },
+    {
+      "name": "驴式提踵",
+      "nameEn": "Donkey Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "髋屈前倾，充分下放拉伸腓肠肌，再踮至最高。"
+    },
+    {
+      "name": "北欧腘绳肌弯举",
+      "nameEn": "Nordic Hamstring Curl",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "固定脚跟，靠腘绳肌离心控制身体前倾，需循序渐进。"
+    },
+    {
+      "name": "腿举提踵",
+      "nameEn": "Leg Press Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "前脚掌抵踏板边缘，伸踝推起，缓慢下放拉伸小腿。"
+    },
+    {
+      "name": "单腿臀桥",
+      "nameEn": "Single-leg Glute Bridge",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑顶髋，骨盆保持水平，避免一侧下沉。"
+    },
+    {
+      "name": "臀桥行进",
+      "nameEn": "Glute Bridge March",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "保持顶髋姿态交替抬膝，核心稳定不塌腰。"
+    },
+    {
+      "name": "蚌式开合",
+      "nameEn": "Clamshell",
+      "muscle": "臀",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "侧卧屈髋屈膝，膝上套带，靠臀中肌外展打开。"
+    },
+    {
+      "name": "弹力带臀推",
+      "nameEn": "Banded Hip Thrust",
+      "muscle": "臀",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带绕髋，顶髋至躯干与大腿成一线，顶端夹臀。"
+    },
+    {
+      "name": "单腿罗马尼亚硬拉",
+      "nameEn": "Single-leg Romanian Deadlift",
+      "muscle": "臀",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "单腿支撑髋铰链，背部中立，兼顾平衡与腘绳肌。"
+    },
+    {
+      "name": "相扑硬拉",
+      "nameEn": "Sumo Deadlift",
+      "muscle": "臀",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "宽站距脚尖外展，膝外推，靠髋伸与股四头协同拉起。"
+    },
+    {
+      "name": "器械髋内收",
+      "nameEn": "Hip Adduction",
+      "muscle": "臀",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐姿双腿内收夹合，感受大腿内侧肌群收缩。"
+    },
+    {
+      "name": "驴踢腿",
+      "nameEn": "Donkey Kick",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "四足跪姿屈膝后蹬，骨盆保持水平，靠臀大肌发力。"
+    },
+    {
+      "name": "阿诺德推举",
+      "nameEn": "Arnold Press",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "推起过程中前臂旋外，兼顾三角肌前束与中束。"
+    },
+    {
+      "name": "器械肩推",
+      "nameEn": "Machine Shoulder Press",
+      "muscle": "肩",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐稳靠背，把手推至头顶，缓慢下放至耳侧。"
+    },
+    {
+      "name": "绳索侧平举",
+      "nameEn": "Cable Lateral Raise",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "绳索提供全程张力，抬至与肩平，避免耸肩。"
+    },
+    {
+      "name": "绳索面拉",
+      "nameEn": "Cable Face Pull",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "拉向面部并外旋，强化后束与肩袖，改善圆肩体态。"
+    },
+    {
+      "name": "倒立俯卧撑",
+      "nameEn": "Pike Push-up",
+      "muscle": "肩",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "臀部抬高呈倒 V，头顶向地面下沉，主攻三角肌。"
+    },
+    {
+      "name": "古巴推举",
+      "nameEn": "Cuban Press",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "小重量完成外旋加推举，用于肩袖强化与热身。"
+    },
+    {
+      "name": "哑铃耸肩",
+      "nameEn": "Dumbbell Shrug",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肩胛垂直上提，顶端略停，避免转肩绕环。"
+    },
+    {
+      "name": "绳索后束飞鸟",
+      "nameEn": "Cable Rear Delt Fly",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "交叉拉索向侧后展开，主攻三角肌后束，肘微屈固定。"
+    },
+    {
+      "name": "牧师凳弯举",
+      "nameEn": "Preacher Curl",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "初级",
+      "cues": "大臂贴垫固定，孤立肱二头，离心下放充分。"
+    },
+    {
+      "name": "上斜哑铃弯举",
+      "nameEn": "Incline Dumbbell Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "靠上斜凳使大臂后展，强化肱二头长头拉伸位。"
+    },
+    {
+      "name": "集中弯举",
+      "nameEn": "Concentration Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肘抵大腿内侧，集中收缩肱二头，顶峰略停。"
+    },
+    {
+      "name": "绳索弯举",
+      "nameEn": "Cable Curl",
+      "muscle": "手臂",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "低位绳索全程提供张力，肘固定于体侧。"
+    },
+    {
+      "name": "反握弯举",
+      "nameEn": "Reverse Curl",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "正手握杠，兼顾肱桡肌与前臂伸肌，小重量慢控。"
+    },
+    {
+      "name": "窄距俯卧撑",
+      "nameEn": "Close-grip Push-up",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "双手与肩同宽或略窄，肘贴身，主攻肱三头。"
+    },
+    {
+      "name": "哑铃颈后臂屈伸",
+      "nameEn": "Overhead Dumbbell Extension",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "双手捧铃置于脑后，靠肘伸举起，大臂保持垂直。"
+    },
+    {
+      "name": "绳索过顶臂屈伸",
+      "nameEn": "Overhead Cable Extension",
+      "muscle": "手臂",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "背对低位滑轮，向前上方伸肘，感受三头长头拉伸。"
+    },
+    {
+      "name": "板凳臂屈伸",
+      "nameEn": "Bench Dip",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "背对凳沿支撑，屈肘下沉再撑起，肩不适者减幅。"
+    },
+    {
+      "name": "反向卷腹",
+      "nameEn": "Reverse Crunch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "骨盆向胸口卷，下背贴地，靠腹肌收缩而非惯性甩腿。"
+    },
+    {
+      "name": "自行车卷腹",
+      "nameEn": "Bicycle Crunch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "对侧肘膝相触，躯干旋转，节奏可控，下背不离地。"
+    },
+    {
+      "name": "触踝卷腹",
+      "nameEn": "Heel Touch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "仰卧屈膝，躯干侧屈交替触碰脚跟，练腹斜肌。"
+    },
+    {
+      "name": "悬垂举腿",
+      "nameEn": "Hanging Leg Raise",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "悬垂稳定不摆荡，靠下腹收缩抬腿至水平以上。"
+    },
+    {
+      "name": "悬垂举膝",
+      "nameEn": "Hanging Knee Raise",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "悬垂屈膝上提至胸，控制回落，是举腿的降阶版本。"
+    },
+    {
+      "name": "绳索卷腹",
+      "nameEn": "Cable Crunch",
+      "muscle": "核心",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "跪姿，靠腹肌收缩使躯干卷曲，髋部位置固定。"
+    },
+    {
+      "name": "健腹轮",
+      "nameEn": "Ab Wheel Rollout",
+      "muscle": "核心",
+      "equipment": "器械",
+      "level": "高级",
+      "cues": "收腹不塌腰缓慢前滚，肩髋一线，量力控制幅度。"
+    },
+    {
+      "name": "侧支撑抬髋",
+      "nameEn": "Side Plank Hip Lift",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "侧支撑基础上髋部下沉再上顶，强化腹斜肌与侧链。"
+    },
+    {
+      "name": "帕洛夫推",
+      "nameEn": "Pallof Press",
+      "muscle": "核心",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "侧对滑轮前推，抗旋转保持躯干稳定，是核心抗旋经典动作。"
+    },
+    {
+      "name": "折刀式",
+      "nameEn": "Jackknife",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "同时抬躯干与双腿使手触脚，靠腹肌发力，避免颈部代偿。"
+    },
+    {
+      "name": "平板支撑抬腿",
+      "nameEn": "Plank Leg Lift",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "平板姿态交替抬腿，骨盆保持水平，勿左右晃动。"
+    },
+    {
+      "name": "空体保持",
+      "nameEn": "Hollow Body Hold",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下背压实地面，手脚离地呈浅碗形，静态保持核心张力。"
+    },
+    {
+      "name": "挺举（简化）",
+      "nameEn": "Clean and Jerk",
+      "muscle": "全身",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "翻杠接前蹲后上挺，爆发力复合动作，需专业指导。"
+    },
+    {
+      "name": "抓举（简化）",
+      "nameEn": "Snatch",
+      "muscle": "全身",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "一动作将杠铃从地面举过头顶，技术要求高，须循序渐进。"
+    },
+    {
+      "name": "单臂壶铃摆动",
+      "nameEn": "Single-arm Kettlebell Swing",
+      "muscle": "全身",
+      "equipment": "壶铃",
+      "level": "中级",
+      "cues": "髋铰链发力，单侧持铃，核心抗旋，顶端夹臀。"
+    },
+    {
+      "name": "壶铃土耳其起立",
+      "nameEn": "Turkish Get-up",
+      "muscle": "全身",
+      "equipment": "壶铃",
+      "level": "高级",
+      "cues": "从卧姿到站姿全程举铃不落，考核心稳定与肩稳定性。"
+    },
+    {
+      "name": "药球砸地",
+      "nameEn": "Medicine Ball Slam",
+      "muscle": "全身",
+      "equipment": "药球",
+      "level": "中级",
+      "cues": "过顶用力下砸，启动核心与肩背，注意与球保持距离。"
+    },
+    {
+      "name": "药球过顶抛掷",
+      "nameEn": "Medicine Ball Throw",
+      "muscle": "全身",
+      "equipment": "药球",
+      "level": "中级",
+      "cues": "下蹲蓄力后向上向前抛出，练全身爆发，落地缓冲。"
+    },
+    {
+      "name": "雪橇推",
+      "nameEn": "Sled Push",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "前倾握把发力推移，低冲击高功率，注意躯干稳定。"
+    },
+    {
+      "name": "雪橇拉",
+      "nameEn": "Sled Drag",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "倒退拉拽或前向拖行，练髋膝伸展与后链力量。"
+    },
+    {
+      "name": "负重登阶",
+      "nameEn": "Weighted Step-up",
+      "muscle": "全身",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "持重登阶，上侧腿主导，兼顾下肢力量与单侧稳定。"
+    },
+    {
+      "name": "冲刺间歇",
+      "nameEn": "Sprint Interval",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "短时全力冲刺配合充分间歇，需充分热身后进行。"
+    },
+    {
+      "name": "走跑交替",
+      "nameEn": "Walk-Jog Interval",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "快走与慢跑交替进行，适合心肺基础较弱的起步阶段。"
+    },
+    {
+      "name": "爬绳",
+      "nameEn": "Rope Climb",
+      "muscle": "全身",
+      "equipment": "绳索",
+      "level": "高级",
+      "cues": "手脚并用攀爬，练上肢拉力与核心，注意安全保护。"
+    },
+    {
+      "name": "熊爬",
+      "nameEn": "Bear Crawl",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "四点支撑对侧手脚同时移动，稳定核心与肩关节。"
+    },
+    {
+      "name": "蟹行",
+      "nameEn": "Crab Walk",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "仰撑反向前进，激活臀肌与肩后链，注意手腕保护。"
+    },
+    {
+      "name": "高抬腿跑",
+      "nameEn": "High Knees",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "原地快速提膝至髋高，前脚掌落地，节奏均匀。"
+    },
+    {
+      "name": "后踢腿跑",
+      "nameEn": "Butt Kicks",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "原地快速屈膝后踢，脚跟触臀，常用于热身与有氧。"
+    },
+    {
+      "name": "滑步跳",
+      "nameEn": "Skater Jump",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "左右侧向跳跃落地单腿缓冲，练下肢侧向爆发与平衡。"
+    },
+    {
+      "name": "深蹲跳",
+      "nameEn": "Jump Squat",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下蹲后爆发起跳，落地屈膝缓冲，膝踝不适者慎做。"
+    },
+    {
+      "name": "弓步跳",
+      "nameEn": "Jumping Lunge",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "箭步姿态交替跳换，落地缓冲，对上肢冲击小。"
+    },
+    {
+      "name": "变速跑",
+      "nameEn": "Fartlek",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "快慢交替自由变速跑，兼顾有氧与心肺刺激。"
+    },
+    {
+      "name": "固定自行车",
+      "nameEn": "Stationary Bike",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "座高以腿近伸直为准，踏频稳定，阻力和缓递增。"
+    },
+    {
+      "name": "卧式自行车",
+      "nameEn": "Recumbent Bike",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "靠背支撑低冲击，适合腰背不适或老年人群。"
+    },
+    {
+      "name": "跑步机慢跑",
+      "nameEn": "Treadmill Jogging",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "前脚掌或全脚掌着地，步幅自然，避免过度后蹬。"
+    },
+    {
+      "name": "爬绳机",
+      "nameEn": "Rope Trainer",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "交替拉拽模拟爬绳，上肢与核心参与多，注意肩部热身。"
+    },
+    {
+      "name": "战绳交替甩",
+      "nameEn": "Alternating Battle Rope",
+      "muscle": "全身",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "半蹲稳定下盘，双臂快速交替甩绳，保持呼吸节奏。"
+    },
+    {
+      "name": "波比跳（无俯卧撑）",
+      "nameEn": "Burpee (No Push-up)",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "去掉俯卧撑环节的降阶波比，适合心肺起步阶段。"
+    },
+    {
+      "name": "腘绳肌坐姿拉伸",
+      "nameEn": "Seated Hamstring Stretch",
+      "muscle": "大腿后侧",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "坐姿单腿伸直，髋为轴前倾，感受大腿后侧拉伸，勿弹振。"
+    },
+    {
+      "name": "站姿股四头肌拉伸",
+      "nameEn": "Standing Quad Stretch",
+      "muscle": "大腿前侧",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单手扶墙，屈膝拉脚踝向臀，骨盆中立，膝并拢。"
+    },
+    {
+      "name": "小腿站姿拉伸",
+      "nameEn": "Standing Calf Stretch",
+      "muscle": "小腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "前脚掌抵墙，后腿伸直脚跟踩实，感受小腿拉伸。"
+    },
+    {
+      "name": "胸大肌门框拉伸",
+      "nameEn": "Doorway Chest Stretch",
+      "muscle": "胸部",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "前臂抵门框，身体前倾至胸部有拉伸感，改善圆肩。"
+    },
+    {
+      "name": "婴儿式",
+      "nameEn": "Child's Pose",
+      "muscle": "腰背",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "跪坐后身体前俯，双臂前伸，放松腰背与呼吸。"
+    },
+    {
+      "name": "猫牛式",
+      "nameEn": "Cat-Cow",
+      "muscle": "脊柱",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "四足跪姿，随呼吸交替拱背与塌腰，活动脊柱。"
+    },
+    {
+      "name": "髋屈肌弓步拉伸",
+      "nameEn": "Kneeling Hip Flexor Stretch",
+      "muscle": "髋屈肌",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "单膝跪地，骨盆后倾，重心前移，拉伸髋前侧。"
+    },
+    {
+      "name": "鸽子式",
+      "nameEn": "Pigeon Pose",
+      "muscle": "臀部",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前腿屈髋外展落地，后腿伸直，拉伸臀与梨状肌。"
+    },
+    {
+      "name": "肩部环绕",
+      "nameEn": "Shoulder Circles",
+      "muscle": "肩",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "由小到大画圆，前后各做若干次，作为肩部热身。"
+    },
+    {
+      "name": "手臂过顶拉伸",
+      "nameEn": "Overhead Triceps Stretch",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "一手过头屈肘，另一手辅助轻压，拉伸肱三头。"
+    },
+    {
+      "name": "仰卧脊柱扭转",
+      "nameEn": "Supine Spinal Twist",
+      "muscle": "脊柱",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "仰卧屈膝倒向一侧，肩部贴地，随呼吸加深扭转。"
+    },
+    {
+      "name": "侧腰拉伸",
+      "nameEn": "Side Bend Stretch",
+      "muscle": "腰腹",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单臂过顶向对侧侧屈，感受侧腰拉伸，避免前倾。"
+    },
+    {
+      "name": "下犬式",
+      "nameEn": "Downward Dog",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "手脚撑地臀部上顶成倒 V，拉长后链，脚跟不必强求贴地。"
+    },
+    {
+      "name": "蝴蝶式拉伸",
+      "nameEn": "Butterfly Stretch",
+      "muscle": "大腿内侧",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "坐姿脚掌相对，髋外展下压双膝，拉伸内收肌。"
+    },
+    {
+      "name": "靠墙胸椎伸展",
+      "nameEn": "Wall Thoracic Extension",
+      "muscle": "脊柱",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "上背靠泡沫轴或墙，缓慢后仰伸展胸椎，改善含胸。"
+    },
+    {
+      "name": "颈部拉伸",
+      "nameEn": "Neck Stretch",
+      "muscle": "颈部",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "缓慢侧屈与旋转，力度轻柔，不绕环、不猛拉。"
+    },
+    {
+      "name": "踝关节活动度练习",
+      "nameEn": "Ankle Mobility Drill",
+      "muscle": "踝",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "膝前顶超过脚尖方向，保持脚跟不离地，改善踝背屈。"
+    },
+    {
+      "name": "髋关节绕环",
+      "nameEn": "Hip Circle",
+      "muscle": "髋",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "扶墙单腿画圆，幅度由小到大，活动髋关节。"
+    },
+    {
+      "name": "单腿站立",
+      "nameEn": "Single-leg Stance",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单腿支撑，另一腿屈髋抬起，保持稳定，可扶墙降阶。"
+    },
+    {
+      "name": "闭眼单腿站立",
+      "nameEn": "Single-leg Stance Eyes Closed",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "在单腿站立基础上闭眼，难度提高，须有保护防止跌倒。"
+    },
+    {
+      "name": "脚跟脚尖走",
+      "nameEn": "Tandem Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "两脚前后成一线行走，如走平衡木，练动态平衡。"
+    },
+    {
+      "name": "脚跟走",
+      "nameEn": "Heel Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "脚尖离地，以脚跟行走一段距离，强化胫前肌。"
+    },
+    {
+      "name": "脚尖走",
+      "nameEn": "Toe Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "以脚尖行走，强化小腿三头肌与踝稳定。"
+    },
+    {
+      "name": "坐立转换",
+      "nameEn": "Sit-to-Stand",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "不用手扶从椅面站起再坐下，反复进行，练下肢功能。"
+    },
+    {
+      "name": "侧向跨步",
+      "nameEn": "Lateral Step",
+      "muscle": "腿",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带套踝或膝上，半蹲横向移动，强化髋外展与稳定。"
+    },
+    {
+      "name": "单腿提踵",
+      "nameEn": "Single-leg Calf Raise",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿踮起至最高再缓慢下放，兼顾踝稳定与平衡。"
+    },
+    {
+      "name": "星形偏移平衡",
+      "nameEn": "Star Excursion Balance",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑，另一腿向八个方向轻点地面，练动态平衡。"
+    },
+    {
+      "name": "太极式重心转移",
+      "nameEn": "Tai Chi Weight Shift",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "缓慢将重心左右前后转移，膝微屈，适合老年平衡训练。"
+    },
+    {
+      "name": "泡沫垫站立",
+      "nameEn": "Foam Pad Stance",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "在软垫上单腿或双腿站立，增加不稳定刺激，注意保护。"
+    },
+    {
+      "name": "单腿硬拉（平衡）",
+      "nameEn": "Balance Single-leg Deadlift",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑髋铰链前倾，后腿后伸，练平衡与后链控制。"
+    },
+    {
+      "name": "腹式呼吸",
+      "nameEn": "Diaphragmatic Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "用鼻吸气使腹部隆起，经口缓慢呼气，节律放慢，可助放松。"
+    },
+    {
+      "name": "缩唇呼吸",
+      "nameEn": "Pursed-lip Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "鼻吸口呼，呼气时缩唇如吹蜡烛，延长呼气，缓解气促。"
+    },
+    {
+      "name": "瑜伽基础体式",
+      "nameEn": "Yoga Basic Poses",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "山式、站立前屈、猫牛、婴儿式等基础序列，配合呼吸。"
+    },
+    {
+      "name": "瑜伽战士一式",
+      "nameEn": "Warrior I",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前后开立，后脚外展踩实，双臂上举，髋部朝向正前。"
+    },
+    {
+      "name": "瑜伽战士二式",
+      "nameEn": "Warrior II",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前膝对准脚尖，双臂平展，目光看向前手，稳定呼吸。"
+    },
+    {
+      "name": "瑜伽树式",
+      "nameEn": "Tree Pose",
+      "muscle": "腿",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "单腿站立，另一脚抵小腿或大腿内侧，练平衡与专注。"
+    },
+    {
+      "name": "瑜伽桥式",
+      "nameEn": "Bridge Pose",
+      "muscle": "臀",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "仰卧屈膝抬髋，肩脚支撑，缓慢起伏，配合呼吸。"
+    },
+    {
+      "name": "渐进式肌肉放松",
+      "nameEn": "Progressive Muscle Relaxation",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "按序绷紧再放松各肌群，配合慢呼吸，缓解紧张焦虑。"
+    },
+    {
+      "name": "五禽戏",
+      "nameEn": "Wuqinxi",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "模仿虎鹿熊猿鸟五禽动作，舒缓连贯，适合中老年。"
+    },
+    {
+      "name": "六字诀",
+      "nameEn": "Liuzijue",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "六种吐纳发音配合导引动作，强调呼吸与动作协调。"
+    },
+    {
+      "name": "正念呼吸练习",
+      "nameEn": "Mindful Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "安静端坐，觉察呼吸起伏，思绪飘走时温和带回。"
+    }
+  ],
+  "conditionExercises": [
+    {
+      "category": "有氧",
+      "examples": [
+        "跑步机步行",
+        "椭圆机",
+        "动感单车",
+        "划船机",
+        "爬楼机",
+        "跳绳"
+      ],
+      "cues": "以中等强度、可对话的节奏持续进行；先热身 5 分钟，再进入主体，结束前减速整理；全程保持自然呼吸。",
+      "cautions": [
+        "静息血压未控制（≥180/110 mmHg）、静息心率异常或运动中胸痛/胸闷者，先就医再运动",
+        "急性感染、发热、明显气促或关节剧痛期间暂停有氧训练",
+        "糖尿病患者使用胰岛素或促泌剂时，注意防范运动相关低血糖，随身携带快速升糖食品",
+        "老年人或平衡障碍者使用跑步机、爬楼机时须扶稳并有人陪同"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；强度与禁忌依据美国身体活动指南第2版（2018）慢性疾病章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "抗阻",
+      "examples": [
+        "坐姿深蹲",
+        "硬拉",
+        "杠铃卧推",
+        "杠铃划船",
+        "杠铃推举",
+        "腿举"
+      ],
+      "cues": "从低负荷开始，先掌握动作模式，再逐步加量；全程保持脊柱中立、自然呼吸，不憋气；每个大肌群 2-3 组、每组 8-12 次，非连续日安排。",
+      "cautions": [
+        "血压未控制（≥180/110 mmHg）者避免抗阻与憋气用力（Valsalva）",
+        "重度骨质疏松、既往脆性骨折者避免脊柱大幅屈曲与旋转负重动作",
+        "急性疼痛、发热、活动性出血期间暂停训练",
+        "初次训练或合并心血管疾病者，须经医生/康复师评估后再决定负荷与进阶"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）慢性疾病章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "柔韧",
+      "examples": [
+        "腘绳肌坐姿拉伸",
+        "胸大肌门框拉伸",
+        "小腿站姿拉伸",
+        "猫牛式",
+        "婴儿式",
+        "仰卧脊柱扭转"
+      ],
+      "cues": "缓慢进入拉伸位，至有牵拉感但不疼痛；每个动作静态保持 15-30 秒、重复 2-4 次；全程正常呼吸，不弹振、不猛拉。",
+      "cautions": [
+        "不在关节急性肿胀、急性疼痛期进行大幅度拉伸",
+        "骨质疏松者避免躯干大幅前屈与含旋转的拉伸",
+        "孕期韧带松弛，避免过度拉伸与长时间仰卧",
+        "拉伸中出现刺痛、麻木应立即停止"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）与 MedlinePlus 改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "平衡",
+      "examples": [
+        "单腿站立",
+        "脚跟脚尖走",
+        "坐立转换",
+        "太极式重心转移",
+        "太极拳"
+      ],
+      "cues": "在防滑地面、临近扶手或有人保护处进行；由双手扶持到单手、再到独立，由睁眼到闭眼，渐进增加难度；每次 10-20 分钟。",
+      "cautions": [
+        "有跌倒史、明显平衡障碍或头晕者，须先经专业评估，并在保护下训练",
+        "避免快速转身与突然变向，训练环境须无绊脚物",
+        "体位性低血压者起身宜缓慢",
+        "训练中出现头晕、视物旋转、心悸应立即停止"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）老年人章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "身心",
+      "examples": [
+        "八段锦",
+        "太极拳",
+        "腹式呼吸",
+        "瑜伽基础体式",
+        "缩唇呼吸"
+      ],
+      "cues": "动作舒缓、配合呼吸，以放松与协调为目标；每次 15-30 分钟，可每天进行；不必追求幅度与难度，以舒适为度。",
+      "cautions": [
+        "身心练习不能替代规范的药物治疗与专科诊疗，不可擅自减药停药",
+        "慢阻肺患者练习呼吸时如出现头晕、气促加重应停止并休息",
+        "练习中出现明显情绪反应或身体不适，应停止并咨询专业人员",
+        "孕期避免长时间仰卧及大幅度扭转"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据 MedlinePlus 与美国身体活动指南第2版（2018）改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "有氧",
+      "examples": [
+        "固定自行车",
+        "卧式自行车",
+        "椭圆机",
+        "跑步机步行",
+        "划船机"
+      ],
+      "cues": "低冲击、关节友好的有氧选择，适合骨关节炎、腰痛、卒中后与老年人群；从每次 10-15 分钟起步、逐步累计到 30 分钟。",
+      "cautions": [
+        "急性关节肿胀、明显疼痛加重期暂停，先就医处理",
+        "卒中后与平衡障碍者须在监护与防护下使用器械",
+        "训练中出现胸痛、明显气促、头晕须立即停止",
+        "骨关节炎患者若运动后疼痛持续超过 2 小时，应降低强度"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）慢性疾病章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "抗阻",
+      "examples": [
+        "徒手深蹲",
+        "臀桥",
+        "俯卧撑",
+        "反向划船",
+        "靠墙静蹲",
+        "死虫式"
+      ],
+      "cues": "自重或极轻负荷起步，优先建立动作模式与核心稳定；适合老年人、康复期与初学者；每个动作 2-3 组、每组 8-15 次，注重控制而非重量。",
+      "cautions": [
+        "初次训练宜在指导下学习动作模式，避免错误动作固化",
+        "腰痛急性期、伴神经根症状者须先经医生或康复师评估",
+        "全程自然呼吸，不憋气用力",
+        "训练中疼痛加剧应立即停止"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）慢性疾病章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
+    },
+    {
+      "category": "平衡",
+      "examples": [
+        "闭眼单腿站立",
+        "星形偏移平衡",
+        "单腿提踵",
+        "泡沫垫站立",
+        "侧向跨步"
+      ],
+      "cues": "在已能稳定完成基础平衡动作后再进阶；由稳定平面到不稳定平面、由睁眼到闭眼逐步提高难度；每次 10-15 分钟，须有保护。",
+      "cautions": [
+        "必须有人保护并临近扶手/固定物，严防跌倒",
+        "老年人、帕金森病及卒中后患者须经专业评估后进阶",
+        "避免在疲劳、低血糖或头晕状态下进行",
+        "训练中出现任何不适立即停止"
+      ],
+      "source": "Free Exercise DB（Unlicense，公共领域）动作分类；禁忌依据美国身体活动指南第2版（2018）老年人章节改写",
+      "url": "https://github.com/yuhonas/free-exercise-db",
+      "license": "Unlicense（公共领域）；禁忌改写部分源自美国政府作品（公共领域）"
     }
   ]
 }

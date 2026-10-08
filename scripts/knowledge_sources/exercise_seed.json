@@ -1,73 +1,1617 @@
 {
-  "version": "1.0.0",
-  "description": "动作库种子：参考 Free Exercise DB（Unlicense，公共领域）的动作分类结构，中文名与要点为自撰改写。",
+  "version": "1.1.0",
+  "description": "动作库种子：参考 Free Exercise DB（Unlicense，公共领域）的动作分类结构，中文名与要点为自撰改写；构建期剥离全部媒体字段（不含图片/动图）。",
   "license": "Free Exercise DB（Unlicense，公共领域），中文改写部分随项目许可",
   "source": "Free Exercise DB",
   "url": "https://github.com/yuhonas/free-exercise-db",
   "exercises": [
-    { "name": "杠铃卧推", "nameEn": "Barbell Bench Press", "muscle": "胸", "equipment": "杠铃", "level": "中级", "cues": "肩胛后收下沉，杠铃落于乳头连线，肘约 45° 夹角，推起时脚踩实地面。" },
-    { "name": "哑铃卧推", "nameEn": "Dumbbell Bench Press", "muscle": "胸", "equipment": "哑铃", "level": "初级", "cues": "哑铃下放至胸侧，感受胸大肌拉伸，向上推至接近但不完全锁死。" },
-    { "name": "上斜哑铃卧推", "nameEn": "Incline Dumbbell Press", "muscle": "胸", "equipment": "哑铃", "level": "中级", "cues": "凳角约 30°，主攻上胸；哑铃轨迹略向内收。" },
-    { "name": "俯卧撑", "nameEn": "Push-up", "muscle": "胸", "equipment": "自重", "level": "初级", "cues": "身体成一条直线，核心收紧，胸接近地面后推起；可跪姿降阶。" },
-    { "name": "双杠臂屈伸", "nameEn": "Dips", "muscle": "胸", "equipment": "自重", "level": "高级", "cues": "身体略前倾偏向胸，直立则偏三头；下沉至肩略低于肘。" },
-    { "name": "蝴蝶机夹胸", "nameEn": "Pec Deck Fly", "muscle": "胸", "equipment": "器械", "level": "初级", "cues": "肘微屈固定，靠胸收缩完成夹合，避免用肩代偿。" },
-    { "name": "绳索夹胸", "nameEn": "Cable Crossover", "muscle": "胸", "equipment": "绳索", "level": "中级", "cues": "两臂由外向内画弧，顶端挤压胸肌，全程保持张力。" },
-    { "name": "引体向上", "nameEn": "Pull-up", "muscle": "背", "equipment": "自重", "level": "高级", "cues": "正握略宽于肩，先沉肩再拉，胸口向杠靠；可弹力带辅助。" },
-    { "name": "高位下拉", "nameEn": "Lat Pulldown", "muscle": "背", "equipment": "器械", "level": "初级", "cues": "握距略宽，拉至锁骨上方，肘向下向后走，避免后仰代偿。" },
-    { "name": "杠铃划船", "nameEn": "Barbell Row", "muscle": "背", "equipment": "杠铃", "level": "中级", "cues": "俯身约 45°，背部挺直，杠铃拉向下腹，肩胛后收。" },
-    { "name": "哑铃单臂划船", "nameEn": "One-arm Dumbbell Row", "muscle": "背", "equipment": "哑铃", "level": "初级", "cues": "一手一膝撑凳，背平，肘贴身后拉，顶点略停。" },
-    { "name": "坐姿绳索划船", "nameEn": "Seated Cable Row", "muscle": "背", "equipment": "绳索", "level": "初级", "cues": "躯干稳定少晃，拉至腹前，肩胛主动后收。" },
-    { "name": "硬拉", "nameEn": "Deadlift", "muscle": "背", "equipment": "杠铃", "level": "高级", "cues": "杠贴小腿，髋膝同时伸展，背部中立；全程杠铃贴近身体。" },
-    { "name": "罗马尼亚硬拉", "nameEn": "Romanian Deadlift", "muscle": "腿", "equipment": "杠铃", "level": "中级", "cues": "微屈膝、髋后坐，感受腘绳肌拉伸，背部始终中立。" },
-    { "name": "坐姿深蹲", "nameEn": "Squat", "muscle": "腿", "equipment": "杠铃", "level": "高级", "cues": "脚略外展，膝随脚尖方向，下蹲至大腿平行，核心全程绷紧。" },
-    { "name": "杠铃前蹲", "nameEn": "Front Squat", "muscle": "腿", "equipment": "杠铃", "level": "高级", "cues": "杠置于前肩，肘高抬躯干直立，重心偏前更练股四头。" },
-    { "name": "腿举", "nameEn": "Leg Press", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "脚与肩同宽，下放至膝约 90°，勿锁死膝关节。" },
-    { "name": "哑铃箭步蹲", "nameEn": "Dumbbell Lunge", "muscle": "腿", "equipment": "哑铃", "level": "中级", "cues": "前腿膝不过脚尖，后膝近地面；躯干保持直立。" },
-    { "name": "保加利亚分腿蹲", "nameEn": "Bulgarian Split Squat", "muscle": "腿", "equipment": "哑铃", "level": "中级", "cues": "后脚搭凳，前腿发力主导，重心垂直下沉。" },
-    { "name": "腿屈伸", "nameEn": "Leg Extension", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "坐稳，顶端收缩股四头，缓慢还原，避免甩动。" },
-    { "name": "腿弯举", "nameEn": "Leg Curl", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "髋部贴垫，靠腘绳肌屈膝，离心控制下放。" },
-    { "name": "站姿提踵", "nameEn": "Standing Calf Raise", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "前脚掌受力，顶端踮到最高，底部充分下放拉伸小腿。" },
-    { "name": "臀桥", "nameEn": "Glute Bridge", "muscle": "臀", "equipment": "自重", "level": "初级", "cues": "脚跟发力顶髋，顶端夹臀，避免腰部代偿。" },
-    { "name": "杠铃臀推", "nameEn": "Barbell Hip Thrust", "muscle": "臀", "equipment": "杠铃", "level": "中级", "cues": "上背靠凳，杠置髋部，顶髋至躯干与大腿成一线，下巴微收。" },
-    { "name": "哑铃相扑深蹲", "nameEn": "Sumo Squat", "muscle": "臀", "equipment": "哑铃", "level": "中级", "cues": "宽站距脚尖外展，髋部下沉，主攻臀内侧与内收肌。" },
-    { "name": "髋外展", "nameEn": "Hip Abduction", "muscle": "臀", "equipment": "器械", "level": "初级", "cues": "坐姿靠背，双腿外展至最大，感受臀中肌收缩。" },
-    { "name": "山羊挺身（罗马椅）", "nameEn": "Back Extension", "muscle": "臀", "equipment": "自重", "level": "初级", "cues": "髋部为轴，躯干下放再抬起至中立位，勿过度后仰。" },
-    { "name": "杠铃推举", "nameEn": "Overhead Press", "muscle": "肩", "equipment": "杠铃", "level": "中级", "cues": "核心收紧，杠自锁骨推至头顶，头微后让位，勿塌腰。" },
-    { "name": "哑铃肩上推举", "nameEn": "Dumbbell Shoulder Press", "muscle": "肩", "equipment": "哑铃", "level": "初级", "cues": "坐姿靠背，哑铃自耳侧推起，顶点不碰撞。" },
-    { "name": "哑铃侧平举", "nameEn": "Lateral Raise", "muscle": "肩", "equipment": "哑铃", "level": "初级", "cues": "肘微屈，抬至与肩平，小重量多次数感受中束。" },
-    { "name": "哑铃前平举", "nameEn": "Front Raise", "muscle": "肩", "equipment": "哑铃", "level": "初级", "cues": "抬至肩高即止，控制下放，避免借力甩动。" },
-    { "name": "俯身飞鸟", "nameEn": "Rear Delt Fly", "muscle": "肩", "equipment": "哑铃", "level": "中级", "cues": "俯身背平，两臂向侧后展开，主攻三角肌后束。" },
-    { "name": "面拉", "nameEn": "Face Pull", "muscle": "肩", "equipment": "绳索", "level": "初级", "cues": "绳索拉向面部，肘高于手，强化后束与肩袖，改善圆肩。" },
-    { "name": "杠铃耸肩", "nameEn": "Barbell Shrug", "muscle": "肩", "equipment": "杠铃", "level": "初级", "cues": "肩胛垂直上提至顶点略停，避免转肩绕环。" },
-    { "name": "杠铃弯举", "nameEn": "Barbell Curl", "muscle": "手臂", "equipment": "杠铃", "level": "初级", "cues": "肘固定于体侧，靠肱二头收缩上举，缓慢离心下放。" },
-    { "name": "哑铃交替弯举", "nameEn": "Alternating Dumbbell Curl", "muscle": "手臂", "equipment": "哑铃", "level": "初级", "cues": "上举时前臂略旋外，顶峰收缩，避免身体晃动。" },
-    { "name": "锤式弯举", "nameEn": "Hammer Curl", "muscle": "手臂", "equipment": "哑铃", "level": "初级", "cues": "掌心相对握法，兼顾肱桡肌，肘部保持稳定。" },
-    { "name": "绳索下压", "nameEn": "Triceps Pushdown", "muscle": "手臂", "equipment": "绳索", "level": "初级", "cues": "大臂贴体侧固定，靠肘伸完成，底端挤压三头。" },
-    { "name": "仰卧臂屈伸", "nameEn": "Skull Crusher", "muscle": "手臂", "equipment": "杠铃", "level": "中级", "cues": "大臂垂直地面固定，仅屈伸肘，杠落向额头后方。" },
-    { "name": "窄距卧推", "nameEn": "Close-grip Bench Press", "muscle": "手臂", "equipment": "杠铃", "level": "中级", "cues": "握距约与肩同宽，肘内收，主攻肱三头。" },
-    { "name": "卷腹", "nameEn": "Crunch", "muscle": "核心", "equipment": "自重", "level": "初级", "cues": "胸向骨盆卷，下背贴地，靠腹肌收缩而非颈部发力。" },
-    { "name": "仰卧举腿", "nameEn": "Lying Leg Raise", "muscle": "核心", "equipment": "自重", "level": "中级", "cues": "下背压实地面，缓慢举放双腿，避免腰部离地。" },
-    { "name": "平板支撑", "nameEn": "Plank", "muscle": "核心", "equipment": "自重", "level": "初级", "cues": "肘在肩下，头臀脚成一线，收腹夹臀，保持均匀呼吸。" },
-    { "name": "侧平板支撑", "nameEn": "Side Plank", "muscle": "核心", "equipment": "自重", "level": "中级", "cues": "身体侧面成一线，髋部上顶，强化腹斜肌与侧链。" },
-    { "name": "俄罗斯转体", "nameEn": "Russian Twist", "muscle": "核心", "equipment": "自重", "level": "中级", "cues": "坐姿后仰，躯干带动左右旋转，可持重物增负。" },
-    { "name": "登山跑", "nameEn": "Mountain Climber", "muscle": "核心", "equipment": "自重", "level": "中级", "cues": "俯撑姿态，双膝交替快速向胸提，臀部保持稳定。" },
-    { "name": "死虫式", "nameEn": "Dead Bug", "muscle": "核心", "equipment": "自重", "level": "初级", "cues": "对侧手脚伸展，下背压实，缓慢控制，适合腰痛康复。" },
-    { "name": "鸟狗式", "nameEn": "Bird Dog", "muscle": "核心", "equipment": "自重", "level": "初级", "cues": "四足跪姿，对侧手脚伸平，保持骨盆水平不晃。" },
-    { "name": "壶铃摆动", "nameEn": "Kettlebell Swing", "muscle": "全身", "equipment": "壶铃", "level": "中级", "cues": "髋铰链发力，非手臂上抬；顶点夹臀，靠髋伸驱动。" },
-    { "name": "高翻（简化）", "nameEn": "Power Clean", "muscle": "全身", "equipment": "杠铃", "level": "高级", "cues": "爆发式髋膝伸展带动杠铃上提，接杠呈前蹲位；需专业指导。" },
-    { "name": "波比跳", "nameEn": "Burpee", "muscle": "全身", "equipment": "自重", "level": "中级", "cues": "下蹲撑地→后跳成俯撑→收腿起跳，节奏可控，心率提升明显。" },
-    { "name": "农夫行走", "nameEn": "Farmer's Walk", "muscle": "全身", "equipment": "哑铃", "level": "初级", "cues": "双手持重自然行走，肩沉背直，核心稳定，练握力与体态。" },
-    { "name": "战绳", "nameEn": "Battle Rope", "muscle": "全身", "equipment": "绳索", "level": "中级", "cues": "半蹲稳定下盘，双臂快速交替甩绳，保持呼吸节奏。" },
-    { "name": "划船机", "nameEn": "Rowing Machine", "muscle": "全身", "equipment": "器械", "level": "初级", "cues": "腿→髋→臂顺序发力，回程反向；保持背部中立。" },
-    { "name": "开合跳", "nameEn": "Jumping Jack", "muscle": "全身", "equipment": "自重", "level": "初级", "cues": "落地屈膝缓冲，节奏均匀，适合热身与有氧。" },
-    { "name": "爬楼机", "nameEn": "Stair Climber", "muscle": "全身", "equipment": "器械", "level": "初级", "cues": "全脚掌踩实，尽量避免扶把借力，重心居中。" },
-    { "name": "椭圆机", "nameEn": "Elliptical", "muscle": "全身", "equipment": "器械", "level": "初级", "cues": "低冲击有氧，保持躯干直立，手脚协调发力。" },
-    { "name": "动感单车", "nameEn": "Spinning", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "座高以腿近伸直为准，踏频稳定，阻力循序渐进。" },
-    { "name": "跑步机步行", "nameEn": "Treadmill Walking", "muscle": "腿", "equipment": "器械", "level": "初级", "cues": "坡度 5%-10% 可显著提升强度，注意摆臂与步幅。" },
-    { "name": "跳绳", "nameEn": "Jump Rope", "muscle": "全身", "equipment": "自重", "level": "中级", "cues": "手腕摇绳，落地前脚掌，膝微屈缓冲，节奏稳定。" },
-    { "name": "八段锦", "nameEn": "Baduanjin", "muscle": "全身", "equipment": "自重", "level": "初级", "cues": "动作舒缓配合呼吸，共八式，适合中老年与康复人群。" },
-    { "name": "太极拳", "nameEn": "Tai Chi", "muscle": "全身", "equipment": "自重", "level": "初级", "cues": "缓慢连贯、重心转换清晰，对平衡与下肢力量有益。" },
-    { "name": "靠墙静蹲", "nameEn": "Wall Sit", "muscle": "腿", "equipment": "自重", "level": "初级", "cues": "背贴墙下滑至大腿平行地面，膝不过脚尖，静态保持。" },
-    { "name": "弹力带侧走", "nameEn": "Banded Lateral Walk", "muscle": "臀", "equipment": "自重", "level": "初级", "cues": "弹力带套膝上或踝，半蹲横向移动，强化臀中肌与稳定性。" }
+    {
+      "name": "杠铃卧推",
+      "nameEn": "Barbell Bench Press",
+      "muscle": "胸",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "肩胛后收下沉，杠铃落于乳头连线，肘约 45° 夹角，推起时脚踩实地面。"
+    },
+    {
+      "name": "哑铃卧推",
+      "nameEn": "Dumbbell Bench Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "哑铃下放至胸侧，感受胸大肌拉伸，向上推至接近但不完全锁死。"
+    },
+    {
+      "name": "上斜哑铃卧推",
+      "nameEn": "Incline Dumbbell Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "凳角约 30°，主攻上胸；哑铃轨迹略向内收。"
+    },
+    {
+      "name": "俯卧撑",
+      "nameEn": "Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "身体成一条直线，核心收紧，胸接近地面后推起；可跪姿降阶。"
+    },
+    {
+      "name": "双杠臂屈伸",
+      "nameEn": "Dips",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "身体略前倾偏向胸，直立则偏三头；下沉至肩略低于肘。"
+    },
+    {
+      "name": "蝴蝶机夹胸",
+      "nameEn": "Pec Deck Fly",
+      "muscle": "胸",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "肘微屈固定，靠胸收缩完成夹合，避免用肩代偿。"
+    },
+    {
+      "name": "绳索夹胸",
+      "nameEn": "Cable Crossover",
+      "muscle": "胸",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "两臂由外向内画弧，顶端挤压胸肌，全程保持张力。"
+    },
+    {
+      "name": "引体向上",
+      "nameEn": "Pull-up",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "正握略宽于肩，先沉肩再拉，胸口向杠靠；可弹力带辅助。"
+    },
+    {
+      "name": "高位下拉",
+      "nameEn": "Lat Pulldown",
+      "muscle": "背",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "握距略宽，拉至锁骨上方，肘向下向后走，避免后仰代偿。"
+    },
+    {
+      "name": "杠铃划船",
+      "nameEn": "Barbell Row",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "俯身约 45°，背部挺直，杠铃拉向下腹，肩胛后收。"
+    },
+    {
+      "name": "哑铃单臂划船",
+      "nameEn": "One-arm Dumbbell Row",
+      "muscle": "背",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "一手一膝撑凳，背平，肘贴身后拉，顶点略停。"
+    },
+    {
+      "name": "坐姿绳索划船",
+      "nameEn": "Seated Cable Row",
+      "muscle": "背",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "躯干稳定少晃，拉至腹前，肩胛主动后收。"
+    },
+    {
+      "name": "硬拉",
+      "nameEn": "Deadlift",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "杠贴小腿，髋膝同时伸展，背部中立；全程杠铃贴近身体。"
+    },
+    {
+      "name": "罗马尼亚硬拉",
+      "nameEn": "Romanian Deadlift",
+      "muscle": "腿",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "微屈膝、髋后坐，感受腘绳肌拉伸，背部始终中立。"
+    },
+    {
+      "name": "坐姿深蹲",
+      "nameEn": "Squat",
+      "muscle": "腿",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "脚略外展，膝随脚尖方向，下蹲至大腿平行，核心全程绷紧。"
+    },
+    {
+      "name": "杠铃前蹲",
+      "nameEn": "Front Squat",
+      "muscle": "腿",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "杠置于前肩，肘高抬躯干直立，重心偏前更练股四头。"
+    },
+    {
+      "name": "腿举",
+      "nameEn": "Leg Press",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "脚与肩同宽，下放至膝约 90°，勿锁死膝关节。"
+    },
+    {
+      "name": "哑铃箭步蹲",
+      "nameEn": "Dumbbell Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "前腿膝不过脚尖，后膝近地面；躯干保持直立。"
+    },
+    {
+      "name": "保加利亚分腿蹲",
+      "nameEn": "Bulgarian Split Squat",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "后脚搭凳，前腿发力主导，重心垂直下沉。"
+    },
+    {
+      "name": "腿屈伸",
+      "nameEn": "Leg Extension",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐稳，顶端收缩股四头，缓慢还原，避免甩动。"
+    },
+    {
+      "name": "腿弯举",
+      "nameEn": "Leg Curl",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "髋部贴垫，靠腘绳肌屈膝，离心控制下放。"
+    },
+    {
+      "name": "站姿提踵",
+      "nameEn": "Standing Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "前脚掌受力，顶端踮到最高，底部充分下放拉伸小腿。"
+    },
+    {
+      "name": "臀桥",
+      "nameEn": "Glute Bridge",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "脚跟发力顶髋，顶端夹臀，避免腰部代偿。"
+    },
+    {
+      "name": "杠铃臀推",
+      "nameEn": "Barbell Hip Thrust",
+      "muscle": "臀",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "上背靠凳，杠置髋部，顶髋至躯干与大腿成一线，下巴微收。"
+    },
+    {
+      "name": "哑铃相扑深蹲",
+      "nameEn": "Sumo Squat",
+      "muscle": "臀",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "宽站距脚尖外展，髋部下沉，主攻臀内侧与内收肌。"
+    },
+    {
+      "name": "髋外展",
+      "nameEn": "Hip Abduction",
+      "muscle": "臀",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐姿靠背，双腿外展至最大，感受臀中肌收缩。"
+    },
+    {
+      "name": "山羊挺身（罗马椅）",
+      "nameEn": "Back Extension",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "髋部为轴，躯干下放再抬起至中立位，勿过度后仰。"
+    },
+    {
+      "name": "杠铃推举",
+      "nameEn": "Overhead Press",
+      "muscle": "肩",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "核心收紧，杠自锁骨推至头顶，头微后让位，勿塌腰。"
+    },
+    {
+      "name": "哑铃肩上推举",
+      "nameEn": "Dumbbell Shoulder Press",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "坐姿靠背，哑铃自耳侧推起，顶点不碰撞。"
+    },
+    {
+      "name": "哑铃侧平举",
+      "nameEn": "Lateral Raise",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肘微屈，抬至与肩平，小重量多次数感受中束。"
+    },
+    {
+      "name": "哑铃前平举",
+      "nameEn": "Front Raise",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "抬至肩高即止，控制下放，避免借力甩动。"
+    },
+    {
+      "name": "俯身飞鸟",
+      "nameEn": "Rear Delt Fly",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "俯身背平，两臂向侧后展开，主攻三角肌后束。"
+    },
+    {
+      "name": "面拉",
+      "nameEn": "Face Pull",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "绳索拉向面部，肘高于手，强化后束与肩袖，改善圆肩。"
+    },
+    {
+      "name": "杠铃耸肩",
+      "nameEn": "Barbell Shrug",
+      "muscle": "肩",
+      "equipment": "杠铃",
+      "level": "初级",
+      "cues": "肩胛垂直上提至顶点略停，避免转肩绕环。"
+    },
+    {
+      "name": "杠铃弯举",
+      "nameEn": "Barbell Curl",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "初级",
+      "cues": "肘固定于体侧，靠肱二头收缩上举，缓慢离心下放。"
+    },
+    {
+      "name": "哑铃交替弯举",
+      "nameEn": "Alternating Dumbbell Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "上举时前臂略旋外，顶峰收缩，避免身体晃动。"
+    },
+    {
+      "name": "锤式弯举",
+      "nameEn": "Hammer Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "掌心相对握法，兼顾肱桡肌，肘部保持稳定。"
+    },
+    {
+      "name": "绳索下压",
+      "nameEn": "Triceps Pushdown",
+      "muscle": "手臂",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "大臂贴体侧固定，靠肘伸完成，底端挤压三头。"
+    },
+    {
+      "name": "仰卧臂屈伸",
+      "nameEn": "Skull Crusher",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "大臂垂直地面固定，仅屈伸肘，杠落向额头后方。"
+    },
+    {
+      "name": "窄距卧推",
+      "nameEn": "Close-grip Bench Press",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "握距约与肩同宽，肘内收，主攻肱三头。"
+    },
+    {
+      "name": "卷腹",
+      "nameEn": "Crunch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "胸向骨盆卷，下背贴地，靠腹肌收缩而非颈部发力。"
+    },
+    {
+      "name": "仰卧举腿",
+      "nameEn": "Lying Leg Raise",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下背压实地面，缓慢举放双腿，避免腰部离地。"
+    },
+    {
+      "name": "平板支撑",
+      "nameEn": "Plank",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "肘在肩下，头臀脚成一线，收腹夹臀，保持均匀呼吸。"
+    },
+    {
+      "name": "侧平板支撑",
+      "nameEn": "Side Plank",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "身体侧面成一线，髋部上顶，强化腹斜肌与侧链。"
+    },
+    {
+      "name": "俄罗斯转体",
+      "nameEn": "Russian Twist",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "坐姿后仰，躯干带动左右旋转，可持重物增负。"
+    },
+    {
+      "name": "登山跑",
+      "nameEn": "Mountain Climber",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "俯撑姿态，双膝交替快速向胸提，臀部保持稳定。"
+    },
+    {
+      "name": "死虫式",
+      "nameEn": "Dead Bug",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "对侧手脚伸展，下背压实，缓慢控制，适合腰痛康复。"
+    },
+    {
+      "name": "鸟狗式",
+      "nameEn": "Bird Dog",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "四足跪姿，对侧手脚伸平，保持骨盆水平不晃。"
+    },
+    {
+      "name": "壶铃摆动",
+      "nameEn": "Kettlebell Swing",
+      "muscle": "全身",
+      "equipment": "壶铃",
+      "level": "中级",
+      "cues": "髋铰链发力，非手臂上抬；顶点夹臀，靠髋伸驱动。"
+    },
+    {
+      "name": "高翻（简化）",
+      "nameEn": "Power Clean",
+      "muscle": "全身",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "爆发式髋膝伸展带动杠铃上提，接杠呈前蹲位；需专业指导。"
+    },
+    {
+      "name": "波比跳",
+      "nameEn": "Burpee",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下蹲撑地→后跳成俯撑→收腿起跳，节奏可控，心率提升明显。"
+    },
+    {
+      "name": "农夫行走",
+      "nameEn": "Farmer's Walk",
+      "muscle": "全身",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "双手持重自然行走，肩沉背直，核心稳定，练握力与体态。"
+    },
+    {
+      "name": "战绳",
+      "nameEn": "Battle Rope",
+      "muscle": "全身",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "半蹲稳定下盘，双臂快速交替甩绳，保持呼吸节奏。"
+    },
+    {
+      "name": "划船机",
+      "nameEn": "Rowing Machine",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "腿→髋→臂顺序发力，回程反向；保持背部中立。"
+    },
+    {
+      "name": "开合跳",
+      "nameEn": "Jumping Jack",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "落地屈膝缓冲，节奏均匀，适合热身与有氧。"
+    },
+    {
+      "name": "爬楼机",
+      "nameEn": "Stair Climber",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "全脚掌踩实，尽量避免扶把借力，重心居中。"
+    },
+    {
+      "name": "椭圆机",
+      "nameEn": "Elliptical",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "低冲击有氧，保持躯干直立，手脚协调发力。"
+    },
+    {
+      "name": "动感单车",
+      "nameEn": "Spinning",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "座高以腿近伸直为准，踏频稳定，阻力循序渐进。"
+    },
+    {
+      "name": "跑步机步行",
+      "nameEn": "Treadmill Walking",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坡度 5%-10% 可显著提升强度，注意摆臂与步幅。"
+    },
+    {
+      "name": "跳绳",
+      "nameEn": "Jump Rope",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "手腕摇绳，落地前脚掌，膝微屈缓冲，节奏稳定。"
+    },
+    {
+      "name": "八段锦",
+      "nameEn": "Baduanjin",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "动作舒缓配合呼吸，共八式，适合中老年与康复人群。"
+    },
+    {
+      "name": "太极拳",
+      "nameEn": "Tai Chi",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "缓慢连贯、重心转换清晰，对平衡与下肢力量有益。"
+    },
+    {
+      "name": "靠墙静蹲",
+      "nameEn": "Wall Sit",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "背贴墙下滑至大腿平行地面，膝不过脚尖，静态保持。"
+    },
+    {
+      "name": "弹力带侧走",
+      "nameEn": "Banded Lateral Walk",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "弹力带套膝上或踝，半蹲横向移动，强化臀中肌与稳定性。"
+    },
+    {
+      "name": "上斜杠铃卧推",
+      "nameEn": "Incline Barbell Bench Press",
+      "muscle": "胸",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "凳角约 30°-45°，杠铃落于锁骨下方，主攻上胸。"
+    },
+    {
+      "name": "下斜杠铃卧推",
+      "nameEn": "Decline Barbell Bench Press",
+      "muscle": "胸",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "双腿固定，杠铃落于下胸，肘略收，主攻下胸。"
+    },
+    {
+      "name": "下斜哑铃卧推",
+      "nameEn": "Decline Dumbbell Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "哑铃沿下胸轨迹推起，顶端不锁死，保持胸肌张力。"
+    },
+    {
+      "name": "器械推胸",
+      "nameEn": "Chest Press Machine",
+      "muscle": "胸",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐稳靠背，把手推至手臂近伸直，缓慢还原至胸侧。"
+    },
+    {
+      "name": "单臂哑铃卧推",
+      "nameEn": "Single-arm Dumbbell Press",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "单侧完成，核心抗旋，适合纠正左右不平衡。"
+    },
+    {
+      "name": "上斜俯卧撑",
+      "nameEn": "Incline Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "手撑高处，角度越大越省力，适合初学者与康复期。"
+    },
+    {
+      "name": "下斜俯卧撑",
+      "nameEn": "Decline Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "双脚垫高，重心前移，对上胸与肩前束刺激更大。"
+    },
+    {
+      "name": "钻石俯卧撑",
+      "nameEn": "Diamond Push-up",
+      "muscle": "胸",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "双手成菱形置于胸下，偏重三头与胸内侧，肘贴身。"
+    },
+    {
+      "name": "仰卧哑铃飞鸟",
+      "nameEn": "Dumbbell Fly",
+      "muscle": "胸",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肘微屈固定，两臂画弧下放至胸肌充分拉伸，勿过深。"
+    },
+    {
+      "name": "反握引体向上",
+      "nameEn": "Chin-up",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "反握与肩同宽，下拉时更多动用肱二头，胸口贴近杠。"
+    },
+    {
+      "name": "弹力带辅助引体",
+      "nameEn": "Band-assisted Pull-up",
+      "muscle": "背",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带兜住脚或膝提供助力，逐步降低助力进阶。"
+    },
+    {
+      "name": "窄握高位下拉",
+      "nameEn": "Close-grip Lat Pulldown",
+      "muscle": "背",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "V 形把手，拉至胸上，肘向下向后，增加背阔肌下缘参与。"
+    },
+    {
+      "name": "T 杠划船",
+      "nameEn": "T-Bar Row",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "俯身背挺直，拉向腹部，肩胛后收，控制离心。"
+    },
+    {
+      "name": "反向划船",
+      "nameEn": "Inverted Row",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "身体绷直成一线，胸口拉向横杆，靠背部发力。"
+    },
+    {
+      "name": "直臂下压",
+      "nameEn": "Straight-arm Pulldown",
+      "muscle": "背",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "手臂近伸直，靠背阔肌下压，感受背阔肌全程张力。"
+    },
+    {
+      "name": "坐姿器械划船",
+      "nameEn": "Machine Row",
+      "muscle": "背",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "胸口贴垫，拉至腹前，肩胛主动收紧。"
+    },
+    {
+      "name": "直立划船",
+      "nameEn": "Upright Row",
+      "muscle": "背",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "握距略宽于肩，沿身体上提至胸高，肩不适者慎做。"
+    },
+    {
+      "name": "俯卧挺身",
+      "nameEn": "Superman",
+      "muscle": "背",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "俯卧同时抬起对侧手脚，激活竖脊肌与臀肌。"
+    },
+    {
+      "name": "单臂绳索划船",
+      "nameEn": "Single-arm Cable Row",
+      "muscle": "背",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "单侧拉向髋侧，躯干稳定少旋转，肩胛后收到位。"
+    },
+    {
+      "name": "徒手深蹲",
+      "nameEn": "Bodyweight Squat",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "双脚与肩同宽，髋膝同屈下蹲至大腿平行，膝随脚尖方向。"
+    },
+    {
+      "name": "高脚杯深蹲",
+      "nameEn": "Goblet Squat",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "抱哑铃于胸前，躯干直立下蹲，是学习深蹲模式的入门动作。"
+    },
+    {
+      "name": "箱式深蹲",
+      "nameEn": "Box Squat",
+      "muscle": "腿",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "下蹲轻触凳面再起，控制深度，适合学习蹲姿与提升离心控制。"
+    },
+    {
+      "name": "史密斯深蹲",
+      "nameEn": "Smith Machine Squat",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "轨迹固定，脚可略前移，注意膝与脚尖方向一致。"
+    },
+    {
+      "name": "哈克深蹲",
+      "nameEn": "Hack Squat",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "背部贴垫，下放至大腿平行，靠股四头发力蹬起。"
+    },
+    {
+      "name": "单腿腿举",
+      "nameEn": "Single-leg Press",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "单侧蹬起，踝膝髋对齐，纠正双侧力量差异。"
+    },
+    {
+      "name": "反向箭步蹲",
+      "nameEn": "Reverse Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "后撤步下沉，前腿发力站起，膝部压力小于前向箭步。"
+    },
+    {
+      "name": "行走箭步蹲",
+      "nameEn": "Walking Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "交替向前迈步下沉，躯干直立，膝盖不过度前移。"
+    },
+    {
+      "name": "侧向箭步蹲",
+      "nameEn": "Lateral Lunge",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "向侧方跨步屈髋下沉，另一腿伸直，练内收肌与髋灵活性。"
+    },
+    {
+      "name": "台阶登阶",
+      "nameEn": "Step-up",
+      "muscle": "腿",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "整脚踩上台面，靠上侧腿发力站起，避免蹬地借力。"
+    },
+    {
+      "name": "坐姿提踵",
+      "nameEn": "Seated Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "膝屈 90° 下重点刺激比目鱼肌，顶端收缩略停。"
+    },
+    {
+      "name": "驴式提踵",
+      "nameEn": "Donkey Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "髋屈前倾，充分下放拉伸腓肠肌，再踮至最高。"
+    },
+    {
+      "name": "北欧腘绳肌弯举",
+      "nameEn": "Nordic Hamstring Curl",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "固定脚跟，靠腘绳肌离心控制身体前倾，需循序渐进。"
+    },
+    {
+      "name": "腿举提踵",
+      "nameEn": "Leg Press Calf Raise",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "前脚掌抵踏板边缘，伸踝推起，缓慢下放拉伸小腿。"
+    },
+    {
+      "name": "单腿臀桥",
+      "nameEn": "Single-leg Glute Bridge",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑顶髋，骨盆保持水平，避免一侧下沉。"
+    },
+    {
+      "name": "臀桥行进",
+      "nameEn": "Glute Bridge March",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "保持顶髋姿态交替抬膝，核心稳定不塌腰。"
+    },
+    {
+      "name": "蚌式开合",
+      "nameEn": "Clamshell",
+      "muscle": "臀",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "侧卧屈髋屈膝，膝上套带，靠臀中肌外展打开。"
+    },
+    {
+      "name": "弹力带臀推",
+      "nameEn": "Banded Hip Thrust",
+      "muscle": "臀",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带绕髋，顶髋至躯干与大腿成一线，顶端夹臀。"
+    },
+    {
+      "name": "单腿罗马尼亚硬拉",
+      "nameEn": "Single-leg Romanian Deadlift",
+      "muscle": "臀",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "单腿支撑髋铰链，背部中立，兼顾平衡与腘绳肌。"
+    },
+    {
+      "name": "相扑硬拉",
+      "nameEn": "Sumo Deadlift",
+      "muscle": "臀",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "宽站距脚尖外展，膝外推，靠髋伸与股四头协同拉起。"
+    },
+    {
+      "name": "器械髋内收",
+      "nameEn": "Hip Adduction",
+      "muscle": "臀",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐姿双腿内收夹合，感受大腿内侧肌群收缩。"
+    },
+    {
+      "name": "驴踢腿",
+      "nameEn": "Donkey Kick",
+      "muscle": "臀",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "四足跪姿屈膝后蹬，骨盆保持水平，靠臀大肌发力。"
+    },
+    {
+      "name": "阿诺德推举",
+      "nameEn": "Arnold Press",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "推起过程中前臂旋外，兼顾三角肌前束与中束。"
+    },
+    {
+      "name": "器械肩推",
+      "nameEn": "Machine Shoulder Press",
+      "muscle": "肩",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "坐稳靠背，把手推至头顶，缓慢下放至耳侧。"
+    },
+    {
+      "name": "绳索侧平举",
+      "nameEn": "Cable Lateral Raise",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "绳索提供全程张力，抬至与肩平，避免耸肩。"
+    },
+    {
+      "name": "绳索面拉",
+      "nameEn": "Cable Face Pull",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "拉向面部并外旋，强化后束与肩袖，改善圆肩体态。"
+    },
+    {
+      "name": "倒立俯卧撑",
+      "nameEn": "Pike Push-up",
+      "muscle": "肩",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "臀部抬高呈倒 V，头顶向地面下沉，主攻三角肌。"
+    },
+    {
+      "name": "古巴推举",
+      "nameEn": "Cuban Press",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "小重量完成外旋加推举，用于肩袖强化与热身。"
+    },
+    {
+      "name": "哑铃耸肩",
+      "nameEn": "Dumbbell Shrug",
+      "muscle": "肩",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肩胛垂直上提，顶端略停，避免转肩绕环。"
+    },
+    {
+      "name": "绳索后束飞鸟",
+      "nameEn": "Cable Rear Delt Fly",
+      "muscle": "肩",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "交叉拉索向侧后展开，主攻三角肌后束，肘微屈固定。"
+    },
+    {
+      "name": "牧师凳弯举",
+      "nameEn": "Preacher Curl",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "初级",
+      "cues": "大臂贴垫固定，孤立肱二头，离心下放充分。"
+    },
+    {
+      "name": "上斜哑铃弯举",
+      "nameEn": "Incline Dumbbell Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "靠上斜凳使大臂后展，强化肱二头长头拉伸位。"
+    },
+    {
+      "name": "集中弯举",
+      "nameEn": "Concentration Curl",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "肘抵大腿内侧，集中收缩肱二头，顶峰略停。"
+    },
+    {
+      "name": "绳索弯举",
+      "nameEn": "Cable Curl",
+      "muscle": "手臂",
+      "equipment": "绳索",
+      "level": "初级",
+      "cues": "低位绳索全程提供张力，肘固定于体侧。"
+    },
+    {
+      "name": "反握弯举",
+      "nameEn": "Reverse Curl",
+      "muscle": "手臂",
+      "equipment": "杠铃",
+      "level": "中级",
+      "cues": "正手握杠，兼顾肱桡肌与前臂伸肌，小重量慢控。"
+    },
+    {
+      "name": "窄距俯卧撑",
+      "nameEn": "Close-grip Push-up",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "双手与肩同宽或略窄，肘贴身，主攻肱三头。"
+    },
+    {
+      "name": "哑铃颈后臂屈伸",
+      "nameEn": "Overhead Dumbbell Extension",
+      "muscle": "手臂",
+      "equipment": "哑铃",
+      "level": "初级",
+      "cues": "双手捧铃置于脑后，靠肘伸举起，大臂保持垂直。"
+    },
+    {
+      "name": "绳索过顶臂屈伸",
+      "nameEn": "Overhead Cable Extension",
+      "muscle": "手臂",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "背对低位滑轮，向前上方伸肘，感受三头长头拉伸。"
+    },
+    {
+      "name": "板凳臂屈伸",
+      "nameEn": "Bench Dip",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "背对凳沿支撑，屈肘下沉再撑起，肩不适者减幅。"
+    },
+    {
+      "name": "反向卷腹",
+      "nameEn": "Reverse Crunch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "骨盆向胸口卷，下背贴地，靠腹肌收缩而非惯性甩腿。"
+    },
+    {
+      "name": "自行车卷腹",
+      "nameEn": "Bicycle Crunch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "对侧肘膝相触，躯干旋转，节奏可控，下背不离地。"
+    },
+    {
+      "name": "触踝卷腹",
+      "nameEn": "Heel Touch",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "仰卧屈膝，躯干侧屈交替触碰脚跟，练腹斜肌。"
+    },
+    {
+      "name": "悬垂举腿",
+      "nameEn": "Hanging Leg Raise",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "悬垂稳定不摆荡，靠下腹收缩抬腿至水平以上。"
+    },
+    {
+      "name": "悬垂举膝",
+      "nameEn": "Hanging Knee Raise",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "悬垂屈膝上提至胸，控制回落，是举腿的降阶版本。"
+    },
+    {
+      "name": "绳索卷腹",
+      "nameEn": "Cable Crunch",
+      "muscle": "核心",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "跪姿，靠腹肌收缩使躯干卷曲，髋部位置固定。"
+    },
+    {
+      "name": "健腹轮",
+      "nameEn": "Ab Wheel Rollout",
+      "muscle": "核心",
+      "equipment": "器械",
+      "level": "高级",
+      "cues": "收腹不塌腰缓慢前滚，肩髋一线，量力控制幅度。"
+    },
+    {
+      "name": "侧支撑抬髋",
+      "nameEn": "Side Plank Hip Lift",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "侧支撑基础上髋部下沉再上顶，强化腹斜肌与侧链。"
+    },
+    {
+      "name": "帕洛夫推",
+      "nameEn": "Pallof Press",
+      "muscle": "核心",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "侧对滑轮前推，抗旋转保持躯干稳定，是核心抗旋经典动作。"
+    },
+    {
+      "name": "折刀式",
+      "nameEn": "Jackknife",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "同时抬躯干与双腿使手触脚，靠腹肌发力，避免颈部代偿。"
+    },
+    {
+      "name": "平板支撑抬腿",
+      "nameEn": "Plank Leg Lift",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "平板姿态交替抬腿，骨盆保持水平，勿左右晃动。"
+    },
+    {
+      "name": "空体保持",
+      "nameEn": "Hollow Body Hold",
+      "muscle": "核心",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下背压实地面，手脚离地呈浅碗形，静态保持核心张力。"
+    },
+    {
+      "name": "挺举（简化）",
+      "nameEn": "Clean and Jerk",
+      "muscle": "全身",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "翻杠接前蹲后上挺，爆发力复合动作，需专业指导。"
+    },
+    {
+      "name": "抓举（简化）",
+      "nameEn": "Snatch",
+      "muscle": "全身",
+      "equipment": "杠铃",
+      "level": "高级",
+      "cues": "一动作将杠铃从地面举过头顶，技术要求高，须循序渐进。"
+    },
+    {
+      "name": "单臂壶铃摆动",
+      "nameEn": "Single-arm Kettlebell Swing",
+      "muscle": "全身",
+      "equipment": "壶铃",
+      "level": "中级",
+      "cues": "髋铰链发力，单侧持铃，核心抗旋，顶端夹臀。"
+    },
+    {
+      "name": "壶铃土耳其起立",
+      "nameEn": "Turkish Get-up",
+      "muscle": "全身",
+      "equipment": "壶铃",
+      "level": "高级",
+      "cues": "从卧姿到站姿全程举铃不落，考核心稳定与肩稳定性。"
+    },
+    {
+      "name": "药球砸地",
+      "nameEn": "Medicine Ball Slam",
+      "muscle": "全身",
+      "equipment": "药球",
+      "level": "中级",
+      "cues": "过顶用力下砸，启动核心与肩背，注意与球保持距离。"
+    },
+    {
+      "name": "药球过顶抛掷",
+      "nameEn": "Medicine Ball Throw",
+      "muscle": "全身",
+      "equipment": "药球",
+      "level": "中级",
+      "cues": "下蹲蓄力后向上向前抛出，练全身爆发，落地缓冲。"
+    },
+    {
+      "name": "雪橇推",
+      "nameEn": "Sled Push",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "前倾握把发力推移，低冲击高功率，注意躯干稳定。"
+    },
+    {
+      "name": "雪橇拉",
+      "nameEn": "Sled Drag",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "倒退拉拽或前向拖行，练髋膝伸展与后链力量。"
+    },
+    {
+      "name": "负重登阶",
+      "nameEn": "Weighted Step-up",
+      "muscle": "全身",
+      "equipment": "哑铃",
+      "level": "中级",
+      "cues": "持重登阶，上侧腿主导，兼顾下肢力量与单侧稳定。"
+    },
+    {
+      "name": "冲刺间歇",
+      "nameEn": "Sprint Interval",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "高级",
+      "cues": "短时全力冲刺配合充分间歇，需充分热身后进行。"
+    },
+    {
+      "name": "走跑交替",
+      "nameEn": "Walk-Jog Interval",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "快走与慢跑交替进行，适合心肺基础较弱的起步阶段。"
+    },
+    {
+      "name": "爬绳",
+      "nameEn": "Rope Climb",
+      "muscle": "全身",
+      "equipment": "绳索",
+      "level": "高级",
+      "cues": "手脚并用攀爬，练上肢拉力与核心，注意安全保护。"
+    },
+    {
+      "name": "熊爬",
+      "nameEn": "Bear Crawl",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "四点支撑对侧手脚同时移动，稳定核心与肩关节。"
+    },
+    {
+      "name": "蟹行",
+      "nameEn": "Crab Walk",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "仰撑反向前进，激活臀肌与肩后链，注意手腕保护。"
+    },
+    {
+      "name": "高抬腿跑",
+      "nameEn": "High Knees",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "原地快速提膝至髋高，前脚掌落地，节奏均匀。"
+    },
+    {
+      "name": "后踢腿跑",
+      "nameEn": "Butt Kicks",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "原地快速屈膝后踢，脚跟触臀，常用于热身与有氧。"
+    },
+    {
+      "name": "滑步跳",
+      "nameEn": "Skater Jump",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "左右侧向跳跃落地单腿缓冲，练下肢侧向爆发与平衡。"
+    },
+    {
+      "name": "深蹲跳",
+      "nameEn": "Jump Squat",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "下蹲后爆发起跳，落地屈膝缓冲，膝踝不适者慎做。"
+    },
+    {
+      "name": "弓步跳",
+      "nameEn": "Jumping Lunge",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "箭步姿态交替跳换，落地缓冲，对上肢冲击小。"
+    },
+    {
+      "name": "变速跑",
+      "nameEn": "Fartlek",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "快慢交替自由变速跑，兼顾有氧与心肺刺激。"
+    },
+    {
+      "name": "固定自行车",
+      "nameEn": "Stationary Bike",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "座高以腿近伸直为准，踏频稳定，阻力和缓递增。"
+    },
+    {
+      "name": "卧式自行车",
+      "nameEn": "Recumbent Bike",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "靠背支撑低冲击，适合腰背不适或老年人群。"
+    },
+    {
+      "name": "跑步机慢跑",
+      "nameEn": "Treadmill Jogging",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "初级",
+      "cues": "前脚掌或全脚掌着地，步幅自然，避免过度后蹬。"
+    },
+    {
+      "name": "爬绳机",
+      "nameEn": "Rope Trainer",
+      "muscle": "全身",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "交替拉拽模拟爬绳，上肢与核心参与多，注意肩部热身。"
+    },
+    {
+      "name": "战绳交替甩",
+      "nameEn": "Alternating Battle Rope",
+      "muscle": "全身",
+      "equipment": "绳索",
+      "level": "中级",
+      "cues": "半蹲稳定下盘，双臂快速交替甩绳，保持呼吸节奏。"
+    },
+    {
+      "name": "波比跳（无俯卧撑）",
+      "nameEn": "Burpee (No Push-up)",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "去掉俯卧撑环节的降阶波比，适合心肺起步阶段。"
+    },
+    {
+      "name": "腘绳肌坐姿拉伸",
+      "nameEn": "Seated Hamstring Stretch",
+      "muscle": "大腿后侧",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "坐姿单腿伸直，髋为轴前倾，感受大腿后侧拉伸，勿弹振。"
+    },
+    {
+      "name": "站姿股四头肌拉伸",
+      "nameEn": "Standing Quad Stretch",
+      "muscle": "大腿前侧",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单手扶墙，屈膝拉脚踝向臀，骨盆中立，膝并拢。"
+    },
+    {
+      "name": "小腿站姿拉伸",
+      "nameEn": "Standing Calf Stretch",
+      "muscle": "小腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "前脚掌抵墙，后腿伸直脚跟踩实，感受小腿拉伸。"
+    },
+    {
+      "name": "胸大肌门框拉伸",
+      "nameEn": "Doorway Chest Stretch",
+      "muscle": "胸部",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "前臂抵门框，身体前倾至胸部有拉伸感，改善圆肩。"
+    },
+    {
+      "name": "婴儿式",
+      "nameEn": "Child's Pose",
+      "muscle": "腰背",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "跪坐后身体前俯，双臂前伸，放松腰背与呼吸。"
+    },
+    {
+      "name": "猫牛式",
+      "nameEn": "Cat-Cow",
+      "muscle": "脊柱",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "四足跪姿，随呼吸交替拱背与塌腰，活动脊柱。"
+    },
+    {
+      "name": "髋屈肌弓步拉伸",
+      "nameEn": "Kneeling Hip Flexor Stretch",
+      "muscle": "髋屈肌",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "单膝跪地，骨盆后倾，重心前移，拉伸髋前侧。"
+    },
+    {
+      "name": "鸽子式",
+      "nameEn": "Pigeon Pose",
+      "muscle": "臀部",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前腿屈髋外展落地，后腿伸直，拉伸臀与梨状肌。"
+    },
+    {
+      "name": "肩部环绕",
+      "nameEn": "Shoulder Circles",
+      "muscle": "肩",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "由小到大画圆，前后各做若干次，作为肩部热身。"
+    },
+    {
+      "name": "手臂过顶拉伸",
+      "nameEn": "Overhead Triceps Stretch",
+      "muscle": "手臂",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "一手过头屈肘，另一手辅助轻压，拉伸肱三头。"
+    },
+    {
+      "name": "仰卧脊柱扭转",
+      "nameEn": "Supine Spinal Twist",
+      "muscle": "脊柱",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "仰卧屈膝倒向一侧，肩部贴地，随呼吸加深扭转。"
+    },
+    {
+      "name": "侧腰拉伸",
+      "nameEn": "Side Bend Stretch",
+      "muscle": "腰腹",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单臂过顶向对侧侧屈，感受侧腰拉伸，避免前倾。"
+    },
+    {
+      "name": "下犬式",
+      "nameEn": "Downward Dog",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "手脚撑地臀部上顶成倒 V，拉长后链，脚跟不必强求贴地。"
+    },
+    {
+      "name": "蝴蝶式拉伸",
+      "nameEn": "Butterfly Stretch",
+      "muscle": "大腿内侧",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "坐姿脚掌相对，髋外展下压双膝，拉伸内收肌。"
+    },
+    {
+      "name": "靠墙胸椎伸展",
+      "nameEn": "Wall Thoracic Extension",
+      "muscle": "脊柱",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "上背靠泡沫轴或墙，缓慢后仰伸展胸椎，改善含胸。"
+    },
+    {
+      "name": "颈部拉伸",
+      "nameEn": "Neck Stretch",
+      "muscle": "颈部",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "缓慢侧屈与旋转，力度轻柔，不绕环、不猛拉。"
+    },
+    {
+      "name": "踝关节活动度练习",
+      "nameEn": "Ankle Mobility Drill",
+      "muscle": "踝",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "膝前顶超过脚尖方向，保持脚跟不离地，改善踝背屈。"
+    },
+    {
+      "name": "髋关节绕环",
+      "nameEn": "Hip Circle",
+      "muscle": "髋",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "扶墙单腿画圆，幅度由小到大，活动髋关节。"
+    },
+    {
+      "name": "单腿站立",
+      "nameEn": "Single-leg Stance",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "单腿支撑，另一腿屈髋抬起，保持稳定，可扶墙降阶。"
+    },
+    {
+      "name": "闭眼单腿站立",
+      "nameEn": "Single-leg Stance Eyes Closed",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "在单腿站立基础上闭眼，难度提高，须有保护防止跌倒。"
+    },
+    {
+      "name": "脚跟脚尖走",
+      "nameEn": "Tandem Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "两脚前后成一线行走，如走平衡木，练动态平衡。"
+    },
+    {
+      "name": "脚跟走",
+      "nameEn": "Heel Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "脚尖离地，以脚跟行走一段距离，强化胫前肌。"
+    },
+    {
+      "name": "脚尖走",
+      "nameEn": "Toe Walk",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "以脚尖行走，强化小腿三头肌与踝稳定。"
+    },
+    {
+      "name": "坐立转换",
+      "nameEn": "Sit-to-Stand",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "不用手扶从椅面站起再坐下，反复进行，练下肢功能。"
+    },
+    {
+      "name": "侧向跨步",
+      "nameEn": "Lateral Step",
+      "muscle": "腿",
+      "equipment": "弹力带",
+      "level": "初级",
+      "cues": "弹力带套踝或膝上，半蹲横向移动，强化髋外展与稳定。"
+    },
+    {
+      "name": "单腿提踵",
+      "nameEn": "Single-leg Calf Raise",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿踮起至最高再缓慢下放，兼顾踝稳定与平衡。"
+    },
+    {
+      "name": "星形偏移平衡",
+      "nameEn": "Star Excursion Balance",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑，另一腿向八个方向轻点地面，练动态平衡。"
+    },
+    {
+      "name": "太极式重心转移",
+      "nameEn": "Tai Chi Weight Shift",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "缓慢将重心左右前后转移，膝微屈，适合老年平衡训练。"
+    },
+    {
+      "name": "泡沫垫站立",
+      "nameEn": "Foam Pad Stance",
+      "muscle": "腿",
+      "equipment": "器械",
+      "level": "中级",
+      "cues": "在软垫上单腿或双腿站立，增加不稳定刺激，注意保护。"
+    },
+    {
+      "name": "单腿硬拉（平衡）",
+      "nameEn": "Balance Single-leg Deadlift",
+      "muscle": "腿",
+      "equipment": "自重",
+      "level": "中级",
+      "cues": "单腿支撑髋铰链前倾，后腿后伸，练平衡与后链控制。"
+    },
+    {
+      "name": "腹式呼吸",
+      "nameEn": "Diaphragmatic Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "用鼻吸气使腹部隆起，经口缓慢呼气，节律放慢，可助放松。"
+    },
+    {
+      "name": "缩唇呼吸",
+      "nameEn": "Pursed-lip Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "鼻吸口呼，呼气时缩唇如吹蜡烛，延长呼气，缓解气促。"
+    },
+    {
+      "name": "瑜伽基础体式",
+      "nameEn": "Yoga Basic Poses",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "山式、站立前屈、猫牛、婴儿式等基础序列，配合呼吸。"
+    },
+    {
+      "name": "瑜伽战士一式",
+      "nameEn": "Warrior I",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前后开立，后脚外展踩实，双臂上举，髋部朝向正前。"
+    },
+    {
+      "name": "瑜伽战士二式",
+      "nameEn": "Warrior II",
+      "muscle": "全身",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "前膝对准脚尖，双臂平展，目光看向前手，稳定呼吸。"
+    },
+    {
+      "name": "瑜伽树式",
+      "nameEn": "Tree Pose",
+      "muscle": "腿",
+      "equipment": "瑜伽垫",
+      "level": "中级",
+      "cues": "单腿站立，另一脚抵小腿或大腿内侧，练平衡与专注。"
+    },
+    {
+      "name": "瑜伽桥式",
+      "nameEn": "Bridge Pose",
+      "muscle": "臀",
+      "equipment": "瑜伽垫",
+      "level": "初级",
+      "cues": "仰卧屈膝抬髋，肩脚支撑，缓慢起伏，配合呼吸。"
+    },
+    {
+      "name": "渐进式肌肉放松",
+      "nameEn": "Progressive Muscle Relaxation",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "按序绷紧再放松各肌群，配合慢呼吸，缓解紧张焦虑。"
+    },
+    {
+      "name": "五禽戏",
+      "nameEn": "Wuqinxi",
+      "muscle": "全身",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "模仿虎鹿熊猿鸟五禽动作，舒缓连贯，适合中老年。"
+    },
+    {
+      "name": "六字诀",
+      "nameEn": "Liuzijue",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "六种吐纳发音配合导引动作，强调呼吸与动作协调。"
+    },
+    {
+      "name": "正念呼吸练习",
+      "nameEn": "Mindful Breathing",
+      "muscle": "呼吸",
+      "equipment": "自重",
+      "level": "初级",
+      "cues": "安静端坐，觉察呼吸起伏，思绪飘走时温和带回。"
+    }
   ]
 }

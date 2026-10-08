@@ -1,0 +1,10 @@
+# 测试并发配置
+#
+# 本项目多个测试文件都会打开同一份桌面端 ffi SQLite 本地库
+# （`.dart_tool/sqflite_common_ffi/databases/ai_planner.db`），
+# 其中 T2 验收用例包含「清库重播种」（删除并重建库文件）。
+# 若多个测试文件并发执行，会争抢同一库文件锁并出现
+# `SqliteException(5): database is locked`，属于测试编排问题而非业务缺陷。
+#
+# 因此这里将并发数固定为 1，保证 `flutter test` 全量稳定通过。
+concurrency: 1

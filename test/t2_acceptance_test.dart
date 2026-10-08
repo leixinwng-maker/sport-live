@@ -6,8 +6,8 @@ import 'package:ai_planner/data/knowledge_seed_data.dart';
 import 'package:ai_planner/models/workout.dart';
 import 'package:ai_planner/services/database_helper.dart';
 
-/// P2 T2 schema v7 运行验收（Windows 明文 ffi 路径）：
-/// 1. 全新建库：17 张表齐全
+/// P2 T2 schema v8 运行验收（Windows 明文 ffi 路径）：
+/// 1. 全新建库：18 张表齐全
 /// 2. 种子数据：uuid v5 确定性（清库重播种 id 一致）
 /// 3. 写路径：业务写 → sync_queue 入队，payload 只含业务字段
 /// 4. wipeLocalData：库文件删除 + 重建 + 队列/业务行清空
@@ -41,6 +41,7 @@ void main() {
       'knowledge_entries',
       'books',
       'sync_queue',
+      'wearable_samples',
     ];
     for (final t in expectTables) {
       expect(names, contains(t), reason: '缺少表 $t');

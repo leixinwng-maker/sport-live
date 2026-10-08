@@ -1,17 +1,22 @@
+import '../models/evidence.dart';
 import '../models/knowledge.dart';
 
 /// 检索到的一条知识片段
 class KnowledgeChunk {
-  final String source; // 来源类型：书籍/知识条目/摘录/个人数据
+  final String source; // 来源类型：书籍/知识条目/摘录/个人数据/循证库
   final String title;
   final String content;
   final double score;
+
+  /// 附注（如循证条目的出处与链接），可为空
+  final String meta;
 
   KnowledgeChunk({
     required this.source,
     required this.title,
     required this.content,
     this.score = 0,
+    this.meta = '',
   });
 }
 
@@ -24,6 +29,12 @@ class _IndexedChunk {
   final Map<String, int> tokenFreq;
   final double docLen;
 
+  /// 是否无视领域过滤始终参与检索（循证库条目量少价值高，避免被场景过滤误伤）
+  final bool alwaysSearch;
+
+  /// 附注文本
+  final String meta;
+
   _IndexedChunk({
     required this.source,
     required this.title,
@@ -31,6 +42,8 @@ class _IndexedChunk {
     required this.domain,
     required this.tokenFreq,
     required this.docLen,
+    this.alwaysSearch = false,
+    this.meta = '',
   });
 }
 
@@ -42,7 +55,8 @@ class KnowledgeIndex {
   KnowledgeIndex._(this._chunks);
 
   static KnowledgeIndex build(
-      List<KnowledgeEntry> entries, List<Book> books) {
+      List<KnowledgeEntry> entries, List<Book> books,
+      {List<EvidenceEntry> evidence = const []}) {
     final chunks = <_IndexedChunk>[];
     // 1. 知识条目
     for (final e in entries) {
@@ -73,6 +87,20 @@ class KnowledgeIndex {
         ));
       }
     }
+    // 3. 循证库条目（静态导入自 assets/data/evidence_kb.json，始终参与检索）
+    for (final ev in evidence) {
+      final full = ev.searchText;
+      chunks.add(_IndexedChunk(
+        source: '循证库',
+        title: '${ev.condition}（${ev.evidenceLevel}）',
+        content: ev.recommendation,
+        domain: ev.domain,
+        tokenFreq: KnowledgeEngine._buildTokenFreq(full),
+        docLen: full.length.toDouble(),
+        alwaysSearch: true,
+        meta: '出处：${ev.source}${ev.url.isEmpty ? '' : '（${ev.url}）'}',
+      ));
+    }
     return KnowledgeIndex._(chunks);
   }
 
@@ -85,7 +113,10 @@ class KnowledgeIndex {
     final queryTokens = KnowledgeEngine._tokenize(query);
     final results = <KnowledgeChunk>[];
     for (final c in _chunks) {
-      if (domains != null && domains.isNotEmpty && !domains.contains(c.domain)) {
+      if (!c.alwaysSearch &&
+          domains != null &&
+          domains.isNotEmpty &&
+          !domains.contains(c.domain)) {
         continue;
       }
       final score =
@@ -97,6 +128,7 @@ class KnowledgeIndex {
           title: c.title,
           content: c.content,
           score: boosted,
+          meta: c.meta,
         ));
       }
     }
@@ -123,12 +155,15 @@ class KnowledgeEngine {
 
   /// 获取（懒构建+缓存）预索引
   static KnowledgeIndex _getIndex(
-      List<KnowledgeEntry> entries, List<Book> books) {
+      List<KnowledgeEntry> entries, List<Book> books,
+      {List<EvidenceEntry> evidence = const []}) {
     final fp = '${entries.length}-'
         '${books.map((b) => b.id).join(',')}-'
-        '${books.fold<int>(0, (s, b) => s + b.content.length)}';
+        '${books.fold<int>(0, (s, b) => s + b.content.length)}-'
+        '${evidence.length}-'
+        '${evidence.map((e) => e.id).join(',')}';
     if (_indexCache == null || _indexFingerprint != fp) {
-      _indexCache = KnowledgeIndex.build(entries, books);
+      _indexCache = KnowledgeIndex.build(entries, books, evidence: evidence);
       _indexFingerprint = fp;
     }
     return _indexCache!;
@@ -141,6 +176,9 @@ class KnowledgeEngine {
       '训练', '健身', '练', '胸', '背', '肩', '腿', '臀', '深蹲', '卧推',
       '硬拉', '划船', '呼吸', '动作', '组数', '次数', '力量', '苗振',
       '器械', '拉伸', '松解', '热身', '肌肉', '核心', '腹', '有氧', '导引',
+      // 运动健康（P4）：让循证/运动类问题能命中健身域，循证库条目本身始终参与检索
+      '运动', '锻炼', '跑步', '骑车', '游泳', '减脂', '减肥', '体重', '康复',
+      '血压', '血糖', '血脂', '心率', '体脂', '久坐', '活动量',
     ];
     const finance = [
       '财务', '投资', '理财', '钱', '预算', '储蓄', '负债', '股票', '基金',
@@ -272,18 +310,28 @@ class KnowledgeEngine {
   /// 检索知识片段（纯算法，无IO）
   /// [entries] 知识条目
   /// [books] 书籍列表（参与全文检索）
+  /// [evidence] 循证库条目（P4，始终参与检索）
   /// [query] 用户问题
   /// [topN] 返回条数
   /// [domains] 领域过滤（如 ['fitness'] 只检索健身；空/不传=全量）
   static List<KnowledgeChunk> retrieve({
     required List<KnowledgeEntry> entries,
     required List<Book> books,
+    List<EvidenceEntry> evidence = const [],
     String query = '',
     int topN = 8,
     List<String>? domains,
   }) {
-    return _getIndex(entries, books)
+    return _getIndex(entries, books, evidence: evidence)
         .retrieve(query, topN: topN, domains: domains);
+  }
+
+  /// 计算单条文本与查询的相关度（供 MET 表 / 动作库 / 食物库等小库检索复用）
+  /// 与主索引使用同一套 BM25 风格打分，保证口径一致。
+  static double relevance(String doc, String query) {
+    final qt = _tokenize(query);
+    if (qt.isEmpty || doc.isEmpty) return 0;
+    return _score(_buildTokenFreq(doc), qt, doc.length.toDouble());
   }
 
   /// 将检索结果格式化为注入文本
@@ -300,6 +348,9 @@ class KnowledgeEngine {
         content = '${content.substring(0, maxChars)}…';
       }
       buf.writeln(content);
+      if (c.meta.isNotEmpty) {
+        buf.writeln(c.meta);
+      }
       buf.writeln();
     }
     return buf.toString();

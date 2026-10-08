@@ -68,6 +68,9 @@ server/deploy/
 *.tmp
 *.bak
 
+# Kotlin/Gradle 编译缓存
+android/.kotlin/
+
 # 本地工具链与临时输出（体积大，不入库）
 android_sdk/
 jdk17/

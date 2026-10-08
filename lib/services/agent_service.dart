@@ -1,7 +1,11 @@
 import 'dart:convert';
 
+import '../models/diet.dart';
+import '../models/evidence.dart';
 import '../providers/app_provider.dart';
+import '../providers/wearable_provider.dart';
 import 'ai_engine.dart';
+import 'food_lookup_service.dart';
 
 /// AI 智能体：数据感知的多轮对话核心（P3）
 ///
@@ -14,6 +18,9 @@ class AgentService {
 
   /// 工具执行所需的数据源（由 AgentProvider 初始化时注入）
   AppProvider? provider;
+
+  /// 穿戴数据源（由 AgentProvider 注入；未注入时 `get_wearable_summary` 返回"未就绪"）
+  WearableProvider? wearable;
 
   /// 当前模型是否不支持工具调用（降级模式标记）
   bool _toolsUnsupported = false;
@@ -141,13 +148,25 @@ class AgentService {
     return '你是"问道"App 的私人 AI 智能体——一位融合道家修炼、中医经络食疗、'
         '运动康复（苗振体系）与现代训练科学、营养学、财务规划的私人顾问。'
         '今天是 $today（周$week）。\n\n'
-        '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/知识库/生活状态）。原则：\n'
+        '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/穿戴数据/知识库/生活状态）。原则：\n'
         '1. 回答涉及用户数据的问题时，先调用相关工具获取事实，基于事实回答，绝不编造数据\n'
         '2. 可在一次回答中连续调用多个工具；已获取的信息不要重复查询\n'
         '3. 建议要具体可执行（动作/组次重量/食材克数/金额），体现"道法术养行"体系：'
         '阴阳平衡（推拉/前后链/劳逸）、专气致柔（呼吸驱动）、缘督以为经（脊柱中正）、'
         '子午流注作息、节气养生、食物四气五味\n'
-        '4. 回答用简体中文，Markdown 排版，简洁实用，不空谈';
+        '4. 回答用简体中文，Markdown 排版，简洁实用，不空谈\n'
+        '5. 需要用户穿戴设备数据（步数/静息心率/睡眠/体重体脂趋势/锻炼次数）时调用 get_wearable_summary；'
+        '若返回"尚未授权"，如实说明并引导用户到「设置 → 运动健康数据」阅读同意并授权，'
+        '严禁编造或凭常识估算用户的穿戴数据\n\n'
+        '循证引用规范（涉及疾病、运动处方、营养建议时必须遵守）：\n'
+        '1. 先调用 search_medical_evidence 检索本地循证库，再基于结果作答；'
+        '需要具体动作/强度/食材时配合 query_exercise、query_met、lookup_food\n'
+        '2. 证据强度排序：指南推荐 > 系统评价/Meta 分析 > 单篇 RCT；'
+        '优先引用强度更高的证据，强度偏低时须说明\n'
+        '3. 每条循证建议必须注明出处（来源名称与链接），严禁编造文献、期刊、数据或结论\n'
+        '4. 本地库检索不到相关内容时，明确说明"本地库无相关证据"，'
+        '可给一般性建议但须声明依据不足，不要伪装成有文献支持\n'
+        '5. 涉及用药、诊断、急症时提示及时就医，AI 建议不替代医生诊疗';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -179,6 +198,54 @@ class AgentService {
             },
             requiredParams: ['query']),
         _fn('get_life_status', '查询用户最近 N 天的生活状态：睡眠时长、精力评分、情绪标签、备注',
+            params: {
+              'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
+            }),
+        _fn(
+            'search_medical_evidence',
+            '检索本地循证医学库：疾病/健康目标对应的运动、营养、中医建议，'
+                '含证据强度（指南推荐/系统评价/RCT）与出处，结果按证据强度排序',
+            params: {
+              'condition': {
+                'type': 'string',
+                'description': '疾病或健康目标，如：高血压、2型糖尿病、减脂、骨质疏松、失眠',
+              },
+              'query': {'type': 'string', 'description': '补充检索词，可留空'},
+            },
+            requiredParams: ['condition']),
+        _fn('query_met', '查询活动的 MET 代谢当量（Compendium 2024）：强度分级与热量消耗估算',
+            params: {
+              'activity': {
+                'type': 'string',
+                'description': '活动名称，如：快走、慢跑、游泳、跳绳、骑行',
+              },
+            },
+            requiredParams: ['activity']),
+        _fn('query_exercise', '查询本地动作库：按肌群/器械/关键词检索动作及其要领',
+            params: {
+              'muscle': {'type': 'string', 'description': '目标肌群，如：胸、背、腿、核心'},
+              'equipment': {
+                'type': 'string',
+                'description': '可用器械，如：杠铃、哑铃、自重、器械',
+              },
+              'keyword': {'type': 'string', 'description': '动作关键词'},
+            }),
+        _fn(
+            'lookup_food',
+            '查询食物营养成分（每100g）。优先本地食物库；'
+                '输入条码时需用户开启「循证文献联网检索」才联网查询，默认仅本地库',
+            params: {
+              'query': {
+                'type': 'string',
+                'description': '食物名称，或商品条码（6~20 位数字）',
+              },
+            },
+            requiredParams: ['query']),
+        _fn(
+            'get_wearable_summary',
+            '获取用户最近 N 天的穿戴设备健康数据摘要：日均步数、静息心率区间与均值、'
+                '睡眠时长与分期、体重/体脂趋势、锻炼记录次数。'
+                '需用户已阅读同意并授权健康数据；未授权时返回可读提示，不含任何数据',
             params: {
               'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
             }),
@@ -214,6 +281,11 @@ class AgentService {
     'get_health_metrics': '健康指标',
     'search_knowledge': '知识库',
     'get_life_status': '生活状态',
+    'search_medical_evidence': '循证文献',
+    'query_met': 'MET 强度',
+    'query_exercise': '动作库',
+    'lookup_food': '食物营养',
+    'get_wearable_summary': '穿戴数据',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -245,6 +317,37 @@ class AgentService {
         final q = (args['query'] ?? '').toString().trim();
         if (q.isEmpty) return 'query 参数不能为空';
         return _clip(p.getBrainContext(q, topN: 6));
+      case 'search_medical_evidence':
+        final condition = (args['condition'] ?? '').toString().trim();
+        final query = (args['query'] ?? '').toString().trim();
+        if (condition.isEmpty && query.isEmpty) {
+          return 'condition 参数不能为空';
+        }
+        final hits =
+            p.searchEvidence(query, condition: condition, topN: 4);
+        return _clip(_formatEvidence(hits, '$condition $query'.trim()));
+      case 'query_met':
+        final activity = (args['activity'] ?? '').toString().trim();
+        if (activity.isEmpty) return 'activity 参数不能为空';
+        return _clip(_formatMet(p.searchMet(activity, topN: 3), activity));
+      case 'query_exercise':
+        final muscle = (args['muscle'] ?? '').toString().trim();
+        final equipment = (args['equipment'] ?? '').toString().trim();
+        final keyword = (args['keyword'] ?? '').toString().trim();
+        if (muscle.isEmpty && equipment.isEmpty && keyword.isEmpty) {
+          return '请至少提供 muscle / equipment / keyword 之一';
+        }
+        final moves = p.searchExercise(
+          muscle: muscle,
+          equipment: equipment,
+          keyword: keyword,
+          topN: 5,
+        );
+        return _clip(_formatExercise(moves));
+      case 'lookup_food':
+        return _clip(await _lookupFood(args));
+      case 'get_wearable_summary':
+        return _clip(await _wearableSummary(_daysArg(args, 7)));
       default:
         return '未知工具：$name';
     }
@@ -340,6 +443,122 @@ class AgentService {
       sb.write('\n- ${_fmtDate(s.date)} 睡眠 ${s.sleepHours}h，精力 ${s.energyScore}/10$tags$note');
     }
     return sb.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // P4 循证 / 运动营养 工具格式化
+  // ---------------------------------------------------------------------------
+
+  /// 证据强度排序权重（越小越强）：指南推荐 > 系统评价 > 单篇 RCT
+  static const Map<String, int> _evidenceRank = {
+    '指南推荐': 0,
+    '系统评价': 1,
+    'RCT': 2,
+  };
+
+  String _formatEvidence(List<EvidenceEntry> list, String query) {
+    if (list.isEmpty) {
+      return '本地库无相关证据（检索：$query）。'
+          '请勿编造文献或数据；可提示用户该问题缺乏本地循证依据，必要时建议咨询专业医生。';
+    }
+    final sorted = [...list]..sort((a, b) {
+        final ra = _evidenceRank[a.evidenceLevel] ?? 9;
+        final rb = _evidenceRank[b.evidenceLevel] ?? 9;
+        return ra.compareTo(rb);
+      });
+    final sb = StringBuffer('循证检索结果（本地循证库，按证据强度：指南推荐>系统评价>RCT）：');
+    for (final e in sorted) {
+      sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
+      sb.write('\n建议：${e.recommendation}');
+      sb.write('\n出处：${e.source}');
+      if (e.url.isNotEmpty) sb.write('\n链接：${e.url}');
+    }
+    return sb.toString();
+  }
+
+  String _formatMet(List<MetEntry> list, String activity) {
+    if (list.isEmpty) return '本地 MET 表暂无「$activity」的记录。';
+    final weight = provider?.userProfile?.weight;
+    final sb = StringBuffer('活动 MET 强度（来源：Compendium 2024）：');
+    for (final m in list) {
+      sb.write('\n- ${m.activity}（${m.category}）：MET ${m.met}，${m.intensity}');
+      if (weight != null && weight > 0) {
+        sb.write('，按体重 ${weight}kg 约 ${m.kcalPerMin(weight).toStringAsFixed(1)} kcal/分钟');
+      }
+      if (m.note.isNotEmpty) sb.write('（${m.note}）');
+    }
+    return sb.toString();
+  }
+
+  String _formatExercise(List<ExerciseRef> list) {
+    if (list.isEmpty) {
+      return '本地动作库未找到匹配动作，可放宽肌群 / 器械条件或换关键词。';
+    }
+    final sb = StringBuffer('动作库结果（来源：Free Exercise DB 结构，本地）：');
+    for (final x in list) {
+      final en = x.nameEn.isEmpty ? '' : '（${x.nameEn}）';
+      sb.write('\n- ${x.name}$en｜肌群：${x.muscle}｜器械：${x.equipment}｜难度：${x.level}');
+      if (x.cues.isNotEmpty) sb.write('\n  要领：${x.cues}');
+    }
+    return sb.toString();
+  }
+
+  /// 食物查询：本地库优先；条码在开关开启时联网（OFF），失败回落并标注
+  Future<String> _lookupFood(Map<String, dynamic> args) async {
+    final p = provider!;
+    final q = (args['query'] ?? '').toString().trim();
+    if (q.isEmpty) return 'query 参数不能为空';
+
+    final local = await p.searchFoodCatalog(q);
+    if (local.isNotEmpty) return _formatFood(local, '本地食物库');
+
+    // 本地无命中：判断是否为条码
+    if (FoodLookupService.isBarcode(q)) {
+      if (!p.evidenceOnlineSearch) {
+        return '本地食物库无「$q」。条码联网查询需先在「设置 → 循证文献联网检索」开启（默认关闭）。';
+      }
+      final item = await p.fetchFoodByBarcode(q);
+      if (item != null) {
+        return _formatFood([item], '联网·Open Food Facts（已缓存到本地库）');
+      }
+      return '本地食物库无「$q」，条码联网查询失败或该条码无记录，已回落本地库。';
+    }
+
+    return '本地食物库无「$q」。可换个名称，或输入商品条码（需开启「循证文献联网检索」）。';
+  }
+
+  String _formatFood(List<FoodCatalog> list, String source) {
+    final sb = StringBuffer('食物营养成分查询（$source）：');
+    for (final f in list) {
+      sb.write('\n- ${f.name}【${f.category}】每100g：'
+          '${f.caloriesPer100g.round()}kcal / '
+          '蛋白质${f.proteinPer100g}g / 脂肪${f.fatPer100g}g / 碳水${f.carbsPer100g}g');
+    }
+    return sb.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // P4-C 穿戴数据摘要工具
+  // ---------------------------------------------------------------------------
+
+  /// 穿戴数据摘要：授权门禁在前，未授权只回可读提示、绝不返回任何数据
+  ///
+  /// 合规：授权状态由 [WearableProvider] 的同意留痕 + 系统授权共同决定；
+  /// 撤回授权后本地快照已清空，本方法随即回到「尚未授权」分支。
+  Future<String> _wearableSummary(int days) async {
+    final w = wearable;
+    if (w == null) return '穿戴数据服务未就绪';
+    if (!w.hasConsent) {
+      return '用户尚未授权健康数据：请先到「设置 → 运动健康数据」阅读并同意'
+          '《健康数据单独同意》，再授权读取；授权后本工具可返回步数、静息心率、'
+          '睡眠、体重体脂趋势与锻炼次数摘要。';
+    }
+    if (!w.authorized) {
+      return '用户尚未授权健康数据：已完成单独同意但未通过系统授权，'
+          '请到「设置 → 运动健康数据」点「授权读取健康数据」完成授权。';
+    }
+    final snap = await w.snapshot(days: days);
+    return snap.describe();
   }
 
   // ---------------------------------------------------------------------------

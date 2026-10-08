@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'dart:typed_data';
 import '../models/user_profile.dart';
 import '../models/workout.dart';
@@ -10,6 +13,7 @@ import '../models/ai_advice.dart';
 import '../models/health_profile.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
+import '../models/evidence.dart';
 import '../services/cloud_api.dart';
 import '../services/database_helper.dart';
 import '../services/sync_engine.dart';
@@ -17,6 +21,7 @@ import '../services/ai_engine.dart';
 import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
 import '../services/search_service.dart';
+import '../services/food_lookup_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
@@ -44,6 +49,16 @@ class AppProvider extends ChangeNotifier {
   List<Debt> debts = [];
   List<KnowledgeEntry> knowledgeEntries = [];
   List<Book> books = [];
+
+  // P4 循证知识底座（构建期导入 assets/data/evidence_kb.json，App 内零网络）
+  List<EvidenceEntry> evidenceEntries = [];
+  List<MetEntry> metTable = [];
+  List<ExerciseRef> exerciseRefs = [];
+
+  /// P4-T3 循证文献联网检索开关（默认关闭）。
+  /// 仅控制食物条码的 Open Food Facts 联网查询；关闭时全部走本地库。
+  bool evidenceOnlineSearch = false;
+  static const String _kEvidenceOnline = 'evidence_online_search';
 
   // 健康档案
   HealthProfile? healthProfile;
@@ -97,6 +112,10 @@ class AppProvider extends ChangeNotifier {
       userProfile = await _db.getUserProfile();
       await _db.seedFoodCatalog(FoodCatalogData.foods);
       await _db.seedKnowledge(KnowledgeSeedData.entries);
+      // P4 循证知识底座：离线加载循证条目 / MET 表 / 动作库
+      await _loadEvidenceAsset();
+      // P4-T3 读取本地设置（联网检索开关等）
+      await _loadSettings();
       // 内置书籍自动入库（仅首次，异步后台执行避免阻塞启动）
       BookSeeder.seedIfNeeded(_db).then((count) {
         if (count > 0) loadAllData();
@@ -157,11 +176,91 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
     // 后台预热智脑索引（懒构建+缓存），避免首次提问时卡顿
     Future(() {
-      if (knowledgeEntries.isNotEmpty || books.isNotEmpty) {
+      if (knowledgeEntries.isNotEmpty ||
+          books.isNotEmpty ||
+          evidenceEntries.isNotEmpty) {
         KnowledgeEngine.retrieve(
-            entries: knowledgeEntries, books: books, query: '', topN: 1);
+            entries: knowledgeEntries,
+            books: books,
+            evidence: evidenceEntries,
+            query: '',
+            topN: 1);
       }
     });
+  }
+
+  /// 加载构建期导入的循证知识底座（assets/data/evidence_kb.json）。
+  /// 全程离线，不产生任何网络请求；解析失败仅记录不阻断启动。
+  Future<void> _loadEvidenceAsset() async {
+    try {
+      final raw =
+          await rootBundle.loadString('assets/data/evidence_kb.json');
+      final map = json.decode(raw) as Map<String, dynamic>;
+      evidenceEntries = ((map['evidence'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => EvidenceEntry.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+      metTable = ((map['met'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => MetEntry.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+      exerciseRefs = ((map['exercises'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => ExerciseRef.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      evidenceEntries = [];
+      metTable = [];
+      exerciseRefs = [];
+      error = '循证知识库加载失败：$e';
+    }
+  }
+
+  /// 读取本地设置（SharedPreferences）
+  Future<void> _loadSettings() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      evidenceOnlineSearch = sp.getBool(_kEvidenceOnline) ?? false;
+    } catch (_) {
+      evidenceOnlineSearch = false;
+    }
+  }
+
+  /// 切换「循证文献联网检索」开关（默认关闭）
+  Future<void> setEvidenceOnlineSearch(bool value) async {
+    evidenceOnlineSearch = value;
+    notifyListeners();
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setBool(_kEvidenceOnline, value);
+    } catch (_) {
+      // 持久化失败不影响本次会话生效
+    }
+  }
+
+  // ============ P4-T3 食物库查询（本地优先，条码可选联网） ============
+
+  /// 本地食物库检索（静态表 food_catalog）
+  Future<List<FoodCatalog>> searchFoodCatalog(String keyword,
+      {int limit = 10}) async {
+    final q = keyword.trim();
+    if (q.isEmpty) return const [];
+    return _db.searchFoods(q, limit: limit);
+  }
+
+  /// 条码联网查询（Open Food Facts）。
+  /// 仅在开关开启时发起网络请求；命中结果回写本地库缓存，失败返回 null。
+  Future<FoodCatalog?> fetchFoodByBarcode(String barcode) async {
+    if (!evidenceOnlineSearch) return null;
+    final item = await FoodLookupService.fetchByBarcode(barcode);
+    if (item != null) {
+      try {
+        await _db.saveFoodToCatalog(item);
+      } catch (_) {
+        // 缓存失败不影响本次返回
+      }
+    }
+    return item;
   }
 
   // ============ 知识库 ============
@@ -172,11 +271,81 @@ class AppProvider extends ChangeNotifier {
     final chunks = KnowledgeEngine.retrieve(
       entries: knowledgeEntries,
       books: books,
+      evidence: evidenceEntries,
       query: query,
       topN: topN,
       domains: domains,
     );
     return KnowledgeEngine.formatChunks(chunks, maxChars: 160);
+  }
+
+  // ============ P4 循证检索（供智能体工具复用，全部本地离线） ============
+
+  /// 检索循证证据条目：按主题词与条件（疾病/健康目标）做 BM25 相关度排序
+  List<EvidenceEntry> searchEvidence(String query,
+      {String? condition, int topN = 3}) {
+    final q = query.trim();
+    final cond = (condition ?? '').trim();
+    if (q.isEmpty && cond.isEmpty) return const [];
+    final scored = <MapEntry<EvidenceEntry, double>>[];
+    for (final e in evidenceEntries) {
+      // 疾病/健康目标条件精确匹配优先（视为强相关）
+      var score = KnowledgeEngine.relevance(e.searchText, q);
+      if (cond.isNotEmpty && e.condition.contains(cond)) {
+        score = score * 3.0 + 1.0;
+      }
+      if (cond.isNotEmpty &&
+          !e.condition.contains(cond) &&
+          !e.topic.contains(cond) &&
+          !e.recommendation.contains(cond)) {
+        // 指定了条件但该条完全不沾边：大幅降权，避免误导
+        score = score * 0.1;
+      }
+      if (score > 0.001) scored.add(MapEntry(e, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 查询活动 MET 值（本地 Compendium 表）
+  List<MetEntry> searchMet(String activity, {int topN = 3}) {
+    final q = activity.trim();
+    if (q.isEmpty) return const [];
+    final scored = <MapEntry<MetEntry, double>>[];
+    for (final m in metTable) {
+      final doc = '${m.activity} ${m.category} ${m.note}';
+      final score = KnowledgeEngine.relevance(doc, q);
+      if (score > 0.001) scored.add(MapEntry(m, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 查询动作库（Free Exercise DB 结构，本地）
+  List<ExerciseRef> searchExercise(
+      {String? muscle, String? equipment, String? keyword, int topN = 5}) {
+    final kw = (keyword ?? '').trim();
+    final mus = (muscle ?? '').trim();
+    final eq = (equipment ?? '').trim();
+    if (kw.isEmpty && mus.isEmpty && eq.isEmpty) return const [];
+    final scored = <MapEntry<ExerciseRef, double>>[];
+    for (final x in exerciseRefs) {
+      var score = 0.0;
+      if (kw.isNotEmpty) {
+        score += KnowledgeEngine.relevance(
+            '${x.name} ${x.nameEn} ${x.cues}', kw);
+      }
+      if (mus.isNotEmpty) {
+        score += x.muscle.contains(mus) ? 1.5 : 0.0;
+      }
+      if (eq.isNotEmpty) {
+        score += x.equipment.contains(eq) ? 1.0 : 0.0;
+      }
+      // 仅按肌群/器械筛选时，kw 为空也保留命中项
+      if (score > 0.001) scored.add(MapEntry(x, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
   }
 
   /// 获取最近个人数据摘要（训练/饮食/财务/状态），供智脑自动带入
@@ -828,6 +997,15 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
+  /// 批量新增健康指标（如一次体测的多项体成分），全部落库后只重载一次数据
+  Future<void> addHealthMetrics(List<HealthMetric> metrics) async {
+    if (metrics.isEmpty) return;
+    for (final metric in metrics) {
+      await _db.saveHealthMetric(metric);
+    }
+    await loadAllData();
+  }
+
   /// 删除健康指标
   Future<void> deleteHealthMetric(String id) async {
     await _db.deleteHealthMetric(id);
@@ -875,8 +1053,13 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// 图片识别：识别体检报告图片文字（需配置视觉模型）
-  Future<String?> recognizeImage(String imageBase64) async {
-    return await _ai.recognizeImage(imageBase64: imageBase64);
+  /// [prompt] 可自定义识别要求（如体测回填要求输出结构化 JSON）；不传则用默认的
+  /// 「提取报告全部文字」提示词。
+  Future<String?> recognizeImage(String imageBase64, {String? prompt}) async {
+    if (prompt == null) {
+      return await _ai.recognizeImage(imageBase64: imageBase64);
+    }
+    return await _ai.recognizeImage(imageBase64: imageBase64, prompt: prompt);
   }
 
   bool get hasVisionModel => _ai.hasVisionModel;

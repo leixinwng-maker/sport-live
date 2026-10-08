@@ -11,6 +11,7 @@ import 'cloud_sync_screen.dart';
 import '../ai/ai_screen.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../knowledge/book_library_screen.dart';
+import '../health/health_data_source_screen.dart';
 
 /// 设置页
 class SettingsScreen extends StatelessWidget {
@@ -165,6 +166,43 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     );
                   },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 循证联网检索（P4-T3，默认关闭）
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.science_outlined,
+                  color: TaoistTheme.bambooGreen),
+              title: const Text('循证文献联网检索'),
+              subtitle: Text(
+                provider.evidenceOnlineSearch
+                    ? '已开启：食物条码可联网查询 Open Food Facts'
+                    : '已关闭（默认）：全部走本地库，不产生任何网络请求',
+              ),
+              value: provider.evidenceOnlineSearch,
+              onChanged: (val) => provider.setEvidenceOnlineSearch(val),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 运动健康数据（P4-T6：单独同意 · 数据源诊断 · 撤回授权）
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined,
+                  color: TaoistTheme.bambooGreen),
+              title: const Text('运动健康数据'),
+              subtitle: const Text('授权读取穿戴数据 · 数据源诊断 · 撤回授权'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const HealthDataSourceScreen(),
+                  ),
                 );
               },
             ),

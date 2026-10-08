@@ -48,7 +48,7 @@
 
 ### 🤖 AI 智能体（P3）
 - 数据感知的 Agent 对话：模型先调用本地工具查真实数据再回答，绝不编造
-- 13 个内置工具：身体档案 / 今日摘要 / 训练记录 / 饮食记录 / 财务概况 / 健康指标 / 知识库检索 / 生活状态 + 循证 4 工具（证据检索 / MET / 动作 / 食物营养）+ 穿戴摘要（全部复用本地 Provider，无需额外接口）
+- 15 个内置工具：身体档案 / 今日摘要 / 训练记录 / 饮食记录 / 财务概况 / 健康指标 / 知识库检索 / 生活状态 + 循证 4 工具（证据检索 / MET / 动作 / 食物营养）+ 穿戴摘要 + 文献检索（`search_literature`，需开启联网）+ 疾病运动（`search_condition_exercise`，疾病—运动两层关联）（全部复用本地 Provider，无需额外接口）
 - Agent 循环上限 6 轮自动收敛，工具结果超长截断，上下文窗口 24 条裁剪，Token 可控
 - 模型不支持 function calling 时自动降级"简化模式"：个人数据注入上下文直接问答
 - 聊天页：工具执行状态实时展示、快捷指令、会话持久化与一键新会话
@@ -58,6 +58,15 @@
 - 证据条目模型 `EvidenceEntry` + 导入脚本 `scripts/import_knowledge.py`，本地离线可用
 - 智能体新增 4 个循证工具：`search_medical_evidence`（证据检索）/ `query_met`（MET 与强度分级）/ `query_exercise`（动作查询）/ `lookup_food`（食物营养）
 - 回答遵循**循证引用规范**：给出结论必附指南出处与证据等级，绝不编造文献
+
+### 📚 文献检索与疾病—运动关联知识库（P5）
+- **开源文献检索** `search_literature`：接入 Europe PMC 与 OpenAlex 开放接口，按关键词返回**文献元数据**（标题 / 期刊 / 年份 / DOI / 链接），仅元数据、不下全文；需在设置中开启联网
+- **疾病—运动关联库（两层证据结构，纯离线，零网络依赖）**：工具 `search_condition_exercise` 回答「某疾病 / 人群适合什么运动」，并能进一步给出**具体动作示例**
+  - 第一层（强证据）：疾病 / 人群 → 运动类别 + **FITT-VP 剂量**，`domain='疾病运动'`，来源为权威指南（PAG 2018 / WHO 2020 / ACSM / 中国《人群身体活动指南(2021)》等）
+  - 第二层（弱证据）：运动类别 → **具体动作示例 + 一般性禁忌**，仅供「选动作」参考，**不含任何疗效主张**
+- **禁止证据越级（硬约束）**：绝不说「硬拉改善高血压」这类把具体动作与疾病疗效直接挂钩的表述；约束同时写入 `system prompt` 与工具输出的固定免责段，输出固定「先强证据、后弱证据」两段分离
+- 动作库主表 200+ 条，来自 **free-exercise-db（Unlicense，公共领域）**，中文名与要点为自撰改写；**构建期已剥离全部媒体**（不收录任何图片 / 动图）
+- 每条结论强制带出处；未命中时如实返回「本地库暂无该疾病的运动关联条目，建议咨询医生或康复治疗师」，**绝不编造**；所有运动建议均附禁忌人群与就医提示
 
 ### ⌚ 运动健康数据接入（P4-C）
 - 通过 `health` 插件只读接入 Android **Health Connect** / iOS **HealthKit**：小米运动健康、第三方体脂秤等 App 写入的数据可被汇聚读取（零平台审核）
@@ -80,11 +89,11 @@
 Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · health（Health Connect / HealthKit）· google_mlkit_text_recognition · file_picker · FastAPI + SQLite 云端 · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
 
 ## 📁 目录结构
-- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁、循证知识库、健康数据聚合、体成分解析
+- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁、循证知识库、健康数据聚合、体成分解析、**文献检索（Europe PMC/OpenAlex）**
 - `lib/providers/` 业务状态（AppProvider / AgentProvider / **WearableProvider**）
 - `lib/screens/` 训练/饮食/财务/知识库/AI/云同步/锁屏/**健康（同意页/数据源诊断/体测录入）** 各界面
-- `assets/data/` 内置数据资产（**`evidence_kb.json` 循证知识库**）
-- `scripts/` 知识库导入脚本（`import_knowledge.py`）
+- `assets/data/` 内置数据资产（**`evidence_kb.json` 循证知识库 + 疾病—运动两层关联**）
+- `scripts/` 知识库导入脚本（`import_knowledge.py`）与种子（`scripts/knowledge_sources/`，含疾病—运动两层种子）
 - `docs/` 调研报告、设计规格、实施计划（`docs/superpowers/`）、**PIA 评估（`docs/research/`）**
 - `server/` FastAPI 云端服务（账号 auth + 双向同步 sync，Docker 一键部署）
 - `books/` 内置书籍资源

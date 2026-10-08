@@ -48,17 +48,44 @@
 
 ### 🤖 AI 智能体（P3）
 - 数据感知的 Agent 对话：模型先调用本地工具查真实数据再回答，绝不编造
-- 8 个内置数据工具：身体档案 / 今日摘要 / 训练记录 / 饮食记录 / 财务概况 / 健康指标 / 知识库检索 / 生活状态（全部复用本地 Provider，无需额外接口）
+- 13 个内置工具：身体档案 / 今日摘要 / 训练记录 / 饮食记录 / 财务概况 / 健康指标 / 知识库检索 / 生活状态 + 循证 4 工具（证据检索 / MET / 动作 / 食物营养）+ 穿戴摘要（全部复用本地 Provider，无需额外接口）
 - Agent 循环上限 6 轮自动收敛，工具结果超长截断，上下文窗口 24 条裁剪，Token 可控
 - 模型不支持 function calling 时自动降级"简化模式"：个人数据注入上下文直接问答
 - 聊天页：工具执行状态实时展示、快捷指令、会话持久化与一键新会话
 
+### 📖 循证知识库与循证问答（P4-A / P4-B）
+- 内置循证知识库 `assets/data/evidence_kb.json`：运动处方（FITT）、疾病-运动对照、MET 强度分级、运动损伤与禁忌，每条证据附**出处与证据等级**
+- 证据条目模型 `EvidenceEntry` + 导入脚本 `scripts/import_knowledge.py`，本地离线可用
+- 智能体新增 4 个循证工具：`search_medical_evidence`（证据检索）/ `query_met`（MET 与强度分级）/ `query_exercise`（动作查询）/ `lookup_food`（食物营养）
+- 回答遵循**循证引用规范**：给出结论必附指南出处与证据等级，绝不编造文献
+
+### ⌚ 运动健康数据接入（P4-C）
+- 通过 `health` 插件只读接入 Android **Health Connect** / iOS **HealthKit**：小米运动健康、第三方体脂秤等 App 写入的数据可被汇聚读取（零平台审核）
+- 读取步数/距离/活动热量、心率/静息心率/HRV、睡眠分期、体重/体脂/肌肉量、血氧/血压/血糖、锻炼记录共 15 类，**逐类型只读授权**
+- `WearableProvider`：授权管理、近 30 天同步、本地快照（按"类型+时间戳"去重）、数据源逐类型诊断
+- 智能体工具 `get_wearable_summary(days)`：返回日均步数、静息心率区间、睡眠摘要、体重/体脂趋势、锻炼次数；**未授权时返回可读引导，绝不编造数据**
+
+### 🧍 体成分录入与拍照识别（P4-C）
+- 健康指标登记表扩展至 20 项，覆盖体成分 9 项（体重/体脂率/肌肉量/体水分率/骨量/蛋白质率/基础代谢/内脏脂肪等级/腰围）
+- 「体测批量录入」页：一次录入一组同日指标、统一打备注（如"乐刻门店体测"），落库仅触发一次刷新
+- **拍照识别秤屏**：视觉模型优先（提示词输出结构化 JSON → 自动回填表单）→ 未配模型走**本地 OCR** 兜底 → 解析失败退化为手动填写提示，全程不崩溃
+
+### 🔒 健康数据合规（PIPL）
+- **单独同意**：首次授权前强制弹出同意页，逐项列明数据类型与用途，非默认勾选；同意留痕（时间 + 文案版本号），版本变更旧同意自动失效
+- **可撤回**：撤回为「撤销授权 + 清空本地快照 + 留痕」原子操作，撤回后智能体工具**立即失效**
+- **最小必要**：只读、逐类型声明、无写入权限；健康数据**默认不参与云同步**（独立开关，默认关闭），大模型仅接收脱敏文本摘要
+- 评估文档：`docs/research/2026-10-07-p4-health-data-pia.md`
+
 ## 🛠 技术栈
-Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · FastAPI + SQLite 云端 · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
+Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · health（Health Connect / HealthKit）· google_mlkit_text_recognition · file_picker · FastAPI + SQLite 云端 · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
 
 ## 📁 目录结构
-- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁
-- `lib/screens/` 训练/饮食/财务/知识库/AI/云同步/锁屏 各界面
+- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁、循证知识库、健康数据聚合、体成分解析
+- `lib/providers/` 业务状态（AppProvider / AgentProvider / **WearableProvider**）
+- `lib/screens/` 训练/饮食/财务/知识库/AI/云同步/锁屏/**健康（同意页/数据源诊断/体测录入）** 各界面
+- `assets/data/` 内置数据资产（**`evidence_kb.json` 循证知识库**）
+- `scripts/` 知识库导入脚本（`import_knowledge.py`）
+- `docs/` 调研报告、设计规格、实施计划（`docs/superpowers/`）、**PIA 评估（`docs/research/`）**
 - `server/` FastAPI 云端服务（账号 auth + 双向同步 sync，Docker 一键部署）
 - `books/` 内置书籍资源
 - `assets/books/` 提取后的书籍文本

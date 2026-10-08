@@ -8,6 +8,7 @@ import '../../theme/taoist_theme.dart';
 import 'health_profile_edit_screen.dart';
 import 'health_metric_edit_screen.dart';
 import 'health_report_add_screen.dart';
+import 'body_composition_screen.dart';
 
 /// 健康档案主页面（档案信息 / 健康指标 / 体检报告）
 class HealthArchiveScreen extends StatefulWidget {
@@ -183,29 +184,45 @@ class _MetricsTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text(
+              '健康指标趋势',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: TaoistTheme.inkBlack,
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               children: [
-                const Expanded(
-                  child: Text(
-                    '健康指标趋势',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: TaoistTheme.inkBlack,
-                    ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BodyCompositionScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.monitor_weight_outlined, size: 18),
+                    label: const Text('体测批量录入'),
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const HealthMetricEditScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('记录指标'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const HealthMetricEditScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('记录指标'),
+                  ),
                 ),
               ],
             ),
@@ -216,7 +233,8 @@ class _MetricsTab extends StatelessWidget {
                   padding: EdgeInsets.all(24),
                   child: Center(
                     child: Text(
-                      '还没有健康指标记录\n点右上角「记录指标」，录入血压/血糖/血脂等\n长期记录可看到趋势变化',
+                      '还没有健康指标记录\n点上方「记录指标」录入血压/血糖/血脂等\n'
+                      '或点「体测批量录入」一次录入一组体成分\n长期记录可看到趋势变化',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,

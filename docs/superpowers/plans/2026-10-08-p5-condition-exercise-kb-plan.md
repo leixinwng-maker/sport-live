@@ -24,7 +24,15 @@
 - 验收：`python scripts/import_knowledge.py` 成功；`assets/data/evidence_kb.json` 结构合法且含 `conditionExercises`；抽查动作名与出处；零媒体字段。
 
 **实施记录**
-- （待实现）
+- T1 完成：`exercise_seed.json` 扩充至 201 条（构建期剥离全部媒体字段，仅留数据）；新增 `condition_exercise_seed.json`（第一层 40 条 / 12 类疾病与人群，topic 均以运动类别开头；第二层 8 条，动作名全部命中动作库）；`import_knowledge.py` 增加 `validate_condition_exercises`（动作名可命中、类别白名单、cautions 非空）与三类新来源（hasaneyldrm / EXMO / DOID）。产物 `assets/data/evidence_kb.json`：evidence 84 / met 73 / exercises 201 / conditionExercises 8，`sources` 12 条。
+- T2 完成：`lib/models/evidence.dart` 新增 `ExerciseExampleEntry` 与 `ConditionExerciseResult`；`app_provider.dart` 新增 `conditionExerciseExamples` 字段、`_loadEvidenceAsset()` 解析（含 catch 清空）与 `searchConditionExercise()`（严格限定 `domain='疾病运动'`，第二层按类别关联）。
+- T3 完成：`search_condition_exercise` 三处登记（schema / `_toolLabels` / `executeTool`）；`_systemPrompt()` 追加第 6 条「证据越级禁令」；新增固定免责话术 `_exerciseDisclaimer` 与两段式输出 `_formatConditionExercise()`（先强后弱、结构上杜绝越级）。
+- T4 完成：新增 `test/condition_exercise_test.dart` 10 项（CE-1..CE-10，含越级禁令专项 CE-6 与构建期产物闭环 CE-10）；`agent_service_test.dart` 工具计数 14→15。**全量 83 项通过、`flutter analyze lib test` 零问题、Android release 编译通过（app-release.apk 117.9MB）**（超出计划预估的 ≈82 项）。
+- T5 完成：README 新增「📚 文献检索与疾病—运动关联知识库（P5）」章节（两层结构 / 禁止证据越级 / 媒体未收录说明），工具数 13→15 修正，目录结构补文献检索与两层种子；来源清单与许可标注补录 hasaneyldrm（数据部分 MIT）/ EXMO（CC-BY-4.0，仅结构参考不打包）/ DOID（CC0）。**设计 §7 九条验收逐项核对通过。**
+- **与计划的刻意偏离（均为增强，不违背意图）**：
+  1. 计划拟单独抽 `_searchConditionExercise()`，实际将参数校验与调用内联进 `executeTool` 的 case，仅新增 `_formatConditionExercise()`；
+  2. 计划拟对第二层做 `examples ∩ exerciseRefs` 求交集并按 `level` 过滤，实际因导入期 `validate_condition_exercises` 已硬保证零库外动作、CE-10 又做闭环校验，故**不再重复求交集**；`level` 仅作展示标注，不参与硬筛（单测 CE-4 已固化此语义）；
+  3. 第一层检索因 `searchEvidence` 的 `topN` 语义为「最终返回数」，改为先 `topN: 60` 放大再按 `domain=='疾病运动'` 过滤截断，避免过滤后不足额。
 
 ### T2 数据模型与 Provider 检索（P5-F）
 - `lib/models/evidence.dart` 新增 `ExerciseExampleEntry{category, examples, cues, cautions, source, url, license}`（含 `toMap/fromMap`）与 `ConditionExerciseResult{evidence, examples}`。

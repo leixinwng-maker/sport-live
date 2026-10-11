@@ -1,6 +1,8 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'vision/vision_exceptions.dart';
+import 'vision/vision_service.dart';
 
 /// 工具调用请求（由模型返回）
 class ToolCall {
@@ -196,22 +198,36 @@ class AIEngine {
     }
   }
 
-  /// 图片识别：把图片交给视觉模型提取文字内容（OCR）
-  /// [imageBase64] 图片的 base64 编码（不含 data: 前缀）
-  /// [prompt] 识别要求，默认提取体检报告文字
-  /// 说明：DeepSeek 不支持图片，需配置视觉模型（如 qwen-vl-plus / qwen-vl-max）；
-  /// 未配置视觉模型时返回 null，由上层提示用户。
-  Future<String?> recognizeImage({
+  /// 旧版视觉通道（主 AI Key + 视觉模型），供 VisionService 第二级降级调用。
+  /// [imageBase64] 单图 base64（不含 data: 前缀）；[extraImageBase64List] 可选多图
+  /// （PDF 多页场景，排在单图之后）。未配置主 AI 或视觉模型时返回 null；
+  /// 调用失败抛分型异常（不静默降级）。
+  Future<String?> recognizeImageLegacy({
     required String imageBase64,
-    String prompt =
-        '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。',
+    List<String>? extraImageBase64List,
+    String? prompt,
   }) async {
-    if (!isConfigured) {
-      throw Exception('请先在设置中配置AI服务');
-    }
-    if (!hasVisionModel) {
+    if (!isConfigured || !hasVisionModel) {
       return null; // 未配置视觉模型
     }
+
+    final images = [
+      imageBase64,
+      ...?extraImageBase64List,
+    ];
+    final content = <Map<String, dynamic>>[
+      {
+        'type': 'text',
+        'text': (prompt == null || prompt.trim().isEmpty)
+            ? '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。'
+            : prompt,
+      },
+      for (final b64 in images)
+        {
+          'type': 'image_url',
+          'image_url': {'url': 'data:image/jpeg;base64,$b64'},
+        },
+    ];
 
     final url = '$_baseUrl/v1/chat/completions';
     final response = await http.post(
@@ -223,16 +239,7 @@ class AIEngine {
       body: jsonEncode({
         'model': _visionModel,
         'messages': [
-          {
-            'role': 'user',
-            'content': [
-              {'type': 'text', 'text': prompt},
-              {
-                'type': 'image_url',
-                'image_url': {'url': 'data:image/jpeg;base64,$imageBase64'},
-              },
-            ],
-          },
+          {'role': 'user', 'content': content},
         ],
         'temperature': 0.1,
       }),
@@ -240,10 +247,32 @@ class AIEngine {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
-      return data['choices'][0]['message']['content'] as String;
-    } else {
-      throw Exception('图片识别失败: ${response.statusCode} ${response.body}');
+      final text = data['choices'][0]['message']['content'];
+      return text is String ? text : '';
     }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw VisionAuthException(response.statusCode);
+    }
+    throw VisionServiceException(
+      response.statusCode,
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+  }
+
+  /// 图片识别：把图片交给视觉模型提取文字内容（OCR）。
+  ///
+  /// 已迁移至 [VisionService]（独立视觉配置），本方法仅为兼容旧调用点保留，
+  /// 内部转发 VisionService，自动获得「独立配置 → 旧通道 → 本地 OCR」三级降级。
+  @Deprecated('改用 VisionService.instance.recognizeImage')
+  Future<String?> recognizeImage({
+    required String imageBase64,
+    String prompt =
+        '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。',
+  }) {
+    return VisionService.instance.recognizeImage(
+      bytes: base64Decode(imageBase64),
+      prompt: prompt,
+    );
   }
 
   /// 体检报告解读：结合报告文字 + 健康指标 + 用户档案给出建议

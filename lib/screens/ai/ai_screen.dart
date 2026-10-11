@@ -3,7 +3,12 @@ import 'package:provider/provider.dart';
 import '../../providers/agent_provider.dart';
 import '../../providers/app_provider.dart';
 import '../../services/search_service.dart';
+import '../../services/vision/vision_config.dart';
+import '../../services/vision/vision_exceptions.dart';
+import '../../services/vision/vision_service.dart';
 import '../../theme/taoist_theme.dart';
+import 'cards/diet_plan_card.dart';
+import 'cards/workout_plan_card.dart';
 
 /// ============================================================================
 /// AI 智能体对话页（P3 主入口）：数据感知的多轮对话
@@ -168,7 +173,7 @@ class _AIScreenState extends State<AIScreen> {
                     if (i >= agent.messages.length) {
                       return _buildToolStatus(agent.toolStatus);
                     }
-                    return _buildBubble(context, agent.messages[i]);
+                    return _buildBubble(context, agent.messages[i], i);
                   },
                 ),
         ),
@@ -266,7 +271,7 @@ class _AIScreenState extends State<AIScreen> {
     );
   }
 
-  Widget _buildBubble(BuildContext context, ChatMessage m) {
+  Widget _buildBubble(BuildContext context, ChatMessage m, int index) {
     final isUser = m.role == 'user';
     final time =
         '${m.time.hour.toString().padLeft(2, '0')}:${m.time.minute.toString().padLeft(2, '0')}';
@@ -370,8 +375,35 @@ class _AIScreenState extends State<AIScreen> {
                     fontSize: 11, color: TaoistTheme.cloudGray),
               ),
             ),
+          // FIT-2：待确认的方案卡片（训练 / 饮食）
+          if (!isUser && m.payload != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _buildActionCard(context, m, index),
+            ),
         ],
       ),
+    );
+  }
+
+  /// FIT-2：按载荷类型渲染待确认卡片；保存成功后回调标记消息为「已保存」。
+  Widget _buildActionCard(BuildContext context, ChatMessage m, int index) {
+    final payload = m.payload;
+    if (payload == null) return const SizedBox.shrink();
+    final type = payload['type']?.toString() ?? '';
+    Future<void> onSaved() =>
+        context.read<AgentProvider>().markPayloadSaved(index);
+    if (type == 'diet_plan' || type == 'diet_log') {
+      return DietPlanCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    return WorkoutPlanCard(
+      payload: payload,
+      saved: m.payloadSaved,
+      onSaved: onSaved,
     );
   }
 
@@ -1299,6 +1331,16 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   final _modelController = TextEditingController();
   final _visionModelController = TextEditingController();
 
+  // 独立视觉配置（图片与 PDF 识别）
+  final _vBaseUrlController = TextEditingController();
+  final _vApiKeyController = TextEditingController();
+  final _vModelController = TextEditingController();
+  bool _visionConfigured = false;
+  bool _visionKeyVisible = false;
+  bool _testingVision = false;
+  bool _savingVision = false;
+  String _selectedVisionPreset = '自定义';
+
   String _selectedProvider = '通义千问';
 
   static const Map<String, Map<String, String>> _providers = {
@@ -1325,11 +1367,32 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _loadVisionConfig();
+  }
+
+  Future<void> _loadVisionConfig() async {
+    final cfg = await VisionService.instance.config();
+    if (!mounted) return;
+    setState(() {
+      _vBaseUrlController.text = cfg.baseUrl;
+      _vModelController.text = cfg.model;
+      _visionConfigured = cfg.configured;
+      // 不回显明文 Key；已保存时输入框留空并显示占位提示
+      _vApiKeyController.clear();
+    });
+  }
+
+  @override
   void dispose() {
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
     _visionModelController.dispose();
+    _vBaseUrlController.dispose();
+    _vApiKeyController.dispose();
+    _vModelController.dispose();
     super.dispose();
   }
 
@@ -1340,6 +1403,19 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
       _baseUrlController.text = config['baseUrl'] ?? '';
       _modelController.text = config['model'] ?? '';
       _visionModelController.text = config['visionModel'] ?? '';
+    });
+  }
+
+  void _selectVisionPreset(String preset) {
+    setState(() {
+      _selectedVisionPreset = preset;
+      if (preset == VisionPresets.siliconflow.name) {
+        _vBaseUrlController.text = VisionPresets.siliconflow.baseUrl;
+        _vModelController.text = VisionPresets.siliconflow.model;
+      } else {
+        _vBaseUrlController.clear();
+        _vModelController.clear();
+      }
     });
   }
 
@@ -1366,6 +1442,73 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AI配置已保存')),
       );
+    }
+  }
+
+  /// 保存独立视觉配置（Key 留空且已配置时沿用旧 Key）
+  Future<void> _saveVision() async {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final keyInput = _vApiKeyController.text.trim();
+    String key = keyInput;
+    if (key.isEmpty && _visionConfigured) {
+      final existing = await VisionService.instance.config();
+      key = existing.apiKey;
+    }
+    setState(() => _savingVision = true);
+    try {
+      await provider.saveVisionConfig(
+        baseUrl: _vBaseUrlController.text.trim(),
+        apiKey: key,
+        model: _vModelController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _visionConfigured = true;
+        _vApiKeyController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('识别配置已保存')),
+      );
+    } on ArgumentError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? '配置保存失败')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingVision = false);
+    }
+  }
+
+  /// 测试识别：对已保存的独立配置发一次最小视觉请求
+  Future<void> _testVision() async {
+    if (!_visionConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先保存识别配置再测试')),
+      );
+      return;
+    }
+    setState(() => _testingVision = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final reply = await Provider.of<AppProvider>(context, listen: false)
+          .testVisionConfig();
+      final brief =
+          reply.trim().isEmpty ? '（空回复）' : reply.trim().replaceAll('\n', ' ');
+      messenger.showSnackBar(SnackBar(
+        content: Text('识别服务连通正常，模型回复：$brief'),
+      ));
+    } on VisionAuthException {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('测试失败：API Key 无效或已过期（鉴权失败）'),
+      ));
+    } on VisionNetworkException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('测试失败：${e.message}')));
+    } on VisionServiceException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('测试失败：${e.message}')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('测试失败：$e')));
+    } finally {
+      if (mounted) setState(() => _testingVision = false);
     }
   }
 
@@ -1461,23 +1604,36 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '视觉模型（图片识别，可选）',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: TaoistTheme.teaBrown,
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text(
+                '高级 / 旧版兼容',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: TaoistTheme.teaBrown,
+                ),
+              ),
+              subtitle: const Text(
+                '视觉模型（旧版兼容，新配置优先，见下方「图片与 PDF 识别」卡片）',
+                style: TextStyle(fontSize: 12, color: TaoistTheme.cloudGray),
+              ),
+              children: [
+                TextField(
+                  controller: _visionModelController,
+                  decoration: const InputDecoration(
+                    hintText: 'qwen-vl-plus（主AI自带视觉时才需要）',
+                    prefixIcon: Icon(Icons.image_search),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _visionModelController,
-            decoration: const InputDecoration(
-              hintText: 'qwen-vl-plus（留空则无法识别体检报告图片）',
-              prefixIcon: Icon(Icons.image_search),
-            ),
-          ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           SizedBox(
             height: 48,
             child: ElevatedButton(
@@ -1493,7 +1649,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
-              '提示：\n1. 通义千问/DeepSeek/文心一言均支持OpenAI兼容接口\n2. 数据会发送到对应AI服务商，请勿包含敏感信息\n3. API Key仅保存在本地设备\n4. DeepSeek不支持图片识别，如需识别体检报告图片，请在"视觉模型"填入通义千问视觉模型（如qwen-vl-plus），识别后可交给DeepSeek解读',
+              '提示：\n1. 通义千问/DeepSeek/文心一言均支持OpenAI兼容接口\n2. 数据会发送到对应AI服务商，请勿包含敏感信息\n3. API Key仅保存在本地设备\n4. 体检报告图片/PDF识别请在下方「图片与 PDF 识别」单独配置，与主AI相互独立',
               style: TextStyle(
                 fontSize: 12,
                 color: TaoistTheme.cloudGray,
@@ -1501,7 +1657,238 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          _buildVisionCard(),
         ],
+      ),
+    );
+  }
+
+  /// 独立视觉配置卡片：图片与 PDF 识别
+  Widget _buildVisionCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: TaoistTheme.mistGray.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _visionConfigured
+                        ? TaoistTheme.jadeGreen
+                        : TaoistTheme.mistGray,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '图片与 PDF 识别（可选，独立于主AI）',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: TaoistTheme.inkBlack,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _visionConfigured
+                  ? '已配置：报告图片/PDF 走独立识别服务（Key 加密存储）'
+                  : '未配置时使用手机本地识别（免费且数据不出设备）；PDF 需配置识别服务',
+              style: const TextStyle(
+                fontSize: 12,
+                color: TaoistTheme.cloudGray,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '服务商预设',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TaoistTheme.teaBrown,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in VisionPresets.all)
+                  ChoiceChip(
+                    label: Text(preset.name),
+                    selected: _selectedVisionPreset == preset.name,
+                    onSelected: (_) => _selectVisionPreset(preset.name),
+                    selectedColor: TaoistTheme.jadeGreen,
+                    labelStyle: TextStyle(
+                      color: _selectedVisionPreset == preset.name
+                          ? Colors.white
+                          : TaoistTheme.inkBlack,
+                    ),
+                    side: BorderSide(
+                      color: _selectedVisionPreset == preset.name
+                          ? TaoistTheme.jadeGreen
+                          : TaoistTheme.mistGray,
+                    ),
+                  ),
+                ChoiceChip(
+                  label: const Text('自定义'),
+                  selected: _selectedVisionPreset == '自定义',
+                  onSelected: (_) => _selectVisionPreset('自定义'),
+                  selectedColor: TaoistTheme.jadeGreen,
+                  labelStyle: TextStyle(
+                    color: _selectedVisionPreset == '自定义'
+                        ? Colors.white
+                        : TaoistTheme.inkBlack,
+                  ),
+                  side: BorderSide(
+                    color: _selectedVisionPreset == '自定义'
+                        ? TaoistTheme.jadeGreen
+                        : TaoistTheme.mistGray,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'API 地址',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TaoistTheme.teaBrown,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _vBaseUrlController,
+              decoration: const InputDecoration(
+                hintText: 'https://api.siliconflow.cn',
+                prefixIcon: Icon(Icons.link),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'API Key',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TaoistTheme.teaBrown,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _vApiKeyController,
+              obscureText: !_visionKeyVisible,
+              decoration: InputDecoration(
+                hintText: _visionConfigured ? '••••••（已保存，重新输入可覆盖）' : 'sk-...',
+                prefixIcon: const Icon(Icons.key),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _visionKeyVisible ? Icons.visibility_off : Icons.visibility,
+                    size: 20,
+                  ),
+                  onPressed: () =>
+                      setState(() => _visionKeyVisible = !_visionKeyVisible),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '模型名称',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TaoistTheme.teaBrown,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _vModelController,
+              decoration: const InputDecoration(
+                hintText: 'Qwen/Qwen2.5-VL-7B-Instruct',
+                prefixIcon: Icon(Icons.memory),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _testingVision ? null : _testVision,
+                    icon: _testingVision
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.bolt, size: 18),
+                    label: const Text('测试识别'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _savingVision ? null : _saveVision,
+                    icon: _savingVision
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save, size: 18),
+                    label: const Text('保存识别配置'),
+                  ),
+                ),
+              ],
+            ),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text(
+                  '说明与注意事项',
+                  style: TextStyle(fontSize: 13, color: TaoistTheme.cloudGray),
+                ),
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: TaoistTheme.mistGray.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      '1. 硅基流动注册送免费额度，Qwen2.5-VL 对文档/报告 OCR 效果好；\n'
+                      '2. 免费/低价模型名可能调整，以平台当前「视觉模型」列表为准；\n'
+                      '3. 支持任何 OpenAI 视觉兼容网关，地址末尾带 /v1 也可自动纠正；\n'
+                      '4. 未配置时图片走手机本地识别（免费离线），PDF 无法识别；\n'
+                      '5. 此配置独立于主AI，主AI换 DeepSeek 不影响图片识别。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: TaoistTheme.cloudGray,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

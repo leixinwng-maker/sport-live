@@ -5,7 +5,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import '../models/user_profile.dart';
 import '../models/workout.dart';
+import '../models/workout_plan.dart';
 import '../models/diet.dart';
+import '../models/fasting.dart';
 import '../models/finance.dart';
 import '../models/knowledge.dart';
 import '../models/life_status.dart';
@@ -22,10 +24,15 @@ import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
 import '../services/search_service.dart';
 import '../services/food_lookup_service.dart';
+import '../services/diet_target.dart';
+import '../services/fasting_settings.dart';
+import '../services/fasting_service.dart';
 import '../services/literature_lookup_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
+import '../services/vision/vision_config.dart';
+import '../services/vision/vision_service.dart';
 import '../data/food_catalog_data.dart';
 import '../data/knowledge_seed_data.dart';
 
@@ -41,7 +48,10 @@ class AppProvider extends ChangeNotifier {
 
   // 数据列表
   List<Workout> workouts = [];
+  List<WorkoutPlan> workoutPlans = [];
   List<DietRecord> dietRecords = [];
+  /// FIT-7 断食会话（endAt==null 表示进行中）
+  List<FastingSession> fastingSessions = [];
   List<FinanceRecord> financeRecords = [];
   List<LifeStatus> lifeStatuses = [];
   List<AIAdvice> advices = [];
@@ -70,6 +80,18 @@ class AppProvider extends ChangeNotifier {
   /// 只给成分、剂量与一般性安全提示，不作诊断、不承诺疗效。
   List<EvidenceEntry> supplementEntries = [];
 
+  /// P6-D1 本体术语（EXMO 运动医学 + RehabO 康复），构建期自上游本体搬运，未翻译。
+  List<OntologyTerm> ontologyTerms = [];
+
+  /// P6-D2 开放数据与本体登记表（**仅元数据**，不含正文数据）。
+  List<DatasetRegistryEntry> datasetRegistry = [];
+
+  /// P6-D3 开放动作库（Exercises Dataset + Free Exercise DB + Longhaul Exercises，2428 条）。
+  /// 体量较大（约 2 MB），**不随启动加载**，首次查询/进入浏览页时按需加载。
+  List<CatalogExercise> exerciseCatalog = [];
+  bool _catalogLoaded = false;
+  bool get exerciseCatalogLoaded => _catalogLoaded;
+
   /// 循证联网检索开关（默认关闭）。
   /// 控制两类外发请求：
   /// - P4-T3：食物条码联网查询 Open Food Facts
@@ -77,6 +99,17 @@ class AppProvider extends ChangeNotifier {
   /// 关闭时全部走本地库，不产生任何网络请求。
   bool evidenceOnlineSearch = false;
   static const String _kEvidenceOnline = 'evidence_online_search';
+
+  // FIT-7 饮食增强：每日营养目标 + 断食设置（SharedPreferences 持久化）
+  DietTarget dietTarget = const DietTarget();
+  FastingSettings fastingSettings = const FastingSettings();
+  static const DietTargetStore _dietTargetStore = DietTargetStore();
+  static const FastingSettingsStore _fastingSettingsStore =
+      FastingSettingsStore();
+
+  /// 进行中的断食会话（至多一条）
+  FastingSession? get activeFasting =>
+      FastingService.activeOf(fastingSessions);
 
   // 健康档案
   HealthProfile? healthProfile;
@@ -127,6 +160,10 @@ class AppProvider extends ChangeNotifier {
       }
       await _ai.init();
       aiConfigured = _ai.isConfigured;
+      // 视觉识别（方案乙）：注入旧通道 + 预热独立配置缓存
+      VisionService.instance.setLegacyChannel(_ai);
+      final visionCfg = await VisionService.instance.config();
+      visionConfigured = visionCfg.configured;
       userProfile = await _db.getUserProfile();
       await _db.seedFoodCatalog(FoodCatalogData.foods);
       await _db.seedKnowledge(KnowledgeSeedData.entries);
@@ -175,7 +212,9 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> loadAllData() async {
     workouts = await _db.getWorkouts();
+    workoutPlans = await _db.getWorkoutPlans();
     dietRecords = await _db.getDietRecords();
+    fastingSessions = await _db.getFastingSessions();
     financeRecords = await _db.getFinanceRecords();
     lifeStatuses = await _db.getLifeStatus();
     advices = await _db.getAdvices();
@@ -242,6 +281,14 @@ class AppProvider extends ChangeNotifier {
           .whereType<Map>()
           .map((e) => EvidenceEntry.fromMap(Map<String, dynamic>.from(e)))
           .toList();
+      ontologyTerms = ((map['ontologies'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => OntologyTerm.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+      datasetRegistry = ((map['datasetRegistry'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => DatasetRegistryEntry.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       evidenceEntries = [];
       metTable = [];
@@ -249,8 +296,93 @@ class AppProvider extends ChangeNotifier {
       conditionExerciseExamples = [];
       otcSafetyEntries = [];
       supplementEntries = [];
+      ontologyTerms = [];
+      datasetRegistry = [];
       error = '循证知识库加载失败：$e';
     }
+  }
+
+  /// 按需加载开放动作库（assets/data/exercise_catalog.json，约 2 MB）。
+  /// 幂等：已加载则直接返回；解析失败返回空列表且不抛异常。
+  Future<List<CatalogExercise>> ensureExerciseCatalogLoaded() async {
+    if (_catalogLoaded) return exerciseCatalog;
+    try {
+      final raw =
+          await rootBundle.loadString('assets/data/exercise_catalog.json');
+      final map = json.decode(raw) as Map<String, dynamic>;
+      exerciseCatalog = ((map['exercises'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => CatalogExercise.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+      _catalogLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      exerciseCatalog = [];
+      _catalogLoaded = false;
+      error = '开放动作库加载失败：$e';
+    }
+    return exerciseCatalog;
+  }
+
+  /// 开放动作库检索（本地离线）。命中前自动确保已加载。
+  ///
+  /// [bodyPart] 身体部位（胸/背/腿/肩/手臂/腰腹…）；[equipment] 器械；
+  /// [keyword] 关键词（中英文均可）；[zhOnly] 仅返回带中文说明的条目。
+  Future<List<CatalogExercise>> searchExerciseCatalog({
+    String? bodyPart,
+    String? equipment,
+    String? keyword,
+    bool zhOnly = false,
+    int topN = 5,
+  }) async {
+    final bp = (bodyPart ?? '').trim();
+    final eq = (equipment ?? '').trim();
+    final kw = (keyword ?? '').trim();
+    if (bp.isEmpty && eq.isEmpty && kw.isEmpty) return const [];
+    final rows = await ensureExerciseCatalogLoaded();
+    final scored = <MapEntry<CatalogExercise, double>>[];
+    for (final x in rows) {
+      if (zhOnly && x.lang != 'zh') continue;
+      var score = 0.0;
+      if (kw.isNotEmpty) {
+        score += KnowledgeEngine.relevance(x.searchText, kw);
+      }
+      if (bp.isNotEmpty) {
+        score += x.bodyPart.contains(bp) ? 1.5 : 0.0;
+      }
+      if (eq.isNotEmpty) {
+        score += x.equipment.contains(eq) ? 1.0 : 0.0;
+      }
+      if (score > 0.001) scored.add(MapEntry(x, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 开放动作库全部身体部位（去重，按出现频次降序），供筛选器与工具提示。
+  Future<List<String>> exerciseCatalogBodyParts() async {
+    final rows = await ensureExerciseCatalogLoaded();
+    final count = <String, int>{};
+    for (final x in rows) {
+      if (x.bodyPart.isEmpty) continue;
+      count[x.bodyPart] = (count[x.bodyPart] ?? 0) + 1;
+    }
+    final keys = count.keys.toList()
+      ..sort((a, b) => count[b]!.compareTo(count[a]!));
+    return keys;
+  }
+
+  /// 开放动作库全部器械（去重，按出现频次降序）。
+  Future<List<String>> exerciseCatalogEquipment() async {
+    final rows = await ensureExerciseCatalogLoaded();
+    final count = <String, int>{};
+    for (final x in rows) {
+      if (x.equipment.isEmpty) continue;
+      count[x.equipment] = (count[x.equipment] ?? 0) + 1;
+    }
+    final keys = count.keys.toList()
+      ..sort((a, b) => count[b]!.compareTo(count[a]!));
+    return keys;
   }
 
   /// 读取本地设置（SharedPreferences）
@@ -260,6 +392,14 @@ class AppProvider extends ChangeNotifier {
       evidenceOnlineSearch = sp.getBool(_kEvidenceOnline) ?? false;
     } catch (_) {
       evidenceOnlineSearch = false;
+    }
+    // FIT-7 饮食目标 / 断食设置（Store 内部已吞异常回落默认值）
+    try {
+      dietTarget = await _dietTargetStore.load();
+      fastingSettings = await _fastingSettingsStore.load();
+    } catch (_) {
+      dietTarget = const DietTarget();
+      fastingSettings = const FastingSettings();
     }
   }
 
@@ -532,6 +672,81 @@ class AppProvider extends ChangeNotifier {
     return seen;
   }
 
+  // ============ P6-D1 本体术语检索（全部本地离线） ============
+
+  /// 检索本体术语（EXMO 运动医学 / RehabO 康复）。
+  ///
+  /// 术语为**上游原文**（英文 label/definition），未翻译；命中为空时返回空列表。
+  /// [ontology] 可选：限定单个本体（'EXMO' / 'RehabO'）。
+  List<OntologyTerm> searchOntology(String query,
+      {String? ontology, int topN = 5}) {
+    final q = query.trim();
+    final onto = (ontology ?? '').trim();
+    if (q.isEmpty && onto.isEmpty) return const [];
+    final scored = <MapEntry<OntologyTerm, double>>[];
+    for (final t in ontologyTerms) {
+      if (onto.isNotEmpty && t.ontology != onto) continue;
+      var score = KnowledgeEngine.relevance(t.searchText, q);
+      // 仅按本体筛选时，q 为空也保留该项
+      if (q.isEmpty && onto.isNotEmpty) score = 1.0;
+      // 标签/同义词精确命中视为强相关
+      if (q.isNotEmpty) {
+        final lq = q.toLowerCase();
+        if (t.label.toLowerCase() == lq) {
+          score += 3.0;
+        } else if (t.altLabels.any((a) => a.toLowerCase() == lq)) {
+          score += 2.0;
+        }
+      }
+      if (score > 0.001) scored.add(MapEntry(t, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 本体术语总数（按本体分组），供展示与工具提示。
+  Map<String, int> get ontologyCounts {
+    final count = <String, int>{};
+    for (final t in ontologyTerms) {
+      count[t.ontology] = (count[t.ontology] ?? 0) + 1;
+    }
+    return count;
+  }
+
+  // ============ P6-D2 开放数据登记表检索（全部本地离线） ============
+
+  /// 检索开放数据与本体登记表（**仅元数据**）。
+  /// [kind] 类型筛选；[access] 接入状态筛选；[usableOnly] 仅返回已接入/可接入。
+  List<DatasetRegistryEntry> searchDatasetRegistry(
+      {String? keyword,
+      String? kind,
+      String? access,
+      bool usableOnly = false,
+      int topN = 10}) {
+    final kw = (keyword ?? '').trim();
+    final kd = (kind ?? '').trim();
+    final ac = (access ?? '').trim();
+    final scored = <MapEntry<DatasetRegistryEntry, double>>[];
+    for (final r in datasetRegistry) {
+      if (kd.isNotEmpty && r.kind != kd) continue;
+      if (ac.isNotEmpty && r.access != ac) continue;
+      if (usableOnly && !r.isUsable) continue;
+      var score = kw.isEmpty ? 1.0 : KnowledgeEngine.relevance(r.searchText, kw);
+      if (score > 0.001) scored.add(MapEntry(r, score));
+    }
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(topN).map((m) => m.key).toList();
+  }
+
+  /// 登记表按类型分组计数，供展示与工具提示。
+  Map<String, int> get datasetRegistryCounts {
+    final count = <String, int>{};
+    for (final r in datasetRegistry) {
+      count[r.kind] = (count[r.kind] ?? 0) + 1;
+    }
+    return count;
+  }
+
   /// 获取最近个人数据摘要（训练/饮食/财务/状态），供智脑自动带入
   /// 已优化：数据降维（只留关键信息）+ 按天缓存（一天内不重复拼装）
   String getPersonalContext({int days = 3}) {
@@ -771,6 +986,17 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
+  // ============ 训练计划（FIT-1）============
+  Future<void> saveWorkoutPlan(WorkoutPlan plan) async {
+    await _db.saveWorkoutPlan(plan);
+    await loadAllData();
+  }
+
+  Future<void> deleteWorkoutPlan(String id) async {
+    await _db.deleteWorkoutPlan(id);
+    await loadAllData();
+  }
+
   // ============ 饮食 ============
   Future<void> addDietRecord(DietRecord record) async {
     await _db.saveDietRecord(record);
@@ -779,6 +1005,46 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteDietRecord(String id) async {
     await _db.deleteDietRecord(id);
+    await loadAllData();
+  }
+
+  // ============ FIT-7 每日营养目标 ============
+  Future<void> saveDietTarget(DietTarget target) async {
+    dietTarget = target;
+    notifyListeners();
+    await _dietTargetStore.save(target);
+  }
+
+  // ============ FIT-7 断食 ============
+  Future<void> saveFastingSettings(FastingSettings settings) async {
+    fastingSettings = settings;
+    notifyListeners();
+    await _fastingSettingsStore.save(settings);
+  }
+
+  /// 开始断食（若已有进行中的会话则直接返回，不重复开启）
+  Future<void> startFasting({DateTime? at}) async {
+    if (activeFasting != null) return;
+    final session = FastingSession(
+      id: newFastingId(),
+      startAt: at ?? DateTime.now(),
+      targetHours: fastingSettings.plan.fastHours,
+    );
+    await _db.saveFastingSession(session);
+    await loadAllData();
+  }
+
+  /// 结束当前断食（无进行中会话时静默返回）
+  Future<void> endFasting({DateTime? at}) async {
+    final active = activeFasting;
+    if (active == null) return;
+    await _db.saveFastingSession(
+        active.copyWith(endAt: at ?? DateTime.now()));
+    await loadAllData();
+  }
+
+  Future<void> deleteFastingSession(String id) async {
+    await _db.deleteFastingSession(id);
     await loadAllData();
   }
 
@@ -1236,17 +1502,47 @@ class AppProvider extends ChangeNotifier {
         '目标:${p.goal} BMI:${getBMI().toStringAsFixed(1)}';
   }
 
-  /// 图片识别：识别体检报告图片文字（需配置视觉模型）
+  /// 图片识别：识别体检报告图片文字（需配置识别服务）
   /// [prompt] 可自定义识别要求（如体测回填要求输出结构化 JSON）；不传则用默认的
   /// 「提取报告全部文字」提示词。
-  Future<String?> recognizeImage(String imageBase64, {String? prompt}) async {
-    if (prompt == null) {
-      return await _ai.recognizeImage(imageBase64: imageBase64);
-    }
-    return await _ai.recognizeImage(imageBase64: imageBase64, prompt: prompt);
+  /// 内部转发 VisionService：独立视觉配置 → 旧通道 → 本地 OCR 三级降级。
+  Future<String?> recognizeImage(String imageBase64, {String? prompt}) {
+    return VisionService.instance.recognizeImage(
+      bytes: base64Decode(imageBase64),
+      prompt: prompt,
+    );
   }
 
-  bool get hasVisionModel => _ai.hasVisionModel;
+  /// 是否有任一远程视觉通道可用（独立配置或旧通道）
+  bool get hasVisionModel => VisionService.instance.anyChannelAvailable;
+
+  // ============ 视觉识别独立配置（与主 AI 分离，加密存储） ============
+  /// 独立视觉配置是否已配置
+  bool visionConfigured = false;
+
+  /// 保存独立视觉配置（URL 自动规范化；地址非法抛 ArgumentError）
+  Future<void> saveVisionConfig({
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+  }) async {
+    final saved = await VisionService.instance.saveConfig(
+      VisionConfig(baseUrl: baseUrl, apiKey: apiKey, model: model),
+    );
+    visionConfigured = saved.configured;
+    notifyListeners();
+  }
+
+  /// 清空独立视觉配置
+  Future<void> clearVisionConfig() async {
+    await VisionService.instance.clearConfig();
+    visionConfigured = false;
+    notifyListeners();
+  }
+
+  /// 测试识别连通性：对已保存的独立配置发一次内置小图请求，
+  /// 成功返回模型回复；失败抛分型异常（401/网络/服务错误）。
+  Future<String> testVisionConfig() => VisionService.instance.testRecognize();
 
   // ============ 联网搜索 ============
   /// 执行联网搜索（微信/Bing/百度多源）
@@ -1315,6 +1611,30 @@ class AppProvider extends ChangeNotifier {
     return workouts
         .where((w) => w.date.isAfter(weekStart))
         .length;
+  }
+
+  /// 本周训练总容量（kg）：按逐组明细（仅已完成组）或 组数×次数×重量 汇总
+  double getWeekVolume() {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    return workouts
+        .where((w) => w.date.isAfter(weekStart))
+        .fold<double>(0, (sum, w) => sum + w.totalVolume);
+  }
+
+  /// 按部位汇总训练容量（kg）：无部位标签计入「其他」
+  Map<String, double> getMuscleGroupVolume() {
+    final map = <String, double>{};
+    for (final w in workouts) {
+      for (final e in w.exercises) {
+        final key = (e.muscleGroup == null || e.muscleGroup!.isEmpty)
+            ? '其他'
+            : e.muscleGroup!;
+        map[key] = (map[key] ?? 0) + e.volume;
+      }
+    }
+    return map;
   }
 
   /// 获取今日摄入热量

@@ -1,3 +1,5 @@
+import 'health_data_extraction.dart';
+
 /// 健康报告（图片/PDF 存储 + 识别文本 + AI 解读 + 类型/风险评级/行动清单）
 class HealthReport {
   final String? id;
@@ -85,4 +87,11 @@ class HealthReport {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  /// 行动清单强类型视图（actionsJson 解析，坏数据返回空表）
+  List<HealthAction> get actions => HealthAction.listFromJson(actionsJson);
+
+  /// 以新行动清单派生副本（序列化为 v1 包装 JSON）
+  HealthReport withActions(List<HealthAction> list) =>
+      copyWith(actionsJson: HealthAction.listToJson(list));
 }

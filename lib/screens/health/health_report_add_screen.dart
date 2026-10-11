@@ -8,11 +8,14 @@ import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:provider/provider.dart';
 
 import '../../models/health_report.dart';
+import '../../models/health_data_extraction.dart';
 import '../../providers/app_provider.dart';
 import '../../services/health/report_file_store.dart';
+import '../../services/health/report_ingestion_service.dart';
 import '../../services/vision/vision_exceptions.dart';
 import '../../theme/taoist_theme.dart';
 import '../ai/ai_screen.dart';
+import 'health_extraction_review_screen.dart';
 
 /// 体检报告添加页：拍照/相册/文件 → 视觉识别（图片可本地OCR兜底）/ PDF 逐页识别 → AI解读
 class HealthReportAddScreen extends StatefulWidget {
@@ -31,6 +34,12 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
   String _ocrText = '';
   bool _recognizing = false;
   bool _analyzing = false;
+
+  /// 智能归纳进行中（P7-T4：stage → AI 提取 → 确认页）
+  bool _extracting = false;
+
+  /// 智能归纳阶段文案（整理文件 → AI 提取 → 等待确认）
+  String? _extractStageText;
   String? _aiSummary;
   String _lastError = '';
   final DateTime _date = DateTime.now();
@@ -270,6 +279,76 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
       setState(() {
         _analyzing = false;
         _lastError = 'AI解读失败: $e';
+      });
+    }
+  }
+
+  /// 智能归纳入库（P7-T4）：生成临时报告 → AI 结构化提取 → 确认页审核 → 入库
+  Future<void> _extractAndReview() async {
+    if (_ocrText.trim().isEmpty) return;
+    final provider = context.read<AppProvider>();
+    setState(() {
+      _extracting = true;
+      _extractStageText = '正在整理报告文件...';
+      _lastError = '';
+    });
+    try {
+      // 1. 生成临时报告（文件未归档时在此归档，回填路径防止 dispose 误删）
+      final temp = await ReportIngestionService.instance.stage(
+        filePath: _filePath ?? '',
+        fileType: _fileType,
+        title: _title.isEmpty ? '${DateTime.now().year}年体检报告' : _title,
+        ocrText: _ocrText,
+        date: _date,
+        archivedPath: _archivedPath ?? '',
+      );
+      _archivedPath = temp.filePath.isEmpty ? null : temp.filePath;
+      // 2. AI 结构化提取（主 AI 精确模式）
+      if (mounted) {
+        setState(() => _extractStageText = 'AI 正在提取指标与灯色...');
+      }
+      final extraction = await provider.extractHealthData(temp);
+      if (!mounted) return;
+      setState(() {
+        _extracting = false;
+        _extractStageText = null;
+      });
+      // 3. 确认入库页审核
+      final committed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HealthExtractionReviewScreen(
+            report: temp,
+            extraction: extraction,
+          ),
+        ),
+      );
+      if (committed == true && mounted) {
+        // 入库成功：报告已落库，标记 _saved 防止 dispose 清理已入库的归档文件
+        _saved = true;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('报告与指标已入库，可在健康指标页查看')),
+        );
+      }
+    } on ExtractionException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _extracting = false;
+        _extractStageText = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('AI 归纳失败：${e.message}'),
+          action: SnackBarAction(label: '重试', onPressed: _extractAndReview),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _extracting = false;
+        _extractStageText = null;
+        _lastError = '智能归纳失败：$e';
       });
     }
   }
@@ -562,6 +641,28 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
               label: Text(_analyzing ? 'AI 正在解读...' : 'AI 解读报告'),
             ),
           ),
+          // 智能归纳入库（P7-T4）：识别完成后出现
+          if (_ocrText.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: _extracting ? null : _extractAndReview,
+                icon: _extracting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.checklist_rounded, size: 20),
+                label: Text(
+                  _extracting
+                      ? (_extractStageText ?? 'AI 正在归纳...')
+                      : '智能归纳入库（提取指标+灯色）',
+                ),
+              ),
+            ),
+          ],
           if (_aiSummary != null) ...[
             const SizedBox(height: 12),
             Container(

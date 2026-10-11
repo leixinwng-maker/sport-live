@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/health_data_extraction.dart';
 import '../../models/health_metric.dart';
 import '../../models/health_report.dart';
 import '../../providers/app_provider.dart';
 import '../../theme/taoist_theme.dart';
+import 'health_light.dart';
 import 'health_profile_edit_screen.dart';
 import 'health_metric_edit_screen.dart';
 import 'health_report_add_screen.dart';
@@ -732,42 +734,9 @@ class _ReportCard extends StatelessWidget {
     );
   }
 
-  /// 风险灯色圆点（T3 占位映射，T4 统一为灯色工具类）
+  /// 风险灯色圆点（P7-T4 统一走灯色工具类）
   Widget _buildRiskDot(String riskLevel) {
-    final Color color;
-    final String label;
-    switch (riskLevel) {
-      case 'red':
-        color = const Color(0xFFD9534F);
-        label = '红灯';
-      case 'yellow':
-        color = const Color(0xFFF0AD4E);
-        label = '黄灯';
-      case 'blue':
-        color = const Color(0xFF4A90D9);
-        label = '蓝灯';
-      case 'green':
-        color = const Color(0xFF5CB85C);
-        label = '绿灯';
-      default:
-        color = TaoistTheme.cloudGray;
-        label = '未评级';
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: TaoistTheme.cloudGray),
-        ),
-      ],
-    );
+    return HealthLightUI.dot(RiskLight.fromCode(riskLevel));
   }
 
   @override

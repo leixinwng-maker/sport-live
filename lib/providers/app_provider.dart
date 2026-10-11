@@ -15,6 +15,7 @@ import '../models/ai_advice.dart';
 import '../models/health_profile.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
+import '../models/health_data_extraction.dart';
 import '../models/evidence.dart';
 import '../services/cloud_api.dart';
 import '../services/database_helper.dart';
@@ -32,6 +33,7 @@ import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
 import '../services/health/report_file_store.dart';
+import '../services/health/report_ingestion_service.dart';
 import '../services/vision/vision_config.dart';
 import '../services/vision/vision_service.dart';
 import '../data/food_catalog_data.dart';
@@ -1533,6 +1535,25 @@ class AppProvider extends ChangeNotifier {
     void Function(int done, int total)? onProgress,
   }) {
     return VisionService.instance.recognizePdf(pdfPath, onProgress: onProgress);
+  }
+
+  /// 体检报告结构化提取（P7-T4）：走主 AI 精确模式输出 JSON，
+  /// 解析失败抛 ExtractionException（调用方提示重试或仅保存文本）。
+  Future<HealthDataExtraction> extractHealthData(HealthReport report) async {
+    final raw = await _ai.extractHealthData(
+      ocrText: report.ocrText.isEmpty ? report.title : report.ocrText,
+      reportDate: report.date,
+    );
+    return HealthDataExtraction.parse(raw);
+  }
+
+  /// 归纳入库确认（P7-T4）：报告 + 指标同事务落库并刷新数据，返回报告 rowId。
+  Future<String> commitReportIngestion(
+      HealthReport report, List<HealthMetric> metrics) async {
+    final rowId = await ReportIngestionService.instance
+        .commit(report, metrics);
+    await loadAllData();
+    return rowId;
   }
 
   // ============ 视觉识别独立配置（与主 AI 分离，加密存储） ============

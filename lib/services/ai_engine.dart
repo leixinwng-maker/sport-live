@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/health_metric.dart';
 import 'vision/vision_exceptions.dart';
 import 'vision/vision_service.dart';
 
@@ -303,6 +304,69 @@ class AIEngine {
       },
     ];
     return await chat(messages);
+  }
+
+  /// 精确模式请求（temperature 0）：结构化提取等确定性任务专用
+  Future<String> _chatExact(List<Map<String, String>> messages) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+    final url = '$_baseUrl/v1/chat/completions';
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': _model,
+        'messages': messages,
+        'temperature': 0,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      return data['choices'][0]['message']['content'] as String;
+    }
+    throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+  }
+
+  /// 体检报告结构化提取（P7-T4）：走主 AI、temperature 0，输出 JSON 字符串。
+  /// 解析由调用方用 HealthDataExtraction.parse 完成（含围栏剥离与容错）。
+  Future<String> extractHealthData({
+    required String ocrText,
+    DateTime? reportDate,
+  }) async {
+    final dateStr =
+        (reportDate ?? DateTime.now()).toIso8601String().substring(0, 10);
+    final types = HealthMetric.metricTypes.join('、');
+    final system = '你是体检/化验报告结构化提取助手。只输出一个 JSON 对象，'
+        '不要输出任何解释、前后缀或 Markdown 围栏。\n'
+        '输出 schema：\n'
+        '{"reportType":"体检|化验|影像|门诊|其他",'
+        '"metrics":[{"rawName":"报告原文名称","type":"标准类型或null",'
+        '"value":数字,"unit":"单位","referenceRange":"参考范围原文",'
+        '"light":"red|yellow|blue|green","interpretation":"一句话解读"}],'
+        '"actions":[{"title":"行动标题","category":"复查|运动|饮食|生活",'
+        '"light":"red|yellow|blue|green","needsFollowup":true,'
+        '"dueDate":"YYYY-MM-DD","detail":"具体做法"}],'
+        '"summary":"总体一句话评价"}\n'
+        '规则：\n'
+        '1. type 只能从以下标准类型中选：$types；匹配不上时 type=null 并保留 rawName 原文。\n'
+        '2. 血压 "120/80mmHg" 必须拆成两条：收缩压 120、舒张压 80。\n'
+        '3. value 必须是纯数字（不含箭头/单位/范围）；参考范围原文放 referenceRange。\n'
+        '4. light 以报告标注的参考范围为准：显著超标或标注危急值为 red'
+        '（如收缩压≥180 或舒张压≥110、空腹血糖≥11.1）；超出参考范围为 yellow；'
+        '临界/边缘为 blue；在参考范围内为 green。\n'
+        '5. actions：红灯项默认 30 天内复查、黄灯项 90 天内复查'
+        '（needsFollowup=true，dueDate 自 $dateStr 起算）；'
+        '全部正常时给 1-2 条 green 保持性建议。\n'
+        '6. 禁止编造报告里没有的数值或项目；提取不到任何指标时 metrics 为空数组。';
+    final messages = [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': '报告日期：$dateStr\n报告原文：\n$ocrText'},
+    ];
+    return _chatExact(messages);
   }
 
   /// 生成每日建议

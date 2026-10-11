@@ -1249,6 +1249,25 @@ class DatabaseHelper {
   }
 
   // ============ 体检报告操作 ============
+
+  /// P7-T4：报告归纳入库——报告 + 指标同一事务写入（全部成功或全部回滚）。
+  /// 返回报告 rowId（report.id 为空时内部生成，用于指标 source_report_id 关联）。
+  /// 新行插入，不覆盖同日同类型的既有记录。
+  Future<String> commitReportIngestion(
+      HealthReport report, List<HealthMetric> metrics) async {
+    final rowId = report.id ?? _uuid.v4();
+    final db = await database;
+    await db.transaction((txn) async {
+      await _upsertWithin(txn, 'health_reports', rowId, report.toMap());
+      for (final m in metrics) {
+        await _upsertWithin(
+            txn, 'health_metrics', m.id ?? _uuid.v4(), m.toMap());
+      }
+    });
+    onLocalWrite?.call();
+    return rowId;
+  }
+
   Future<String> saveHealthReport(HealthReport report) async {
     final rowId = report.id ?? _uuid.v4();
     await _upsertSynced('health_reports', rowId, report.toMap());

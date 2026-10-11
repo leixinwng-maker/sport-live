@@ -10,6 +10,7 @@ import 'health_light.dart';
 import 'health_profile_edit_screen.dart';
 import 'health_metric_edit_screen.dart';
 import 'health_report_add_screen.dart';
+import 'health_report_detail_sheet.dart';
 import 'body_composition_screen.dart';
 import 'body_trend_screen.dart';
 
@@ -76,6 +77,8 @@ class _ProfileTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // P7-T5 复查提醒卡片（无待复查行动时不显示）
+            _FollowupCard(reports: provider.healthReports),
             // 档案概览卡
             Card(
               child: Padding(
@@ -579,6 +582,183 @@ class _ReportsTabState extends State<_ReportsTab> {
   }
 }
 
+// ==================== 复查提醒卡片（档案信息页顶部，P7-T5） ====================
+
+/// 待复查行动条目（报告 + 行动）
+class _FollowupEntry {
+  final HealthReport report;
+  final HealthAction action;
+  _FollowupEntry(this.report, this.action);
+}
+
+/// 聚合全部报告未完成的复查行动：逾期红、7 天内黄、更远期折叠；
+/// 点击条目打开对应报告详情抽屉（完成勾选 / 改期在详情内操作）。
+class _FollowupCard extends StatelessWidget {
+  final List<HealthReport> reports;
+  const _FollowupCard({required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekLater = todayStart.add(const Duration(days: 8));
+    final entries = <_FollowupEntry>[];
+    for (final r in reports) {
+      final actions = r.actions;
+      for (var i = 0; i < actions.length; i++) {
+        final a = actions[i];
+        if (a.needsFollowup && !a.done && a.dueDate != null) {
+          entries.add(_FollowupEntry(r, a));
+        }
+      }
+    }
+    if (entries.isEmpty) return const SizedBox.shrink();
+    entries.sort((x, y) => x.action.dueDate!.compareTo(y.action.dueDate!));
+
+    final urgent = entries
+        .where((e) => e.action.dueDate!.isBefore(weekLater))
+        .toList();
+    final later = entries
+        .where((e) => !e.action.dueDate!.isBefore(weekLater))
+        .toList();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.alarm_on_outlined,
+                    size: 20, color: TaoistTheme.teaBrown),
+                const SizedBox(width: 8),
+                const Text(
+                  '复查提醒',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: TaoistTheme.inkBlack,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: TaoistTheme.jadeGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${entries.length} 项待复查',
+                    style: const TextStyle(
+                        fontSize: 11, color: TaoistTheme.teaBrown),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ...urgent.map((e) => _entryTile(context, e)),
+            if (later.isNotEmpty)
+              Theme(
+                data: Theme.of(context)
+                    .copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    '更远期的提醒（${later.length}）',
+                    style: const TextStyle(
+                        fontSize: 13, color: TaoistTheme.cloudGray),
+                  ),
+                  iconColor: TaoistTheme.cloudGray,
+                  collapsedIconColor: TaoistTheme.cloudGray,
+                  children: later.map((e) => _entryTile(context, e)).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _entryTile(BuildContext context, _FollowupEntry e) {
+    final report = e.report;
+    final a = e.action;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final overdue = a.dueDate!.isBefore(todayStart);
+    final urgent =
+        !overdue && a.dueDate!.isBefore(todayStart.add(const Duration(days: 8)));
+    final color = overdue
+        ? HealthLightUI.red
+        : urgent
+            ? HealthLightUI.yellow
+            : TaoistTheme.jadeGreen;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        if (report.id != null) {
+          HealthReportDetailSheet.show(context, report.id!);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                overdue
+                    ? '已逾期 ${a.dueDate!.month}/${a.dueDate!.day}'
+                    : '${a.dueDate!.month}/${a.dueDate!.day}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    a.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: TaoistTheme.inkBlack),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${report.title} · ${a.category}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 11, color: TaoistTheme.cloudGray),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                size: 18, color: TaoistTheme.cloudGray),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ReportCard extends StatelessWidget {
   final HealthReport report;
   const _ReportCard({required this.report});
@@ -624,99 +804,10 @@ class _ReportCard extends StatelessWidget {
     }
   }
 
+  /// 详情抽屉（P7-T5）：灯色总览/指标分组/行动清单/附件缩略/原文/重新归纳
   void _showDetail(BuildContext context, HealthReport r) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: ListView(
-              controller: scrollController,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.description_outlined,
-                        color: TaoistTheme.teaBrown),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        r.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: TaoistTheme.inkBlack,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '体检日期: ${r.date.year}-${r.date.month.toString().padLeft(2, '0')}-${r.date.day.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                      fontSize: 12, color: TaoistTheme.cloudGray),
-                ),
-                const SizedBox(height: 16),
-                if (r.aiSummary.isNotEmpty) ...[
-                  const Text(
-                    'AI 解读',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: TaoistTheme.inkBlack,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: TaoistTheme.jadeGreen.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      r.aiSummary,
-                      style: const TextStyle(fontSize: 13, height: 1.7),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                if (r.ocrText.isNotEmpty) ...[
-                  const Text(
-                    '报告内容',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: TaoistTheme.inkBlack,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    r.ocrText,
-                    style: const TextStyle(
-                        fontSize: 12, height: 1.6, color: TaoistTheme.cloudGray),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
+    if (r.id == null) return;
+    HealthReportDetailSheet.show(context, r.id!);
   }
 
   /// 报告类型小标签（T3 占位样式，T5 统一视觉）

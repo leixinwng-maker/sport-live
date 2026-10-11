@@ -32,6 +32,7 @@ import '../services/literature_lookup_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
+import '../services/health/followup_reminder.dart';
 import '../services/health/report_file_store.dart';
 import '../services/health/report_ingestion_service.dart';
 import '../services/vision/vision_config.dart';
@@ -180,6 +181,10 @@ class AppProvider extends ChangeNotifier {
       });
       await loadAllData();
       lunarInfo = _lunarService.getTodayInfo();
+      // P7-T5 复查提醒：插件初始化 + 按全部报告行动清单幂等重调度
+      // （平台守卫在内部：Windows/桌面 no-op；权限被拒不弹，走应用内卡片）
+      await FollowupReminder.instance.init();
+      await FollowupReminder.instance.rescheduleAll(healthReports);
     } catch (e) {
       error = e.toString();
     }
@@ -1469,13 +1474,16 @@ class AppProvider extends ChangeNotifier {
   Future<void> addHealthReport(HealthReport report) async {
     await _db.saveHealthReport(report);
     await loadAllData();
+    // P7-T5：入库行动清单含复查提醒时注册本地通知
+    await FollowupReminder.instance.reschedule(report.id ?? '', report.actions);
   }
 
-  /// 更新体检报告（识别文字/AI解读结果）
+  /// 更新体检报告（识别文字/AI解读结果/行动清单）
   Future<void> updateHealthReport(HealthReport report) async {
     if (report.id == null) return;
     await _db.saveHealthReport(report);
     await loadAllData();
+    await FollowupReminder.instance.reschedule(report.id!, report.actions);
   }
 
   /// 删除体检报告（同步删除归档目录内的报告文件）
@@ -1491,7 +1499,42 @@ class AppProvider extends ChangeNotifier {
     if (report != null) {
       await ReportFileStore.instance.delete(report.filePath);
     }
+    await FollowupReminder.instance.cancelReport(id);
     await loadAllData();
+  }
+
+  /// 勾选/取消行动条目完成（P7-T5）：回写 actionsJson + 重调度提醒
+  Future<void> toggleActionDone(String reportId, int index, bool done) async {
+    final i = healthReports.indexWhere((r) => r.id == reportId);
+    if (i < 0) return;
+    final actions = healthReports[i].actions;
+    if (index < 0 || index >= actions.length) return;
+    final updated = [...actions];
+    updated[index] = actions[index].copyWith(done: done);
+    await _saveReportActions(healthReports[i], updated);
+  }
+
+  /// 编辑行动条目（P7-T5：改标题/改期/开关提醒等），回写后重调度
+  Future<void> updateAction(String reportId, int index, HealthAction action) async {
+    final i = healthReports.indexWhere((r) => r.id == reportId);
+    if (i < 0) return;
+    final actions = healthReports[i].actions;
+    if (index < 0 || index >= actions.length) return;
+    final updated = [...actions];
+    updated[index] = action;
+    await _saveReportActions(healthReports[i], updated);
+  }
+
+  /// 行动清单变更的统一回写：落库 → 轻量替换内存 → 重调度提醒 → 通知 UI
+  Future<void> _saveReportActions(
+      HealthReport old, List<HealthAction> actions) async {
+    if (old.id == null) return;
+    final updated = old.withActions(actions);
+    await _db.saveHealthReport(updated);
+    final i = healthReports.indexWhere((r) => r.id == old.id);
+    if (i >= 0) healthReports[i] = updated;
+    await FollowupReminder.instance.reschedule(old.id!, actions);
+    notifyListeners();
   }
 
   /// 生成体检报告 AI 解读
@@ -1548,11 +1591,15 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// 归纳入库确认（P7-T4）：报告 + 指标同事务落库并刷新数据，返回报告 rowId。
+  /// [replaceMetrics] 为 true 时（P7-T5 重新归纳），同事务覆盖旧关联指标。
   Future<String> commitReportIngestion(
-      HealthReport report, List<HealthMetric> metrics) async {
+      HealthReport report, List<HealthMetric> metrics,
+      {bool replaceMetrics = false}) async {
     final rowId = await ReportIngestionService.instance
-        .commit(report, metrics);
+        .commit(report, metrics, replaceMetrics: replaceMetrics);
     await loadAllData();
+    // P7-T5：入库行动清单含复查提醒时注册本地通知
+    await FollowupReminder.instance.reschedule(rowId, report.actions);
     return rowId;
   }
 

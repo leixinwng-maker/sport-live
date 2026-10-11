@@ -1253,12 +1253,33 @@ class DatabaseHelper {
   /// P7-T4：报告归纳入库——报告 + 指标同一事务写入（全部成功或全部回滚）。
   /// 返回报告 rowId（report.id 为空时内部生成，用于指标 source_report_id 关联）。
   /// 新行插入，不覆盖同日同类型的既有记录。
+  /// [replaceMetrics] 为 true 时（P7-T5 重新归纳），同事务内先删除该报告
+  /// 旧关联指标再写入新指标，保证不重复不残留。
   Future<String> commitReportIngestion(
-      HealthReport report, List<HealthMetric> metrics) async {
+      HealthReport report, List<HealthMetric> metrics,
+      {bool replaceMetrics = false}) async {
     final rowId = report.id ?? _uuid.v4();
     final db = await database;
     await db.transaction((txn) async {
       await _upsertWithin(txn, 'health_reports', rowId, report.toMap());
+      if (replaceMetrics) {
+        // 删除旧关联指标，并逐条写入同步删除标记（远端同步删，不残留）
+        final olds = await txn.query(
+          'health_metrics',
+          columns: ['id'],
+          where: 'source_report_id = ?',
+          whereArgs: [rowId],
+        );
+        for (final row in olds) {
+          await txn.delete(
+            'health_metrics',
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+          await _enqueue(txn, 'health_metrics', row['id'] as String, 'delete',
+              null);
+        }
+      }
       for (final m in metrics) {
         await _upsertWithin(
             txn, 'health_metrics', m.id ?? _uuid.v4(), m.toMap());

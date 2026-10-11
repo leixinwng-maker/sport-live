@@ -2,6 +2,22 @@
     <!-- 应用锁生物识别（local_auth） -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
 
+    <!-- FIT-7 饮食增强：扫描食品包装条码（mobile_scanner，仅取景识别，不上传图像） -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+    <!-- FIT-7 语音快速记录：设备语音识别（speech_to_text，仅本地识别服务） -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- 联网能力：循证文献检索 / 条码商品查询 / 智能体（用户开启开关后才会发起请求） -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- ===== P7-T5 复查提醒（flutter_local_notifications）===== -->
+    <!-- Android 13+ 运行时通知权限（首次注册提醒时弹窗请求，拒绝后走应用内卡片） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 重启后由 BootReceiver 恢复已排程的复查提醒 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <!-- ===== P4-C 运动健康数据接入（Health Connect，仅只读）===== -->
     <!-- 步数/距离/活动热量等运动数据在 Android 10+ 需运动识别权限 -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
@@ -66,6 +82,20 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS"/>
             </intent-filter>
         </activity-alias>
+        <!-- P7-T5 复查提醒：展示排程通知 / 重启后恢复排程（flutter_local_notifications 要求） -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -86,6 +116,10 @@
         <package android:name="com.google.android.apps.healthdata"/>
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
+        </intent>
+        <!-- FIT-7 语音快速记录：Android 11+ 包可见性限制下需声明可查询系统语音识别服务 -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>

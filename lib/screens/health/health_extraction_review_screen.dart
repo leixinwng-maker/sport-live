@@ -11,15 +11,18 @@ import 'health_light.dart';
 
 /// 确认归纳入库页（P7-T4）：
 /// 展示 AI 从报告提取的指标与行动清单，用户勾选/修正后与报告同事务入库。
-/// 入参 [report] 为未入库的临时报告（ReportIngestionService.stage 产出）。
+/// 入参 [report] 为未入库的临时报告（ReportIngestionService.stage 产出）；
+/// [reIngest] 为 true 时（P7-T5 重新归纳），入库同事务覆盖该报告旧关联指标。
 class HealthExtractionReviewScreen extends StatefulWidget {
   final HealthReport report;
   final HealthDataExtraction extraction;
+  final bool reIngest;
 
   const HealthExtractionReviewScreen({
     super.key,
     required this.report,
     required this.extraction,
+    this.reIngest = false,
   });
 
   @override
@@ -136,7 +139,11 @@ class _HealthExtractionReviewScreenState
     setState(() => _committing = true);
     try {
       final provider = context.read<AppProvider>();
-      await provider.commitReportIngestion(report, metrics);
+      await provider.commitReportIngestion(
+        report,
+        metrics,
+        replaceMetrics: widget.reIngest,
+      );
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -777,19 +784,35 @@ class _HealthExtractionReviewScreenState
             ),
           ],
         ),
-        child: SizedBox(
-          height: 48,
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _committing ? null : _commit,
-            child: _committing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text('确认入库（$_checkedCount 项指标 · ${_actions.length} 条行动）'),
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.reIngest)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '重新归纳模式：确认后将覆盖该报告已入库的旧指标',
+                  style: TextStyle(fontSize: 11, color: TaoistTheme.teaBrown),
+                ),
+              ),
+            SizedBox(
+              height: 48,
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _committing ? null : _commit,
+                child: _committing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        '${widget.reIngest ? '确认重新归纳' : '确认入库'}'
+                        '（$_checkedCount 项指标 · ${_actions.length} 条行动）',
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );

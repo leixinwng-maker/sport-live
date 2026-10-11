@@ -48,7 +48,10 @@ class ReportIngestionService {
 
   /// 确认入库：指标回填 id / source_report_id / 备注来源后，
   /// 与报告同一事务落库（DatabaseHelper.commitReportIngestion）。返回报告 rowId。
-  Future<String> commit(HealthReport report, List<HealthMetric> metrics) async {
+  /// [replaceMetrics] 为 true 时（P7-T5 重新归纳），同事务先删旧关联指标。
+  Future<String> commit(
+      HealthReport report, List<HealthMetric> metrics,
+      {bool replaceMetrics = false}) async {
     final rowId = report.id ?? _uuid.v4();
     final source = '来源：《${report.title}》';
     final tagged = <HealthMetric>[];
@@ -62,7 +65,8 @@ class ReportIngestionService {
             : (note.isEmpty ? source : '$note；$source'),
       ));
     }
-    return DatabaseHelper.instance
-        .commitReportIngestion(report.copyWith(id: rowId), tagged);
+    return DatabaseHelper.instance.commitReportIngestion(
+        report.copyWith(id: rowId), tagged,
+        replaceMetrics: replaceMetrics);
   }
 }

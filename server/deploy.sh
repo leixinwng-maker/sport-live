@@ -20,7 +20,6 @@ STATE_FILE="$STATE_DIR/deploy.state"
 ENV_FILE="$SCRIPT_DIR/.env"
 TUNNEL_SECRET_FILE="$STATE_DIR/tunnel_secret"
 TUNNEL_NAME="wendao-tunnel"
-HEALTH_URL="http://localhost:8000/health"
 HEALTH_TIMEOUT=120
 
 # ---------- 日志 ----------
@@ -276,10 +275,10 @@ start_services() {
   step "启动服务"
   run docker compose up -d --build || die "docker compose 启动失败，排查：docker compose logs api"
   info "等待 /health 就绪（最多 ${HEALTH_TIMEOUT}s）"
-  if [ "$DRY_RUN" = 1 ]; then warn "[dry-run] 轮询 $HEALTH_URL 直至 status: ok"; return; fi
+  if [ "$DRY_RUN" = 1 ]; then warn "[dry-run] 轮询容器内 /health 直至 status: ok"; return; fi
   local waited=0
   while [ "$waited" -lt "$HEALTH_TIMEOUT" ]; do
-    if curl -fsS "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then
+    if docker compose exec -T api curl -fsS http://localhost:8000/health 2>/dev/null | grep -q '"status":"ok"'; then
       ok "服务就绪（${waited}s）"; return
     fi
     sleep 5; waited=$((waited+5))

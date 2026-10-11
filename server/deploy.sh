@@ -278,7 +278,7 @@ start_services() {
   if [ "$DRY_RUN" = 1 ]; then warn "[dry-run] 轮询容器内 /health 直至 status: ok"; return; fi
   local waited=0
   while [ "$waited" -lt "$HEALTH_TIMEOUT" ]; do
-    if docker compose exec -T api curl -fsS http://localhost:8000/health 2>/dev/null | grep -q '"status":"ok"'; then
+    if docker compose exec -T api python -c "import urllib.request;urllib.request.urlopen('http://localhost:8000/health', timeout=3)" 2>/dev/null; then
       ok "服务就绪（${waited}s）"; return
     fi
     sleep 5; waited=$((waited+5))

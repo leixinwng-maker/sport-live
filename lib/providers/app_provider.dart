@@ -31,6 +31,7 @@ import '../services/literature_lookup_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
+import '../services/health/report_file_store.dart';
 import '../services/vision/vision_config.dart';
 import '../services/vision/vision_service.dart';
 import '../data/food_catalog_data.dart';
@@ -1475,9 +1476,19 @@ class AppProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  /// 删除体检报告
+  /// 删除体检报告（同步删除归档目录内的报告文件）
   Future<void> deleteHealthReport(String id) async {
+    HealthReport? report;
+    for (final r in healthReports) {
+      if (r.id == id) {
+        report = r;
+        break;
+      }
+    }
     await _db.deleteHealthReport(id);
+    if (report != null) {
+      await ReportFileStore.instance.delete(report.filePath);
+    }
     await loadAllData();
   }
 
@@ -1515,6 +1526,14 @@ class AppProvider extends ChangeNotifier {
 
   /// 是否有任一远程视觉通道可用（独立配置或旧通道）
   bool get hasVisionModel => VisionService.instance.anyChannelAvailable;
+
+  /// PDF 识别：逐页渲染 → 视觉模型多页识别 → 合并文本（无远程通道时抛分型异常）
+  Future<String> recognizePdf(
+    String pdfPath, {
+    void Function(int done, int total)? onProgress,
+  }) {
+    return VisionService.instance.recognizePdf(pdfPath, onProgress: onProgress);
+  }
 
   // ============ 视觉识别独立配置（与主 AI 分离，加密存储） ============
   /// 独立视觉配置是否已配置

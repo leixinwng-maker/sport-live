@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../ai_engine.dart';
+import '../health/pdf_page_renderer.dart';
 import '../local_ocr_service.dart';
 import 'vision_config.dart';
 import 'vision_exceptions.dart';
@@ -140,12 +141,66 @@ class VisionService {
   }
 
   /// 识别 PDF：逐页渲染 → 视觉模型多页识别 → 按页合并文本。
-  /// T2 实现（依赖 PDF 渲染器）；当前版本先留接口。
+  ///
+  /// 每批最多 4 页组成一条多图消息，批间顺序调用；
+  /// [onProgress] 报告批次进度 (已完成批次, 总批次)；
+  /// 第一批失败即中止（已渲染页随调用释放），整份重试；
+  /// 独立配置与旧通道均不可用时抛 [VisionConfigRequiredException]
+  /// （本地 OCR 无法处理 PDF）。
   Future<String> recognizePdf(
     String pdfPath, {
     void Function(int done, int total)? onProgress,
   }) async {
-    throw UnimplementedError('PDF 识别将在下一版本实现');
+    final cfg = await config();
+    final useIndependent = cfg.configured;
+    final legacy = _legacy;
+    final useLegacy = !useIndependent &&
+        legacy != null &&
+        legacy.isConfigured &&
+        legacy.hasVisionModel;
+    if (!useIndependent && !useLegacy) {
+      throw const VisionConfigRequiredException(
+          'PDF 识别需要配置识别服务（图片可走手机本地识别，PDF 不行）');
+    }
+
+    final pages = await PdfPageRenderer.instance.render(pdfPath);
+    const batchSize = 4;
+    final totalBatches = (pages.length + batchSize - 1) ~/ batchSize;
+    final buffer = StringBuffer();
+
+    for (var i = 0; i < totalBatches; i++) {
+      final start = i * batchSize;
+      final end = (start + batchSize).clamp(0, pages.length);
+      final b64List = [
+        for (final page in pages.sublist(start, end)) base64Encode(page),
+      ];
+      final prompt = '这是体检报告 PDF 的第 ${start + 1}-$end 页（共 ${pages.length} 页）。'
+          '请逐页完整提取每页的全部文字内容（项目名称、检测数值、单位、参考范围、异常标记），'
+          '每页以「第 n 页」开头分段输出，只输出提取到的文字，不要解释。';
+
+      String text;
+      if (useIndependent) {
+        text = await _postVision(
+          baseUrl: cfg.baseUrl,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          b64Images: b64List,
+          prompt: prompt,
+        );
+      } else {
+        text = await legacy!.recognizeImageLegacy(
+              imageBase64: b64List.first,
+              extraImageBase64List: b64List.sublist(1),
+              prompt: prompt,
+            ) ??
+            '';
+      }
+      if (text.trim().isNotEmpty) {
+        buffer.writeln(text.trim());
+      }
+      onProgress?.call(i + 1, totalBatches);
+    }
+    return buffer.toString();
   }
 
   /// 连通性测试：用内置 1×1 测试图对「独立视觉配置」发一次最小请求。

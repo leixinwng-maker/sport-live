@@ -4,8 +4,11 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
+  file_selector_windows
   flutter_secure_storage_windows
   local_auth_windows
+  pdfx
+  speech_to_text_windows
   sqlite3_flutter_libs
 )
 

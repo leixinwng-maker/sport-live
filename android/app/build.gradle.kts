@@ -12,6 +12,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // P7：flutter_local_notifications 依赖 java.time 等 API，需要 core library desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -58,4 +60,6 @@ flutter {
 dependencies {
     // ML Kit 中文文字识别（本地 OCR）
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // P7：core library desugaring 的 API 依赖（配合上方 isCoreLibraryDesugaringEnabled）
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

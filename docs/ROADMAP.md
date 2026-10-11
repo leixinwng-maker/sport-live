@@ -14,7 +14,11 @@
 | P4 | 循证知识库与 4 个循证工具、Health Connect 接入、体成分录入与拍照识别、PIPL 同意与撤回闭环 | `assets/data/evidence_kb.json`、`lib/services/{wearable_aggregator,body_composition_parser}.dart` |
 | P5 | 开源文献检索（Europe PMC / OpenAlex）、疾病—运动两层关联库 | `lib/services/literature_lookup_service.dart` |
 
-工程现状：智能体工具 15 个；单测 83 项全通过；`flutter analyze lib test` 无问题；Android release APK 117.9 MB。证据资产由 `scripts/import_knowledge.py` 从种子统一生成，当前产物为 84 条证据、73 条 MET、201 条动作、8 条疾病—运动条目、12 条来源登记。
+工程现状：智能体工具 25 个（21 只读 + 4 写入，写入一律只产 `PendingAction`、经用户确认后落库）；单测 384 项通过（另有 10 项既有失败为历史遗留，与 P7 无关）；`flutter analyze lib test` 无问题；Android release APK 138.9 MB（P7 后实测，较 136.2 MB 增加 2.7 MB：pdfx/pdfium、flutter_local_notifications、core library desugaring）。证据资产由 `scripts/import_knowledge.py`（v1.5.0）从种子统一生成，当前产物为 `evidence_kb.json`（84 条证据、73 条 MET、201 条动作、8 条疾病—运动条目、24 条补剂、64 条用药安全、19 条来源登记、433 条本体术语、82 条数据源登记）与独立资产 `exercise_catalog.json`（2428 条开放动作）。
+
+对标训记的训练闭环分期（FIT-1 ~ FIT-8）见 `specs/2026-10-08-xunji-parity-fit1-fit2-design.md`，已完成 FIT-1（逐组明细 + 计划库）、FIT-2（智能体写工具 → 确认 → 落库）、FIT-3（官方计划模板 + 计划库列表/详情/编辑 + 预填训练）、FIT-4（统计与日历可视化）、FIT-5（身体数据与趋势：围度类型扩展 + `body_stats_service` 纯计算层 + 非零基线趋势图 + 独立趋势页）、FIT-6（组间休息计时：`rest_timer` 控制器 + 打勾自动触发 + 训练页倒计时圆环 + 设置页开关）、FIT-7（饮食增强：每日营养目标与达成度 `diet_target`/`diet_target_service` + 首页目标卡、条码扫码页接入 `FoodLookupService`、语音快速记录 `voice_diet_parser`/`voice_diet_screen` 双入口 + 草稿合并、断食 `fasting`/`fasting_service`/`fasting_settings` + 圆环页与进行中卡、三份新增单测）。
+
+健康档案智能管理（P7，2026-10-11 立项并交付）见 `specs/2026-10-11-health-profile-vision-design.md`：视觉识别独立成服务（`lib/services/vision/`：配置存储 `vision_config` / 服务 `vision_service` / 分型异常，预设硅基流动 Qwen2.5-VL，URL 规范化防双 `/v1`），识别三级降级且已配置但调用失败不静默降级；报告导入支持拍照 / 相册 / PDF（`pdfx` 逐页渲染、每批 4 页、超 20 页拦截引导拆分）；结构化提取 + 用户确认入库，指标按参考区间评红 / 黄 / 蓝 / 绿四灯（红=危急引导就医、黄=超出参考、蓝=临界、绿=正常）；报告档案（类型与灯色筛选、行动清单、复查提醒走 `flutter_local_notifications` 本地通知，Android 13+ 动态请求权限）；多报告连读（2~8 份，老报告 OCR 参与并注明）；数据库 v10→v11 增量迁移为本项目首个 `ALTER TABLE` 迁移（旧数据保留、中断重试安全，`test/db_v11_migration_test.dart` 把守）；智能体新增只读工具 `get_health_reports`（检前引导医生确认 / 检后先灯色总览）。云同步对报告整行 JSON 透传，后端零改动。
 
 ## 2. 已记账的欠账
 
@@ -22,22 +26,23 @@
 
 | 项 | 出处 | 当前状态 |
 |---|---|---|
-| 家庭用药安全知识库 | `specs/2026-10-08-p5-home-health-kb-design.md` | 设计规格已写完，缺实施计划与实现 |
-| 补剂 / 营养品数据库 | 会话中提出 | 无调研、无设计；现有营养域 9 条证据中仅 2 条是补剂 |
+| 家庭用药安全知识库 | `specs/2026-10-08-p5-home-health-kb-design.md` | **已闭环**（P6-A，64 条用药安全，工具 `search_otc_safety`） |
+| 补剂 / 营养品数据库 | 会话中提出 | **已闭环**（P6-C，24 条补剂，工具 `lookup_supplement`）；P6-B 调研报告未产出 |
 | 华为 Health Service Kit | `specs/2026-10-07-p4-health-data-design.md` §1 | 资质门槛：实缴注册资本 ≥50 万且成立满 1 年 |
 | 云康宝 BLE 直连体脂秤 | 同上 | 申请制 SDK，条款未知 |
 | 环境与天气 API（和风、彩云） | `research/2026-10-07-p4-data-sources-research.md` §7 | 未调研 |
 | 中医数据集 RAG | 同上 | 未调研；现有中医域仅 3 条证据 |
 | iOS 平台与 HealthKit | 仓库无 `ios/` 目录 | 未建立，`health` 插件的 iOS 分支从未验证 |
 | 真机验收 | `plans/2026-10-07-p4-health-data-plan.md` 实施结论 | APK 已产出，主流程未在真机跑过 |
+| schema 增量迁移（替换清库重建） | 会话中提出 | 见 §8 岔路口；云同步可用前不阻塞 |
 
 ## 3. P6 知识域补完
 
-两块内容都落在同一条已有管线上（`EvidenceEntry` + `import_knowledge.py` + `KnowledgeIndex` + 工具三处登记），不引入新架构，因此排在首位。
+P6 全部落在同一条已有管线上（`EvidenceEntry` + `import_knowledge.py` + `KnowledgeIndex` + 工具三处登记），不引入新架构，因此排在首位。其中 P6-A、P6-C 与 P6-D 已交付，只剩 P6-B 调研报告未产出。
 
-### 3.1 P6-A 家庭用药安全知识库
+### 3.1 P6-A 家庭用药安全知识库（已交付）
 
-设计规格已就绪，可直接开工，约 2 个开发日。
+已交付：64 条用药安全条目，`domain` 统一取 `用药安全`，新增工具 `search_otc_safety`，`test/otc_safety_test.dart` 覆盖设计 §7 的验收。约 2 个开发日。以下为原始切分，保留备查。
 
 T1 种子与管线（1 天）
 新建 `scripts/knowledge_sources/otc_safety_seed.json`，按设计 §4 的 8 个分组整理 60~80 条；`import_knowledge.py` 增加 `otcSafety[]` 输出与校验，`domain` 统一取 `用药安全`，`evidenceLevel` 取 `指南`（官方文件）或 `专家`（说明书范本）。来源限定国家卫健委《居家治疗常用药参考表》与 NMPA 非处方药说明书范本目录，人工摘录改写，不写爬虫。
@@ -64,19 +69,39 @@ T3 单测与收尾（0.5 天）
 
 内容边界。补剂的功效宣称受《广告法》与《食品安全法》管制，报告需给出免责话术与"不做疗效承诺"的约束写法，与 P5 疾病—运动库的"禁止证据越级"同等强度。
 
-### 3.3 P6-C 补剂接入
+### 3.3 P6-C 补剂接入（已交付）
 
-约 2 个开发日，形态取决于 P6-B 结论，两种走法可组合。
+已交付：24 条补剂证据（`domain` 取 `补剂`，独立存放避免外溢到其他域）+ 工具 `lookup_supplement`，`test/supplement_test.dart` 覆盖。约 2 个开发日。形态取静态导入路线；运行时条码查询路线未采用。以下为原始切分，保留备查。
 
 静态导入路线：把常见补剂（肌酸、乳清蛋白、维生素 D、鱼油、咖啡因、复合维生素等）的成分与剂量整理成 `domain='补剂'` 的证据条目，新增 `lookup_supplement(query)` 工具，同时把现有营养域从 2 条补剂扩到一个可用的量级。
 
 运行时查询路线：在 `FoodLookupService` 旁增加补剂条码查询，命中即缓存到本地，同样受设置页"循证文献联网检索"开关控制，同样失败回落不抛异常。这条路线的好处是与既有条码链路同构，成本最低。
 
-P6 合计约 4.5 个开发日。
+P6-A 与 P6-C 已交付，剩余 P6-B 约 0.5 个开发日（P6 原始估算合计约 4.5 个开发日）。
+
+### 3.4 P6-D 开放数据与本体接入（已交付）
+
+把知识域从自研种子扩展到可直接引用的开放标准：本体（语义标准）、数据源登记（获取指引）、开放动作库（大规模动作条目）。三项全部走**构建期静态导入**，App 内零网络依赖，不引入任何自动抓取第三方站点的脚本，只取上游官方发布的开放文件。
+
+T1 种子与管线。新增 4 个上游种子：`scripts/knowledge_sources/ontology_exmo.json`（EXMO 运动医学本体，CC BY 4.0，须署名）、`ontology_rehabo.json`（RehabO 康复本体，CC0，取自 OBO Foundry）、`dataset_registry_seed.json`（开放数据源登记）、`exercise_catalog_seed.json`（Exercises Dataset 1324 条 + Free Exercise DB 738 条 + Longhaul Exercises 366 条归并）。`import_knowledge.py` 升到 v1.5.0，新增 `ontologies[]` 与 `datasetRegistry[]` 两段输出与校验；2428 条开放动作从 `evidence_kb.json` 拆出为独立资产 `assets/data/exercise_catalog.json`（约 2 MB），由 `ensureExerciseCatalogLoaded()` 首次查询时按需加载，避免拖慢启动。
+
+T2 模型与检索。`lib/models/evidence.dart` 新增 `OntologyTerm` / `DatasetRegistryEntry` / `CatalogExercise` 三个模型；`AppProvider` 增加 `searchOntology` / `ontologyCounts` / `searchDatasetRegistry` / `datasetRegistryCounts` / `ensureExerciseCatalogLoaded` / `searchExerciseCatalog` / `exerciseCatalogBodyParts` / `exerciseCatalogEquipment`，全部为本地离线打分检索（标签精确命中加权、`usableOnly` 过滤、部位/器械加权）。
+
+T3 工具与界面。智能体新增 3 个只读工具 `query_ontology` / `query_exercise_catalog` / `list_open_datasets`；新增浏览页 `lib/screens/knowledge/open_data_screen.dart`（本体术语 / 数据源登记表 / 开放动作库三分区），入口挂在设置页「开放数据与本体」。
+
+交付规模：本体术语 433 条（EXMO 370 + RehabO 63）；数据源登记 82 条（数据集 47 / 本体 8 / 开源软件 9 / 知识图谱 16 / 食品数据库 2）；开放动作 2428 条（中文 1324 / 英文 1104，14 个字段无空缺、无重复 id）。
+
+三条硬约束写在模型注释与工具描述里，并由 `test/open_data_test.dart`（25 个用例）把守：
+
+- **本体术语原样搬运，不翻译、不改写、不推断。** 只保留 id / label / 同义词 / 定义 / 父类，工具输出显式标注「原始术语，未翻译」，出处可溯（EXMO 须署名、RehabO 为 CC0），避免自造译名污染语义标准。
+- **数据源登记表只承载元数据与获取指引，不含任何正文数据。** `access` 分「已接入 / 可接入 / 登记题录」三态，仅前两态可用于检索；登记题录在工具输出中明确标注「本地未入库任何数据，不得当作已有数据引用」。当前 82 条中已接入 3 条（`exmo` / `rehabo` / `longhaul-exercises`）、可接入 32 条（含 `nice-food` / `usda-fdc` / `open-food-facts` 及各营养/医学知识图谱、运动康复与运动情绪数据集）、其余 47 条为登记题录。
+- **开放动作库在构建期剥离全部媒体字段。** 图片 / 动图 / 视频均不收录（其版权属原作者），只保留名称、目标肌群、协同肌群、部位、器械、难度与文字说明；中文说明取自上游提供的中文，非本应用翻译。单测逐条断言媒体字段零命中。
 
 ## 4. P7 数据通道补完
 
 这一期的共同点是每项都有外部前置条件，因此按"无门槛先做"的顺序排。
+
+> 编号说明：本节 P7 专指**数据通道**（环境 API、iOS/华为、体脂秤直连）。知识域侧的开放数据与本体接入已交付，记在 §3.4 **P6-D**，两者不共用编号。
 
 ### 4.1 P7-A 环境与天气 API
 
@@ -114,7 +139,7 @@ P6 合计约 4.5 个开发日。
 
 ### 6.3 P9-C 包体与性能（1 天）
 
-APK 117.9 MB 偏大。按 ABI 拆分产物、清理未使用的媒体与字体资源、核对 ML Kit 与 SQLCipher 的 native 库体积，目标降到 60 MB 以内。同时复核智能体上下文裁剪与 RAG 预索引的内存占用。
+APK 136.2 MB 偏大（FIT-7 引入 `mobile_scanner` 与 `speech_to_text` 后较 119.1 MB 进一步增长）。按 ABI 拆分产物、清理未使用的媒体与字体资源、核对 ML Kit、SQLCipher 与扫码/语音插件的 native 库体积，目标降到 60 MB 以内。同时复核智能体上下文裁剪与 RAG 预索引的内存占用。
 
 ### 6.4 P9-D 上架与后端生产化（2 天）
 
@@ -130,11 +155,14 @@ P6-B 补剂调研 ──┘
                           P7-B iOS（需 macOS）
 ```
 
+图中 P6-A 与 P6-C 已交付；P6-D 开放数据与本体接入为独立支线，已交付，不占用上述链条。
+
 | 期 | 内容 | 预估 | 前置 |
 |---|---|---|---|
-| P6-A | 家庭用药安全知识库 | 2 天 | 无，设计已就绪 |
+| P6-A | 家庭用药安全知识库（已交付） | 2 天 | 无，设计已就绪 |
 | P6-B | 补剂数据库调研 | 0.5 天 | 无 |
-| P6-C | 补剂接入 | 2 天 | P6-B 结论 |
+| P6-C | 补剂接入（已交付） | 2 天 | P6-B 结论 |
+| P6-D | 开放数据与本体接入（已交付） | 独立支线 | 无 |
 | P7-A | 环境与天气 API | 1.5 天 | 免费额度与商用条款确认 |
 | P7-B | iOS 与 HealthKit | 2 天 | macOS + Xcode |
 | P7-C | 华为 Kit | 不排期 | 企业资质 |
@@ -145,17 +173,27 @@ P6-B 补剂调研 ──┘
 | P9-C | 包体与性能 | 1 天 | 无 |
 | P9-D | 上架与后端生产化 | 2 天 | 目标定位 |
 
-可确定性投入合计约 16 个开发日。P6-A 是唯一可以立刻开工且无任何外部依赖的项；P9-B 与 P9-C 属于随时可插入的独立工作；P7-C 与 P7-D 在外部条件满足前不计入排期。
+可确定性投入合计约 16 个开发日（含已交付的 P6-A 与 P6-C）；扣除这两项的 4 天后，剩余约 11.5 个开发日。P6-B 是当前唯一可以立刻开工且无任何外部依赖的项；P9-B 与 P9-C 属于随时可插入的独立工作；P7-C 与 P7-D 在外部条件满足前不计入排期。
 
 ## 8. 需要拍板的岔路口
 
-补剂库走静态导入还是运行时查询，等 P6-B 报告出来再定，符合既定的"先看报告再定"。
+补剂库走静态导入还是运行时查询 —— **已拍板**：P6-C 已按静态导入交付（24 条，工具 `lookup_supplement`），运行时条码查询路线未采用。P6-B 调研报告仍未产出；若后续要显著扩库，再以该报告为准复核形态。
 
 是否要做 iOS 与华为。iOS 需要一台 Mac 与开发者账号，华为需要企业资质，这两个答案直接决定 P7-B 与 P7-C 排不排。
 
 终局是自用还是上架。这决定 P9-D 的深度，也间接影响 P9-C 的包体目标是否值得压到 60 MB。
 
 中医知识域的优先级。它排在补剂之后，但如果"道法术养行"是产品的核心卖点，可以提前到 P6-C 之前。
+
+**schema 升级方式（已拍板：暂缓，维持清库重建）**。现状：`database_helper.dart` 的 `_upgradeTables` 走 `_dropAllTables` → `_createTables`，即清库重建；依据是本地库被定位为「云端缓存」，清掉可从云端重新同步，且 `wipeLocalData()` 同时删除 Keystore 加密密钥。
+
+维持现状的理由：当前仍是单机阶段、云同步未真正启用，清库重建实现成本近乎为零、无数据损坏风险。
+
+**切换触发条件**：当云同步做成可用状态、且开始承载真实用户数据时，必须改为增量迁移（`ALTER TABLE` / 新建表 + 搬数据），并为每个新版本配迁移脚本与回归测试。在此之前，任何新增字段都只改 `_createTables` 即可。
+
+**风险**：若用户在未开启云同步的情况下升级，清库即永久丢失全部训练、饮食与体测数据，且无恢复途径。
+
+P7 更新（2026-10-11）：v10→v11 已落地首个增量迁移（`ALTER TABLE ADD COLUMN`，旧数据保留，逐条 try-catch 容错 `duplicate column`、中断重试安全，`test/db_v11_migration_test.dart` 把守真实升级路径）；`oldVersion < 10` 的清库重建路径维持不变。
 
 ## 9. 风险
 
@@ -165,7 +203,7 @@ P6-B 补剂调研 ──┘
 
 外部依赖。华为资质与云康宝 SDK 都有可能长期不可得，方案里不把它们当作必经路径。
 
-资产体积。补剂库若走静态导入，`evidence_kb.json` 会明显增大，需在 P6-C 里同步评估是否改为按域拆分资产文件。
+资产体积。补剂库走静态导入后 `evidence_kb.json` 已达 384 KB，尚可接受。P6-D 已把体量最大的开放动作库（2428 条、约 2 MB）拆为独立资产 `exercise_catalog.json` 并改为按需加载；后续若再有单域数据超过数百 KB，沿用同一条拆分思路，并在单测里加规模与字段完整性断言。
 
 ## 10. 执行约定
 

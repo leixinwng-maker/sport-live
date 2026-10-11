@@ -77,7 +77,7 @@ void main() {
         30, (i) => {'role': i.isEven ? 'user' : 'assistant', 'content': '历史消息$i'});
     final reply = await service.sendMessage(history: history, userText: '你好');
 
-    expect(reply, '你好，我是问道智能体');
+    expect(reply.text, '你好，我是问道智能体');
     expect(engine.chatWithToolsCount, 1);
     expect(engine.chatFallbackCount, 0);
 
@@ -104,7 +104,7 @@ void main() {
     final reply =
         await service.sendMessage(history: [], userText: '我的身体情况如何？', onStatus: statuses.add);
 
-    expect(reply, '根据你的档案，BMI 处于正常区间');
+    expect(reply.text, '根据你的档案，BMI 处于正常区间');
     expect(engine.chatWithToolsCount, 2);
 
     final second = engine.toolRequests[1];
@@ -135,7 +135,7 @@ void main() {
 
     final reply = await service.sendMessage(history: [], userText: '今日概况');
 
-    expect(reply, contains('已达工具调用上限'));
+    expect(reply.text, contains('已达工具调用上限'));
     expect(engine.chatWithToolsCount, 6, reason: '循环上限 _maxToolRounds = 6');
 
     // 末轮请求追加强制收敛 system 提示
@@ -156,7 +156,7 @@ void main() {
     final first =
         await service.sendMessage(history: [], userText: '今天晚餐吃什么？', onStatus: statuses.add);
 
-    expect(first, '（简化模式）建议晚餐吃山药小米粥');
+    expect(first.text, '（简化模式）建议晚餐吃山药小米粥');
     expect(service.toolsUnsupported, isTrue);
     expect(engine.chatWithToolsCount, 1, reason: '降级后不应再发起 tools 请求');
     expect(statuses, ['简化模式生成中…']);
@@ -173,7 +173,7 @@ void main() {
 
     // 第二次发送：直接走降级路径，chatWithTools 计数不变
     final second = await service.sendMessage(history: [], userText: '那早餐呢');
-    expect(second, '（简化模式）建议晚餐吃山药小米粥');
+    expect(second.text, '（简化模式）建议晚餐吃山药小米粥');
     expect(engine.chatWithToolsCount, 1);
     expect(engine.chatFallbackCount, 2);
   });
@@ -181,26 +181,31 @@ void main() {
   test('T5-5 executeTool 分发：守卫/未知工具/空 query/days 钳制/工具表完整性', () async {
     // 未注入 provider：一律命中数据服务守卫
     final bare = AgentService(AIEngine());
-    expect(await bare.executeTool('get_user_profile', {}), '数据服务未就绪');
+    expect((await bare.executeTool('get_user_profile', {})).text, '数据服务未就绪');
 
     final service = AgentService(AIEngine())..provider = _FixtureProvider();
-    expect(await service.executeTool('no_such_tool', {}), '未知工具：no_such_tool');
-    expect(await service.executeTool('search_knowledge', {}), 'query 参数不能为空');
-    expect(await service.executeTool('search_knowledge', {'query': '   '}), 'query 参数不能为空');
+    expect((await service.executeTool('no_such_tool', {})).text, '未知工具：no_such_tool');
+    expect((await service.executeTool('search_knowledge', {})).text,
+        'query 参数不能为空');
+    expect((await service.executeTool('search_knowledge', {'query': '   '})).text,
+        'query 参数不能为空');
 
     // 档案分发：命中 fixture 文本
     expect(
-        await service.executeTool('get_user_profile', {}), '【测试档案】男，30 岁，175cm/70kg，中级训练者');
+        (await service.executeTool('get_user_profile', {})).text,
+        '【测试档案】男，30 岁，175cm/70kg，中级训练者');
 
     // days 参数钳制与解析：500 → 90；字符串 '3' → 3（空数据走格式化兜底文案）
-    expect(await service.executeTool('get_recent_workouts', {'days': 500}),
+    expect((await service.executeTool('get_recent_workouts', {'days': 500})).text,
         '最近 90 天没有训练记录');
-    expect(await service.executeTool('get_recent_workouts', {'days': '3'}),
+    expect((await service.executeTool('get_recent_workouts', {'days': '3'})).text,
         '最近 3 天没有训练记录');
 
-    // 工具表：17 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 + P6-A 用药安全 1 + P6-C 补剂常识 1），schema 结构与 required 完整
+    // 工具表：25 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 +
+    // P6-A 用药安全 1 + P6-C 补剂常识 1 + FIT-2 写工具 4 + P6-D 开放数据 3 + P7 体检报告 1），
+    // schema 结构与 required 完整
     final schemas = service.toolSchemas;
-    expect(schemas.length, 17);
+    expect(schemas.length, 25);
     final names = schemas.map((s) => (s['function'] as Map)['name']).toSet();
     expect(names, {
       'get_user_profile',
@@ -220,6 +225,14 @@ void main() {
       'search_condition_exercise',
       'search_otc_safety',
       'lookup_supplement',
+      'propose_workout_plan',
+      'propose_diet_plan',
+      'log_workout',
+      'log_diet',
+      'query_ontology',
+      'query_exercise_catalog',
+      'list_open_datasets',
+      'get_health_reports',
     });
     final search =
         schemas.firstWhere((s) => (s['function'] as Map)['name'] == 'search_knowledge');

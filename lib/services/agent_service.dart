@@ -2,16 +2,57 @@ import 'dart:convert';
 
 import '../models/diet.dart';
 import '../models/evidence.dart';
+import '../models/health_report.dart';
 import '../providers/app_provider.dart';
 import '../providers/wearable_provider.dart';
 import 'ai_engine.dart';
 import 'food_lookup_service.dart';
 
+/// 智能体写工具产出的「待确认载荷」（FIT-2 核心安全设计）
+///
+/// 所有写工具一律不落库，只把方案挂在此处；用户在前端卡片点「保存」后才写入。
+/// [type]：'workout_plan' | 'diet_plan' | 'workout_log' | 'diet_log'
+class PendingAction {
+  final String type;
+  final Map<String, dynamic> data;
+
+  const PendingAction({required this.type, required this.data});
+
+  Map<String, dynamic> toJson() => {'type': type, 'data': data};
+
+  /// 反序列化（容错）：缺失或类型不符时返回 null，调用方降级为纯文本展示。
+  static PendingAction? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final map = Map<String, dynamic>.from(json);
+    final type = map['type']?.toString();
+    final data = map['data'];
+    if (type == null || type.isEmpty || data is! Map) return null;
+    return PendingAction(type: type, data: Map<String, dynamic>.from(data));
+  }
+}
+
+/// 工具执行结果：可读文本回传模型；可选载荷另行挂出，不进入模型上下文。
+class ToolResult {
+  final String text;
+  final PendingAction? action;
+
+  const ToolResult(this.text, {this.action});
+}
+
+/// 一次回答的最终结果：纯文本 + 可选待确认方案 + 本轮工具查询次数
+class AgentReply {
+  final String text;
+  final PendingAction? action;
+  final int toolCount;
+
+  const AgentReply(this.text, {this.action, this.toolCount = 0});
+}
+
 /// AI 智能体：数据感知的多轮对话核心（P3）
 ///
 /// 职责：
 /// - 维护 agent 循环：模型返回 tool_calls → 本地执行工具 → role:'tool' 回传 → 再请求，上限 6 轮
-/// - 工具集：全部复用 [AppProvider] 已有数据与方法，返回人类可读文本
+/// - 工具集：读工具复用 [AppProvider] 数据返回可读文本；写工具只产 [PendingAction] 不落库
 /// - 降级：模型不支持 function calling 时自动切换"数据注入模式"
 class AgentService {
   final AIEngine engine;
@@ -40,13 +81,14 @@ class AgentService {
   ///
   /// [history] 先前对话（role: user/assistant，content: 文本），窗口自动裁剪
   /// [onStatus] 工具调用状态回调（UI 展示"正在查询：…"）
-  Future<String> sendMessage({
+  Future<AgentReply> sendMessage({
     required List<Map<String, dynamic>> history,
     required String userText,
     void Function(String status)? onStatus,
   }) async {
     if (_toolsUnsupported) {
-      return _sendWithInjection(history, userText, onStatus);
+      final text = await _sendWithInjection(history, userText, onStatus);
+      return AgentReply(text);
     }
 
     final messages = <Map<String, dynamic>>[
@@ -54,6 +96,9 @@ class AgentService {
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
+
+    PendingAction? action;
+    int toolCount = 0;
 
     for (int round = 0; round < _maxToolRounds; round++) {
       // 最后一轮强制收敛
@@ -70,12 +115,14 @@ class AgentService {
       } on ToolsUnsupportedException {
         // 首次发现模型不支持 tools → 降级为数据注入模式重答
         _toolsUnsupported = true;
-        return _sendWithInjection(history, userText, onStatus);
+        final text = await _sendWithInjection(history, userText, onStatus);
+        return AgentReply(text);
       }
 
       final calls = resp.toolCalls;
       if (calls == null || calls.isEmpty) {
-        return resp.text ?? '';
+        return AgentReply(resp.text ?? '',
+            action: action, toolCount: toolCount);
       }
 
       // assistant 消息（含 tool_calls 原始格式）入列
@@ -94,23 +141,26 @@ class AgentService {
             .toList(),
       });
 
-      // 逐个执行工具并以 role:'tool' 回传
+      // 逐个执行工具并以 role:'tool' 回传（载荷另行挂出，不进模型上下文）
       for (final tc in calls) {
         onStatus?.call('正在查询：${toolLabel(tc.name)}');
-        String result;
+        toolCount++;
+        ToolResult result;
         try {
           result = await executeTool(tc.name, tc.arguments);
         } catch (e) {
-          result = '工具执行失败：$e';
+          result = ToolResult('工具执行失败：$e');
         }
+        if (result.action != null) action = result.action;
         messages.add({
           'role': 'tool',
           'tool_call_id': tc.id,
-          'content': result,
+          'content': result.text,
         });
       }
     }
-    return '（已达工具调用上限，请换个问法或开新会话）';
+    return AgentReply('（已达工具调用上限，请换个问法或开新会话）',
+        action: action, toolCount: toolCount);
   }
 
   /// 降级模式：不带 tools，把用户上下文直接注入 system
@@ -148,7 +198,7 @@ class AgentService {
     return '你是"问道"App 的私人 AI 智能体——一位融合道家修炼、中医经络食疗、'
         '运动康复（苗振体系）与现代训练科学、营养学、财务规划的私人顾问。'
         '今天是 $today（周$week）。\n\n'
-        '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/穿戴数据/知识库/生活状态）。原则：\n'
+        '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/体检报告/穿戴数据/知识库/生活状态）。原则：\n'
         '1. 回答涉及用户数据的问题时，先调用相关工具获取事实，基于事实回答，绝不编造数据\n'
         '2. 可在一次回答中连续调用多个工具；已获取的信息不要重复查询\n'
         '3. 建议要具体可执行（动作/组次重量/食材克数/金额），体现"道法术养行"体系：'
@@ -158,6 +208,16 @@ class AgentService {
         '5. 需要用户穿戴设备数据（步数/静息心率/睡眠/体重体脂趋势/锻炼次数）时调用 get_wearable_summary；'
         '若返回"尚未授权"，如实说明并引导用户到「设置 → 运动健康数据」阅读同意并授权，'
         '严禁编造或凭常识估算用户的穿戴数据\n\n'
+        '健康档案规范（涉及体检报告、化验结果、复查安排、就医准备时必须遵守）：\n'
+        '1. 回答健康档案问题（上次某项多少、什么灯、有哪些异常、复查安排）必须先调用 '
+        'get_health_reports / get_health_metrics 获取事实；档案无数据时明确说明「档案中暂无记录」，'
+        '严禁编造数值或灯色\n'
+        '2. 灯色含义：红=显著超标/危急、黄=超出参考范围、蓝=临界、绿=正常；'
+        '引用报告数据时先说灯色再说数值\n'
+        '3. 检前咨询：基于历史异常指标建议关注加项（如「尿酸偏高，可考虑加查肾功能与关节超声」）；'
+        '免做项建议须注明「与医生确认后决定」；空腹、停药、憋尿等准备事项须提醒「遵医嘱」\n'
+        '4. 检后话术：先讲灯色总览，再逐项引用数值与参考范围，红灯项明确引导就医复查，不得淡化风险\n'
+        '5. 全程免责：AI 归纳不构成医疗诊断，异常指标请及时就医复查\n\n'
         '循证引用规范（涉及疾病、运动处方、营养建议时必须遵守）：\n'
         '1. 先调用 search_medical_evidence 检索本地循证库，再基于结果作答；'
         '需要具体动作/强度/食材时配合 query_exercise、query_met、lookup_food\n'
@@ -194,7 +254,18 @@ class AgentService {
         '可给一般性膳食建议但须声明依据不足\n'
         '4. 涉及药物相互作用、孕产哺乳、儿童青少年、老年及慢性病（尤其肾功能不全、肝病）人群时，'
         '只提示「咨询医师或药师」，不给具体剂量结论\n'
-        '5. 补剂不能替代均衡饮食与药物治疗；回答时保持中性，不夸大、不诱导购买';
+        '5. 补剂不能替代均衡饮食与药物治疗；回答时保持中性，不夸大、不诱导购买\n\n'
+        '方案生成规范（生成训练计划、饮食方案，或记录训练/饮食时必须遵守）：\n'
+        '1. 先调用 get_user_profile、get_recent_workouts、get_recent_diets、get_life_status '
+        '等工具获取事实，再据实生成，不得凭空设定\n'
+        '2. 训练计划里的动作必须来自 query_exercise 或 query_exercise_catalog 的检索结果，'
+        '不得编造动作名；饮食方案的食物克数与热量必须来自 lookup_food，不得凭空估算\n'
+        '3. 生成方案请调用 propose_workout_plan / propose_diet_plan；'
+        '记录已完成的训练或饮食请用 log_workout / log_diet。'
+        '这些工具只生成「待用户确认的卡片」，不会直接保存；用户点卡片上的保存按钮后才写入数据\n'
+        '4. 一次只输出一个方案；生成后用一两句话说明思路，并提示用户'
+        '「可在下方卡片确认或修改后保存」，不要在文字里重复罗列卡片中的全部明细\n'
+        '5. 用户明确表示「这只是建议、先别记」时，不要调用写工具，直接给文字建议即可';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -216,9 +287,28 @@ class AgentService {
               'days': {'type': 'integer', 'description': '回看天数，默认 3，最大 90'},
             }),
         _fn('get_finance_overview', '获取用户财务概况：月度收支、分类支出占比、资产负债概览', params: {}),
-        _fn('get_health_metrics', '查询用户最近 N 天的健康指标：血压、血糖、血脂、尿酸、心率、体脂率、体重等',
+        _fn('get_health_metrics', '查询用户最近 N 天的健康指标：血压、血糖、血脂、尿酸、心率、体脂率、体重等；每条含灯色（红=危急/黄=超出参考/蓝=临界/绿=正常）与参考范围',
             params: {
               'days': {'type': 'integer', 'description': '回看天数，默认 30，最大 90'},
+            }),
+        _fn('get_health_reports',
+            '查询用户的体检/化验报告档案：标题、日期、类型、风险灯色、AI 总评、指标数量；'
+                '传 report_id 时返回单份报告详情（含行动清单、入库指标、识别原文截断）',
+            params: {
+              'limit': {'type': 'integer', 'description': '返回条数，默认 5，最大 20'},
+              'report_type': {
+                'type': 'string',
+                'enum': ['体检', '化验', '影像', '门诊', '其他'],
+                'description': '按报告类型过滤，可省略',
+              },
+              'report_id': {
+                'type': 'string',
+                'description': '指定报告 id 时返回该报告详情（忽略 limit 与 report_type）',
+              },
+              'only_abnormal': {
+                'type': 'boolean',
+                'description': 'true 时只返回灯色为红或黄的异常报告，默认 false',
+              },
             }),
         _fn('search_knowledge', '在用户知识库（中医养生、道家哲学、运动康复、财务大师智慧、读书笔记）中检索相关片段',
             params: {
@@ -353,6 +443,224 @@ class AgentService {
               },
             },
             requiredParams: ['query']),
+        // ===== FIT-2 写工具（仅生成待用户确认的方案，不会直接保存）=====
+        _fn(
+            'propose_workout_plan',
+            '生成一份训练计划，并在前端挂出可编辑的待确认卡片。'
+                '**仅生成待用户确认的方案，不会直接保存**；用户点击卡片上的「保存」后才会写入数据。'
+                '动作须来自 query_exercise 的检索结果，不得编造动作名',
+            params: {
+              'name': {'type': 'string', 'description': '计划名称，如：三分化增肌计划'},
+              'goal': {'type': 'string', 'description': '目标（可选）：增肌/减脂/力量/塑形'},
+              'split': {'type': 'string', 'description': '分化方式（可选）：推拉腿/上下肢/三分化'},
+              'daysPerWeek': {'type': 'integer', 'description': '每周训练天数（可选）'},
+              'days': {
+                'type': 'array',
+                'description': '训练日列表，每天含 name 与 exercises',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'name': {'type': 'string', 'description': '当日名称，如：推日/上肢日/周一'},
+                    'exercises': {
+                      'type': 'array',
+                      'description': '当日动作列表',
+                      'items': {
+                        'type': 'object',
+                        'properties': {
+                          'name': {'type': 'string', 'description': '动作名（须来自动作库）'},
+                          'equipment': {'type': 'string', 'description': '器械（可选）'},
+                          'targetSets': {'type': 'integer', 'description': '目标组数'},
+                          'targetReps': {'type': 'integer', 'description': '目标次数'},
+                          'targetWeight': {
+                            'type': 'number',
+                            'description': '目标重量 kg（可选，自重动作可省略）',
+                          },
+                        },
+                        'required': ['name'],
+                      },
+                    },
+                  },
+                  'required': ['name', 'exercises'],
+                },
+              },
+            },
+            requiredParams: ['name', 'days']),
+        _fn(
+            'propose_diet_plan',
+            '生成一份饮食方案，并在前端挂出可编辑的待确认卡片。'
+                '**仅生成待用户确认的方案，不会直接保存**；用户点击卡片上的「保存」后才会写入数据。'
+                '食物克数与热量须来自 lookup_food，不得凭空估算',
+            params: {
+              'targetCalories': {
+                'type': 'number',
+                'description': '目标总热量 kcal（可选）',
+              },
+              'meals': {
+                'type': 'array',
+                'description': '餐次列表，每餐含 mealType 与 foods',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'mealType': {
+                      'type': 'string',
+                      'description': '餐次，如：早餐/午餐/晚餐/加餐',
+                    },
+                    'foods': {
+                      'type': 'array',
+                      'description': '该餐食物列表',
+                      'items': {
+                        'type': 'object',
+                        'properties': {
+                          'name': {'type': 'string', 'description': '食物名称'},
+                          'grams': {'type': 'number', 'description': '克数'},
+                          'calories': {'type': 'number', 'description': '热量 kcal'},
+                          'protein': {'type': 'number', 'description': '蛋白质 g'},
+                          'fat': {'type': 'number', 'description': '脂肪 g'},
+                          'carbs': {'type': 'number', 'description': '碳水 g'},
+                        },
+                        'required': ['name', 'grams'],
+                      },
+                    },
+                  },
+                  'required': ['mealType', 'foods'],
+                },
+              },
+            },
+            requiredParams: ['meals']),
+        _fn(
+            'log_workout',
+            '把一次已完成的训练整理成待确认记录，并在前端挂出可编辑卡片。'
+                '**仅生成待用户确认的记录，不会直接保存**；用户点击卡片上的「记为本日训练」后才会写入数据。'
+                '动作须来自 query_exercise 的检索结果，不得编造动作名',
+            params: {
+              'name': {'type': 'string', 'description': '本次训练名称，如：推日训练'},
+              'goal': {'type': 'string', 'description': '训练目标（可选）'},
+              'split': {'type': 'string', 'description': '分化方式（可选）'},
+              'days': {
+                'type': 'array',
+                'description': '训练日列表（记录已完成训练时通常只需一天）',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'name': {'type': 'string', 'description': '当日名称，如：今天'},
+                    'exercises': {
+                      'type': 'array',
+                      'items': {
+                        'type': 'object',
+                        'properties': {
+                          'name': {'type': 'string', 'description': '动作名（须来自动作库）'},
+                          'equipment': {'type': 'string', 'description': '器械（可选）'},
+                          'targetSets': {'type': 'integer', 'description': '组数'},
+                          'targetReps': {'type': 'integer', 'description': '次数'},
+                          'targetWeight': {'type': 'number', 'description': '重量 kg（可选）'},
+                        },
+                        'required': ['name'],
+                      },
+                    },
+                  },
+                  'required': ['name', 'exercises'],
+                },
+              },
+            },
+            requiredParams: ['name', 'days']),
+        _fn(
+            'log_diet',
+            '把一餐/一天的饮食整理成待确认记录，并在前端挂出可编辑卡片。'
+                '**仅生成待用户确认的记录，不会直接保存**；用户点击卡片上的「保存到今日饮食」后才会写入数据。'
+                '食物克数与热量须来自 lookup_food，不得凭空估算',
+            params: {
+              'date': {
+                'type': 'string',
+                'description': '日期（可选，YYYY-MM-DD，默认今天）',
+              },
+              'meals': {
+                'type': 'array',
+                'description': '餐次列表，每餐含 mealType 与 foods',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'mealType': {
+                      'type': 'string',
+                      'description': '餐次，如：早餐/午餐/晚餐/加餐',
+                    },
+                    'foods': {
+                      'type': 'array',
+                      'items': {
+                        'type': 'object',
+                        'properties': {
+                          'name': {'type': 'string', 'description': '食物名称'},
+                          'grams': {'type': 'number', 'description': '克数'},
+                          'calories': {'type': 'number', 'description': '热量 kcal'},
+                          'protein': {'type': 'number', 'description': '蛋白质 g'},
+                          'fat': {'type': 'number', 'description': '脂肪 g'},
+                          'carbs': {'type': 'number', 'description': '碳水 g'},
+                        },
+                        'required': ['name', 'grams'],
+                      },
+                    },
+                  },
+                  'required': ['mealType', 'foods'],
+                },
+              },
+            },
+            requiredParams: ['meals']),
+        // ===== P6-D 开放数据工具（本体术语 / 开放动作库 / 数据源登记表）=====
+        _fn(
+            'query_ontology',
+            '检索运动医学与康复本体术语（EXMO 运动医学本体 / RehabO 康复本体）：'
+                '返回上游原始术语、定义、同义词与父子关系。'
+                '**术语为上游英文原文，未翻译改写**；用于对齐专业概念、回答术语含义类问题，'
+                '不得据此推断疾病疗效，也不得把本体术语当作临床建议',
+            params: {
+              'query': {
+                'type': 'string',
+                'description': '检索词（建议英文原词），如：exercise、rehabilitation、'
+                    'muscle strength、range of motion',
+              },
+              'ontology': {
+                'type': 'string',
+                'description': '限定本体（可选）：EXMO（运动医学）或 RehabO（康复）',
+              },
+            },
+            requiredParams: ['query']),
+        _fn(
+            'query_exercise_catalog',
+            '检索开放动作库（Exercises Dataset 1324 条含中文说明 + Free Exercise DB 738 条 + Longhaul Exercises 366 条，共 2428 条）：'
+                '按身体部位 / 器械 / 关键词返回动作名称、目标肌群与步骤说明。'
+                '与 query_exercise 相比覆盖面更大且含中文步骤，适合扩充选动作范围；'
+                '**仅收录公开许可的名称与说明文本，不含任何图片/视频等媒体资源**',
+            params: {
+              'body_part': {
+                'type': 'string',
+                'description': '身体部位，如：胸、背、腿、肩、手臂、腰腹',
+              },
+              'equipment': {
+                'type': 'string',
+                'description': '器械，如：杠铃、哑铃、自重、器械',
+              },
+              'keyword': {'type': 'string', 'description': '动作关键词（中英文均可）'},
+              'zh_only': {
+                'type': 'boolean',
+                'description': '仅返回带中文说明的条目，默认 false',
+              },
+            }),
+        _fn(
+            'list_open_datasets',
+            '查询开放数据与本体登记表：返回各数据源的名称、类型、领域、规模、许可协议'
+                '与接入状态。access 为「已接入 / 可接入」表示本地可直接使用；'
+                '「登记题录」表示仅为线索条目、**尚未入库任何数据**。'
+                '用于回答「有哪些开源数据可用」「某数据源能否用」这类问题',
+            params: {
+              'keyword': {'type': 'string', 'description': '关键词（可选）'},
+              'kind': {
+                'type': 'string',
+                'description': '类型（可选）：本体、知识图谱、数据集、食品数据库、开源软件',
+              },
+              'access': {
+                'type': 'string',
+                'description': '接入状态（可选）：已接入、可接入、登记题录',
+              },
+            }),
       ];
 
   Map<String, dynamic> _fn(
@@ -383,6 +691,7 @@ class AgentService {
     'get_recent_diets': '饮食记录',
     'get_finance_overview': '财务概况',
     'get_health_metrics': '健康指标',
+    'get_health_reports': '体检报告',
     'search_knowledge': '知识库',
     'get_life_status': '生活状态',
     'search_medical_evidence': '循证文献',
@@ -394,6 +703,15 @@ class AgentService {
     'search_condition_exercise': '疾病运动',
     'search_otc_safety': '用药安全',
     'lookup_supplement': '补剂常识',
+    // P6-D 开放数据
+    'query_ontology': '本体术语',
+    'query_exercise_catalog': '开放动作库',
+    'list_open_datasets': '数据源登记表',
+    // FIT-2 写工具
+    'propose_workout_plan': '生成训练计划',
+    'propose_diet_plan': '生成饮食方案',
+    'log_workout': '记录训练',
+    'log_diet': '记录饮食',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -402,7 +720,118 @@ class AgentService {
   // 工具执行
   // ---------------------------------------------------------------------------
 
-  Future<String> executeTool(String name, Map<String, dynamic> args) async {
+  /// 统一工具入口：写工具只产 [PendingAction]（绝不落库），读工具复用 [_runReadTool]。
+  Future<ToolResult> executeTool(String name, Map<String, dynamic> args) async {
+    switch (name) {
+      case 'propose_workout_plan':
+        return _buildWorkoutProposal(args, 'workout_plan');
+      case 'log_workout':
+        return _buildWorkoutProposal(args, 'workout_log');
+      case 'propose_diet_plan':
+        return _buildDietProposal(args, 'diet_plan');
+      case 'log_diet':
+        return _buildDietProposal(args, 'diet_log');
+      default:
+        return ToolResult(await _runReadTool(name, args));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // FIT-2 写工具：只产载荷，绝不落库（用户在前端卡片确认后才写入）
+  // ---------------------------------------------------------------------------
+
+  /// 生成「训练计划 / 训练记录」的待确认载荷
+  ToolResult _buildWorkoutProposal(Map<String, dynamic> args, String type) {
+    final name = (args['name'] ?? '').toString().trim();
+    if (name.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 name（计划名称）');
+    }
+    final rawDays = args['days'];
+    if (rawDays is! List || rawDays.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 days（至少一个训练日）');
+    }
+    final days = <Map<String, dynamic>>[];
+    for (final d in rawDays) {
+      if (d is! Map) continue;
+      final dayMap = Map<String, dynamic>.from(d);
+      final rawEx = dayMap['exercises'];
+      final exercises = <Map<String, dynamic>>[];
+      if (rawEx is List) {
+        for (final e in rawEx) {
+          if (e is Map) exercises.add(Map<String, dynamic>.from(e));
+        }
+      }
+      if (exercises.isEmpty) continue;
+      days.add({
+        'name': (dayMap['name'] ?? '训练日').toString(),
+        'exercises': exercises,
+      });
+    }
+    if (days.isEmpty) {
+      return const ToolResult('参数校验失败：days 中每天都需要至少一个 exercises 条目');
+    }
+    final data = <String, dynamic>{
+      'name': name,
+      if ((args['goal'] ?? '').toString().trim().isNotEmpty)
+        'goal': args['goal'].toString().trim(),
+      if ((args['split'] ?? '').toString().trim().isNotEmpty)
+        'split': args['split'].toString().trim(),
+      if (args['daysPerWeek'] != null) 'daysPerWeek': args['daysPerWeek'],
+      'days': days,
+    };
+    final label = type == 'workout_log' ? '训练记录' : '训练计划';
+    return ToolResult(
+      '已生成待确认的$label「$name」（共 ${days.length} 天）。'
+      '该$label尚未保存，需用户在前端卡片上点击保存按钮后才会写入。'
+      '请提示用户「可在下方卡片确认或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: type, data: data),
+    );
+  }
+
+  /// 生成「饮食方案 / 饮食记录」的待确认载荷
+  ToolResult _buildDietProposal(Map<String, dynamic> args, String type) {
+    final rawMeals = args['meals'];
+    if (rawMeals is! List || rawMeals.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 meals（至少一个餐次）');
+    }
+    final meals = <Map<String, dynamic>>[];
+    for (final m in rawMeals) {
+      if (m is! Map) continue;
+      final mealMap = Map<String, dynamic>.from(m);
+      final rawFoods = mealMap['foods'];
+      final foods = <Map<String, dynamic>>[];
+      if (rawFoods is List) {
+        for (final f in rawFoods) {
+          if (f is Map) foods.add(Map<String, dynamic>.from(f));
+        }
+      }
+      if (foods.isEmpty) continue;
+      meals.add({
+        'mealType':
+            (mealMap['mealType'] ?? mealMap['meal_type'] ?? '正餐').toString(),
+        'foods': foods,
+      });
+    }
+    if (meals.isEmpty) {
+      return const ToolResult('参数校验失败：meals 中每一餐都需要至少一个 foods 条目');
+    }
+    final data = <String, dynamic>{
+      if (args['targetCalories'] != null)
+        'targetCalories': args['targetCalories'],
+      if ((args['date'] ?? '').toString().trim().isNotEmpty)
+        'date': args['date'].toString().trim(),
+      'meals': meals,
+    };
+    final label = type == 'diet_log' ? '饮食记录' : '饮食方案';
+    return ToolResult(
+      '已生成待确认的$label（共 ${meals.length} 餐）。'
+      '该$label尚未保存，需用户在前端卡片上点击保存按钮后才会写入。'
+      '请提示用户「可在下方卡片确认或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: type, data: data),
+    );
+  }
+
+  Future<String> _runReadTool(String name, Map<String, dynamic> args) async {
     final p = provider;
     if (p == null) return '数据服务未就绪';
 
@@ -419,6 +848,8 @@ class AgentService {
         return _clip(_formatDiets(_daysArg(args, 3)));
       case 'get_health_metrics':
         return _clip(_formatHealthMetrics(_daysArg(args, 30)));
+      case 'get_health_reports':
+        return _clip(_formatHealthReports(args));
       case 'get_life_status':
         return _clip(_formatLifeStatus(_daysArg(args, 7)));
       case 'search_knowledge':
@@ -488,6 +919,39 @@ class AgentService {
         final hits = p.searchSupplement(query,
             topic: topic.isEmpty ? null : topic, topN: 4);
         return _clip(_formatSupplement(hits, '$topic $query'.trim()));
+      case 'query_ontology':
+        final q = (args['query'] ?? '').toString().trim();
+        final onto = (args['ontology'] ?? '').toString().trim();
+        if (q.isEmpty && onto.isEmpty) return 'query 参数不能为空';
+        final terms = p.searchOntology(q,
+            ontology: onto.isEmpty ? null : onto, topN: 5);
+        return _clip(_formatOntology(terms, q.isEmpty ? onto : q));
+      case 'query_exercise_catalog':
+        final bp = (args['body_part'] ?? '').toString().trim();
+        final eq = (args['equipment'] ?? '').toString().trim();
+        final kw = (args['keyword'] ?? '').toString().trim();
+        if (bp.isEmpty && eq.isEmpty && kw.isEmpty) {
+          return '请至少提供 body_part / equipment / keyword 之一';
+        }
+        final catalog = await p.searchExerciseCatalog(
+          bodyPart: bp.isEmpty ? null : bp,
+          equipment: eq.isEmpty ? null : eq,
+          keyword: kw.isEmpty ? null : kw,
+          zhOnly: args['zh_only'] == true,
+          topN: 5,
+        );
+        return _clip(_formatCatalogExercise(catalog));
+      case 'list_open_datasets':
+        final kw = (args['keyword'] ?? '').toString().trim();
+        final kind = (args['kind'] ?? '').toString().trim();
+        final access = (args['access'] ?? '').toString().trim();
+        final rows = p.searchDatasetRegistry(
+          keyword: kw.isEmpty ? null : kw,
+          kind: kind.isEmpty ? null : kind,
+          access: access.isEmpty ? null : access,
+          topN: 10,
+        );
+        return _clip(_formatDatasetRegistry(rows));
       default:
         return '未知工具：$name';
     }
@@ -571,7 +1035,111 @@ class AgentService {
     for (final m in list) {
       final unit = (m.unit ?? m.defaultUnit).isNotEmpty ? ' ${m.unit ?? m.defaultUnit}' : '';
       final note = m.note.isNotEmpty ? '（${m.note}）' : '';
-      sb.write('\n- ${_fmtDate(m.date)} ${m.type}: ${m.value}$unit$note');
+      final light = m.riskLevel.isNotEmpty ? '（${_lightName(m.riskLevel)}）' : '';
+      final range = m.referenceRange.isNotEmpty ? ' 参考 ${m.referenceRange}' : '';
+      sb.write('\n- ${_fmtDate(m.date)} ${m.type}: ${m.value}$unit$note$light$range');
+    }
+    return sb.toString();
+  }
+
+  /// 灯色代码 → 中文名（red=红、yellow=黄、blue=蓝、green=绿）
+  String _lightName(String code) => switch (code) {
+        'red' => '红',
+        'yellow' => '黄',
+        'blue' => '蓝',
+        'green' => '绿',
+        _ => '未评级',
+      };
+
+  /// 体检报告档案（P7-T7）：列表或单份详情
+  String _formatHealthReports(Map<String, dynamic> args) {
+    final p = provider!;
+    final reportId = (args['report_id'] ?? '').toString().trim();
+    if (reportId.isNotEmpty) {
+      HealthReport? r;
+      for (final x in p.healthReports) {
+        if (x.id == reportId) {
+          r = x;
+          break;
+        }
+      }
+      if (r == null) return '未找到 id 为 $reportId 的报告';
+      return _formatHealthReportDetail(r);
+    }
+
+    var list = p.healthReports.toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final reportType = (args['report_type'] ?? '').toString().trim();
+    if (reportType.isNotEmpty && reportType != '全部') {
+      list = list.where((r) => r.reportType == reportType).toList();
+    }
+    if (args['only_abnormal'] == true) {
+      list = list
+          .where((r) => r.riskLevel == 'red' || r.riskLevel == 'yellow')
+          .toList();
+    }
+    if (list.isEmpty) {
+      return args['only_abnormal'] == true
+          ? '没有灯色为红/黄的异常报告'
+          : '暂无体检报告记录';
+    }
+    final rawLimit = args['limit'];
+    final limit =
+        rawLimit is int && rawLimit > 0 && rawLimit <= 20 ? rawLimit : 5;
+    final sb = StringBuffer(
+        '共 ${list.length} 份报告，返回最近 $limit 份（按日期倒序）：');
+    for (final r in list.take(limit)) {
+      final metricCount = p.healthMetrics
+          .where((m) => r.id != null && m.sourceReportId == r.id)
+          .length;
+      sb.write('\n- id:${r.id} ${_fmtDate(r.date)} ${r.reportType}'
+          '（${_lightName(r.riskLevel)}）${r.title}'
+          ' 指标 $metricCount 项');
+      if (r.aiSummary.isNotEmpty) sb.write('\n  总评：${r.aiSummary}');
+    }
+    sb.write('\n需要某份报告的行动清单/指标明细/原文时，传该报告 report_id 再查。');
+    return sb.toString();
+  }
+
+  /// 单份报告详情：行动清单 + 入库指标 + 识别原文（截断 4000 字）
+  String _formatHealthReportDetail(HealthReport r) {
+    final p = provider!;
+    final sb = StringBuffer('报告详情：${r.title}\n'
+        '- 日期：${_fmtDate(r.date)}，类型：${r.reportType}，'
+        '灯色：${_lightName(r.riskLevel)}\n');
+    if (r.aiSummary.isNotEmpty) sb.write('- AI 总评：${r.aiSummary}\n');
+
+    final actions = r.actions;
+    if (actions.isNotEmpty) {
+      sb.write('- 行动清单：\n');
+      for (final a in actions) {
+        final due = a.dueDate != null ? '，截止 ${_fmtDate(a.dueDate!)}' : '';
+        sb.write('  * ${a.title}（${a.category}/${a.light.label}，'
+            '${a.done ? '已完成' : '未完成'}$due）'
+            '${a.detail.isNotEmpty ? '：${a.detail}' : ''}\n');
+      }
+    }
+
+    final metrics = p.healthMetrics
+        .where((m) => r.id != null && m.sourceReportId == r.id)
+        .toList();
+    if (metrics.isNotEmpty) {
+      sb.write('- 入库指标：\n');
+      for (final m in metrics) {
+        final unit =
+            (m.unit ?? m.defaultUnit).isNotEmpty ? ' ${m.unit ?? m.defaultUnit}' : '';
+        final range =
+            m.referenceRange.isNotEmpty ? '，参考 ${m.referenceRange}' : '';
+        sb.write('  * ${m.type}: ${m.value}$unit'
+            '（${_lightName(m.riskLevel)}$range）\n');
+      }
+    }
+
+    final ocr = r.ocrText.trim();
+    if (ocr.isNotEmpty) {
+      final clipped =
+          ocr.length > 4000 ? '${ocr.substring(0, 4000)}…（已截断）' : ocr;
+      sb.write('- 识别原文：\n$clipped\n');
     }
     return sb.toString();
   }
@@ -651,6 +1219,50 @@ class AgentService {
       final en = x.nameEn.isEmpty ? '' : '（${x.nameEn}）';
       sb.write('\n- ${x.name}$en｜肌群：${x.muscle}｜器械：${x.equipment}｜难度：${x.level}');
       if (x.cues.isNotEmpty) sb.write('\n  要领：${x.cues}');
+    }
+    return sb.toString();
+  }
+
+  /// P6-D1 本体术语格式化：术语为上游英文原文，输出中显式声明未翻译，
+  /// 避免模型把英文术语当作「已懂」而自行发挥。
+  String _formatOntology(List<OntologyTerm> list, String query) {
+    if (list.isEmpty) {
+      return '本体术语库未找到与「$query」匹配的术语。'
+          '本体术语为上游英文原文（未翻译），建议改用英文关键词，'
+          '如 exercise、rehabilitation、muscle strength、range of motion。';
+    }
+    final sb = StringBuffer('本体术语（来源：EXMO 运动医学本体 / RehabO 康复本体；'
+        '均为上游英文原文与定义，未翻译改写）：');
+    for (final t in list) {
+      sb.write('\n\n${t.toToolText()}');
+    }
+    return sb.toString();
+  }
+
+  /// P6-D3 开放动作库格式化：仅名称与文字说明，无媒体资源。
+  String _formatCatalogExercise(List<CatalogExercise> list) {
+    if (list.isEmpty) {
+      return '开放动作库未找到匹配动作，可放宽部位 / 器械条件或换关键词。';
+    }
+    final sb = StringBuffer('开放动作库结果（来源：Exercises Dataset 含中文说明 + '
+        'Free Exercise DB；仅公开许可的名称与说明文本，无媒体资源）：');
+    for (final x in list) {
+      sb.write('\n\n${x.toToolText()}');
+    }
+    return sb.toString();
+  }
+
+  /// P6-D2 开放数据登记表格式化：显式区分「已接入 / 可接入」与「登记题录」，
+  /// 防止模型把未入库的线索条目当作可用数据引用。
+  String _formatDatasetRegistry(List<DatasetRegistryEntry> list) {
+    if (list.isEmpty) {
+      return '开放数据登记表未找到匹配条目。';
+    }
+    final sb = StringBuffer('开放数据与本体登记表（仅元数据）：「已接入 / 可接入」'
+        '为本地可直接使用；「登记题录」仅为线索条目，**本地未入库任何数据，'
+        '回答时不得当作已有数据引用**：');
+    for (final e in list) {
+      sb.write('\n\n${e.toToolText()}');
     }
     return sb.toString();
   }

@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/health_metric.dart';
+import '../models/health_report.dart';
 import 'vision/vision_exceptions.dart';
 import 'vision/vision_service.dart';
 
@@ -367,6 +368,66 @@ class AIEngine {
       {'role': 'user', 'content': '报告日期：$dateStr\n报告原文：\n$ocrText'},
     ];
     return _chatExact(messages);
+  }
+
+  /// 多报告连读（P7-T6）：把多份报告组装成纵向对比语料，走主 AI 输出趋势分析。
+  ///
+  /// [reports] 应为按日期升序的 2-8 份报告；[metricsByReport] 为报告 id →
+  /// 该报告入库指标（Provider 用 getHealthMetricsByReport 批量聚合）。
+  /// 无指标的报告自动附截断 OCR 原文（每份 ≤1500 字）参与分析。
+  Future<String> analyzeReportsTrend({
+    required List<HealthReport> reports,
+    required Map<String, List<HealthMetric>> metricsByReport,
+  }) async {
+    const lightLabel = {'red': '红', 'yellow': '黄', 'blue': '蓝', 'green': '绿'};
+    String lightOf(String code) =>
+        lightLabel[code] ?? (code.isEmpty ? '未评级' : code);
+
+    final buf = StringBuffer();
+    for (final r in reports) {
+      final dateStr = r.date.toIso8601String().substring(0, 10);
+      buf.writeln('【报告】$dateStr ${r.reportType}（总灯色：${lightOf(r.riskLevel)}）${r.title}');
+      buf.writeln('总评：${r.aiSummary.isEmpty ? '（无）' : r.aiSummary}');
+      final metrics =
+          r.id == null ? null : (metricsByReport[r.id!] ?? const []);
+      if (metrics != null && metrics.isNotEmpty) {
+        buf.writeln('入库指标：');
+        for (final m in metrics) {
+          final range = m.referenceRange.isEmpty ? '未记录' : m.referenceRange;
+          buf.writeln(
+              '- ${m.type}: ${m.value}${m.unit ?? ''}（${lightOf(m.riskLevel)}，参考 $range）');
+        }
+      } else if (r.ocrText.trim().isNotEmpty) {
+        final t = r.ocrText.trim();
+        final clipped = t.length > 1500
+            ? '${t.substring(0, 1500)}…（原文超长已截断）'
+            : t;
+        buf.writeln('该报告无入库指标，识别原文（截断）：\n$clipped');
+      } else {
+        buf.writeln('该报告无入库指标、无识别原文。');
+      }
+      buf.writeln();
+    }
+
+    const system = '你是健康数据趋势分析助手。只基于用户给定的多份报告数据做纵向对比，'
+        '禁止编造任何数据；数据缺失时明确说明。\n'
+        '输出要求（Markdown）：\n'
+        '1. 「逐指标对比表」：对跨报告出现的同一指标，输出 Markdown 表格，'
+        '列为日期（升序），行为指标（类型+单位），单元格为「值（灯色）」，'
+        '灯色用 红/黄/蓝/绿 汉字（red=红、yellow=黄、blue=蓝、green=绿）；\n'
+        '2. 「趋势判读」：对关键指标给出 持续升高/持续降低/波动/改善/稳定 的结论并简述意义；\n'
+        '3. 「隐蔽信号」：单期看似正常但多期连看有方向性变化的信号；\n'
+        '4. 「仅一次记录」：只出现在单份报告的指标归入本节，不做趋势判断；\n'
+        '5. 末尾免责声明：本分析仅供参考，不构成医疗诊断，异常指标请及时就医。';
+
+    final messages = [
+      {'role': 'system', 'content': system},
+      {
+        'role': 'user',
+        'content': '以下是用户选择的 ${reports.length} 份报告（按日期排序）：\n\n$buf',
+      },
+    ];
+    return chat(messages);
   }
 
   /// 生成每日建议

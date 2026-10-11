@@ -1551,6 +1551,18 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
+  /// 多报告连读（P7-T6）：按报告聚合入库指标后交给主 AI 做趋势对比。
+  Future<String> analyzeReportsTrend(List<HealthReport> reports) async {
+    final metricsByReport = <String, List<HealthMetric>>{};
+    for (final r in reports) {
+      final id = r.id;
+      if (id == null) continue;
+      metricsByReport[id] = await _db.getHealthMetricsByReport(id);
+    }
+    final sorted = [...reports]..sort((a, b) => a.date.compareTo(b.date));
+    return _ai.analyzeReportsTrend(reports: sorted, metricsByReport: metricsByReport);
+  }
+
   String _userProfileText() {
     final p = userProfile;
     if (p == null) return '未填写';

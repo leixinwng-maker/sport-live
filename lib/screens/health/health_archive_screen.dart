@@ -10,6 +10,7 @@ import 'health_light.dart';
 import 'health_profile_edit_screen.dart';
 import 'health_metric_edit_screen.dart';
 import 'health_report_add_screen.dart';
+import 'health_report_compare_screen.dart';
 import 'health_report_detail_sheet.dart';
 import 'body_composition_screen.dart';
 import 'body_trend_screen.dart';
@@ -511,6 +512,25 @@ class _ReportsTabState extends State<_ReportsTab> {
                       fontWeight: FontWeight.bold,
                       color: TaoistTheme.inkBlack,
                     ),
+                  ),
+                ),
+                // 多报告连读（P7-T6）：不足 2 份禁用
+                Tooltip(
+                  message: all.length >= 2 ? '' : '需要至少 2 份报告',
+                  child: TextButton.icon(
+                    onPressed: all.length >= 2
+                        ? () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const HealthReportCompareScreen(),
+                              ),
+                            );
+                          }
+                        : null,
+                    icon: const Icon(Icons.insights, size: 18),
+                    label: const Text('连读'),
                   ),
                 ),
                 ElevatedButton.icon(

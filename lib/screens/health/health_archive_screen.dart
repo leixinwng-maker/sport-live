@@ -9,6 +9,7 @@ import 'health_profile_edit_screen.dart';
 import 'health_metric_edit_screen.dart';
 import 'health_report_add_screen.dart';
 import 'body_composition_screen.dart';
+import 'body_trend_screen.dart';
 
 /// 健康档案主页面（档案信息 / 健康指标 / 体检报告）
 class HealthArchiveScreen extends StatefulWidget {
@@ -44,7 +45,7 @@ class _HealthArchiveScreenState extends State<HealthArchiveScreen>
           tabs: const [
             Tab(text: '档案信息'),
             Tab(text: '健康指标'),
-            Tab(text: '体检报告'),
+            Tab(text: '健康报告'),
           ],
         ),
       ),
@@ -225,6 +226,22 @@ class _MetricsTab extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BodyTrendScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.show_chart, size: 18),
+                label: const Text('身体数据趋势（体重 / 体脂 / 围度）'),
+              ),
             ),
             const SizedBox(height: 12),
             if (metrics.isEmpty)
@@ -454,15 +471,28 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-// ==================== 体检报告 ====================
-class _ReportsTab extends StatelessWidget {
+// ==================== 健康报告 ====================
+class _ReportsTab extends StatefulWidget {
   const _ReportsTab();
+
+  @override
+  State<_ReportsTab> createState() => _ReportsTabState();
+}
+
+class _ReportsTabState extends State<_ReportsTab> {
+  static const List<String> _filterTypes = [
+    '全部', '体检', '化验', '影像', '门诊', '其他',
+  ];
+  String _filter = '全部';
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
-        final reports = provider.healthReports;
+        final all = provider.healthReports;
+        final reports = _filter == '全部'
+            ? all
+            : all.where((r) => r.reportType == _filter).toList();
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -493,6 +523,34 @@ class _ReportsTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            SizedBox(
+              height: 32,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _filterTypes.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, i) {
+                  final t = _filterTypes[i];
+                  final selected = t == _filter;
+                  return ChoiceChip(
+                    label: Text(
+                      t,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: selected ? Colors.white : TaoistTheme.inkBlack,
+                      ),
+                    ),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _filter = t),
+                    selectedColor: TaoistTheme.jadeGreen,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
             if (reports.isEmpty)
               const Card(
                 child: Padding(
@@ -659,6 +717,59 @@ class _ReportCard extends StatelessWidget {
     );
   }
 
+  /// 报告类型小标签（T3 占位样式，T5 统一视觉）
+  Widget _buildTypeTag(String type) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: TaoistTheme.jadeGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        type,
+        style: const TextStyle(fontSize: 10, color: TaoistTheme.teaBrown),
+      ),
+    );
+  }
+
+  /// 风险灯色圆点（T3 占位映射，T4 统一为灯色工具类）
+  Widget _buildRiskDot(String riskLevel) {
+    final Color color;
+    final String label;
+    switch (riskLevel) {
+      case 'red':
+        color = const Color(0xFFD9534F);
+        label = '红灯';
+      case 'yellow':
+        color = const Color(0xFFF0AD4E);
+        label = '黄灯';
+      case 'blue':
+        color = const Color(0xFF4A90D9);
+        label = '蓝灯';
+      case 'green':
+        color = const Color(0xFF5CB85C);
+        label = '绿灯';
+      default:
+        color = TaoistTheme.cloudGray;
+        label = '未评级';
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: TaoistTheme.cloudGray),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = report.date;
@@ -703,6 +814,14 @@ class _ReportCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _buildTypeTag(report.reportType),
+                    const SizedBox(width: 8),
+                    _buildRiskDot(report.riskLevel),
                   ],
                 ),
                 const SizedBox(height: 6),

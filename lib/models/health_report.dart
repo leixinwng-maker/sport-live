@@ -1,12 +1,15 @@
-/// 体检报告（图片/PDF 存储 + 识别文本 + AI 解读）
+/// 健康报告（图片/PDF 存储 + 识别文本 + AI 解读 + 类型/风险评级/行动清单）
 class HealthReport {
   final String? id;
-  final DateTime date; // 体检日期
+  final DateTime date; // 报告日期
   final String title; // 报告名称（默认：YYYY年体检报告）
   final String filePath; // 本地文件路径（图片/PDF）
   final String fileType; // image / pdf
   final String ocrText; // 图片识别出的文本内容（供 AI 解读/检索）
   final String aiSummary; // AI 解读结果
+  final String reportType; // 报告类型：体检/化验/影像/门诊/其他
+  final String riskLevel; // 风险等级：''（未评级）/red/yellow/blue/green
+  final String actionsJson; // 行动清单 JSON 占位（T4 替换为强类型解析）
   final DateTime createdAt;
 
   const HealthReport({
@@ -17,6 +20,9 @@ class HealthReport {
     required this.fileType,
     this.ocrText = '',
     this.aiSummary = '',
+    this.reportType = '体检',
+    this.riskLevel = '',
+    this.actionsJson = '[]',
     required this.createdAt,
   });
 
@@ -29,6 +35,9 @@ class HealthReport {
       'file_type': fileType,
       'ocr_text': ocrText,
       'ai_summary': aiSummary,
+      'report_type': reportType,
+      'risk_level': riskLevel,
+      'actions_json': actionsJson,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -42,6 +51,9 @@ class HealthReport {
       fileType: map['file_type'] ?? 'image',
       ocrText: map['ocr_text'] ?? '',
       aiSummary: map['ai_summary'] ?? '',
+      reportType: map['report_type'] ?? '体检',
+      riskLevel: map['risk_level'] ?? '',
+      actionsJson: map['actions_json'] ?? '[]',
       createdAt: DateTime.parse(map['created_at']),
     );
   }
@@ -54,6 +66,9 @@ class HealthReport {
     String? fileType,
     String? ocrText,
     String? aiSummary,
+    String? reportType,
+    String? riskLevel,
+    String? actionsJson,
     DateTime? createdAt,
   }) {
     return HealthReport(
@@ -64,6 +79,9 @@ class HealthReport {
       fileType: fileType ?? this.fileType,
       ocrText: ocrText ?? this.ocrText,
       aiSummary: aiSummary ?? this.aiSummary,
+      reportType: reportType ?? this.reportType,
+      riskLevel: riskLevel ?? this.riskLevel,
+      actionsJson: actionsJson ?? this.actionsJson,
       createdAt: createdAt ?? this.createdAt,
     );
   }

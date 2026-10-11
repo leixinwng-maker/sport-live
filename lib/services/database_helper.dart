@@ -10,7 +10,9 @@ import 'package:uuid/uuid.dart';
 
 import '../models/user_profile.dart';
 import '../models/workout.dart';
+import '../models/workout_plan.dart';
 import '../models/diet.dart';
+import '../models/fasting.dart';
 import '../models/finance.dart';
 import '../models/knowledge.dart';
 import '../models/life_status.dart';
@@ -21,11 +23,11 @@ import '../models/health_report.dart';
 import '../models/wearable.dart';
 import 'db_platform.dart';
 
-/// P2 云端化数据层（schema v8）。
+/// P2 云端化数据层（schema v10）。
 ///
 /// 设计要点（详见 docs/superpowers/specs/2026-10-07-p2-cloud-client-design.md）：
 /// - 服务器是唯一真相源，本地库只是展示缓存 + 待传队列；
-/// - 用户数据 13 表：TEXT(UUID) 主键 + sync_version / sync_updated_at，
+/// - 用户数据 15 表（v10 新增 fasting_sessions）：TEXT(UUID) 主键 + sync_version / sync_updated_at，
 ///   所有写路径在同一事务内完成「业务写 → 更新 sync_updated_at → 入队 sync_queue」；
 /// - 静态种子 3 表（food_catalog / knowledge_entries / books）：不进云，
 ///   使用确定性 UUID（UUIDv5 按名称生成），清库重播种后 id 不变，
@@ -59,7 +61,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 8,
+        version: 11,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -69,7 +71,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 8,
+        version: 11,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -123,7 +125,7 @@ class DatabaseHelper {
     await factory.deleteDatabase(f);
   }
 
-  // ============ schema v8 ============
+  // ============ schema v10 ============
 
   Future<void> _createTables(Database db, int version) async {
     // ---- 用户数据表（走云端同步：UUID 主键 + sync_version / sync_updated_at）----
@@ -164,6 +166,17 @@ class DatabaseHelper {
         meal_type TEXT NOT NULL,
         total_calories REAL NOT NULL,
         foods TEXT NOT NULL,
+        sync_version INTEGER NOT NULL DEFAULT 0,
+        sync_updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE fasting_sessions (
+        id TEXT PRIMARY KEY,
+        start_at TEXT NOT NULL,
+        end_at TEXT,
+        target_hours INTEGER NOT NULL,
         sync_version INTEGER NOT NULL DEFAULT 0,
         sync_updated_at TEXT
       )
@@ -282,6 +295,9 @@ class DatabaseHelper {
         value REAL NOT NULL,
         unit TEXT DEFAULT '',
         note TEXT DEFAULT '',
+        source_report_id TEXT NOT NULL DEFAULT '',
+        risk_level TEXT NOT NULL DEFAULT '',
+        reference_range TEXT NOT NULL DEFAULT '',
         sync_version INTEGER NOT NULL DEFAULT 0,
         sync_updated_at TEXT
       )
@@ -296,14 +312,33 @@ class DatabaseHelper {
         file_type TEXT DEFAULT 'image',
         ocr_text TEXT DEFAULT '',
         ai_summary TEXT DEFAULT '',
+        report_type TEXT NOT NULL DEFAULT '体检',
+        risk_level TEXT NOT NULL DEFAULT '',
+        actions_json TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
         sync_version INTEGER NOT NULL DEFAULT 0,
         sync_updated_at TEXT
       )
     ''');
 
-    // ---- 静态种子表（不进云、只读本地；确定性 UUID 主键）----
+    // ---- FIT-1：训练计划表（走云端同步）----
+    // days 为 JSON 文本：[{name, exercises:[{name,equipment,targetSets,targetReps,targetWeight}]}]
+    await db.execute('''
+      CREATE TABLE workout_plans (
+        id            TEXT PRIMARY KEY,
+        name          TEXT NOT NULL,
+        goal          TEXT,
+        split         TEXT,
+        days_per_week INTEGER,
+        days          TEXT NOT NULL,
+        source        TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        sync_version  INTEGER NOT NULL DEFAULT 0,
+        sync_updated_at TEXT
+      )
+    ''');
 
+    // ---- 静态种子表（不进云、只读本地；确定性 UUID 主键）----
     // 列名与 FoodCatalog.toMap 的驼峰键保持一致（修复 v6 中 DDL/模型命名不一致问题）
     await db.execute('''
       CREATE TABLE food_catalog (
@@ -382,11 +417,15 @@ class DatabaseHelper {
     // ---- 索引 ----
     await db.execute('CREATE INDEX idx_workouts_date ON workouts(date)');
     await db.execute('CREATE INDEX idx_diet_date ON diet_records(date)');
+    await db.execute(
+        'CREATE INDEX idx_fasting_start ON fasting_sessions(start_at)');
     await db.execute('CREATE INDEX idx_finance_date ON finance_records(date)');
     await db.execute('CREATE INDEX idx_life_date ON life_status(date)');
     await db.execute('CREATE INDEX idx_advice_date ON ai_advice(created_at)');
     await db.execute('CREATE INDEX idx_metrics_date ON health_metrics(date)');
     await db.execute('CREATE INDEX idx_reports_date ON health_reports(date)');
+    await db.execute(
+        'CREATE INDEX idx_workout_plans_created ON workout_plans(created_at)');
     await db.execute(
         'CREATE INDEX idx_wearable_start ON wearable_samples(start_time)');
     await db.execute(
@@ -399,8 +438,30 @@ class DatabaseHelper {
       Database db, int oldVersion, int newVersion) async {
     // P2：v6 及以下为旧架构（INTEGER 自增主键、无同步列）。
     // 本地数据仅为云端缓存（原为开发期测试数据），按设计直接清库重建。
-    await _dropAllTables(db);
-    await _createTables(db, newVersion);
+    if (oldVersion < 10) {
+      await _dropAllTables(db);
+      await _createTables(db, newVersion);
+      return;
+    }
+    // P7-T3：v10 → v11 健康档案扩展列（保留旧数据）。
+    // 逐条 ALTER，重复执行时列已存在则忽略（升级中断重试安全）。
+    if (oldVersion < 11) {
+      const alters = [
+        "ALTER TABLE health_reports ADD COLUMN report_type TEXT NOT NULL DEFAULT '体检'",
+        "ALTER TABLE health_reports ADD COLUMN risk_level TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE health_reports ADD COLUMN actions_json TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE health_metrics ADD COLUMN source_report_id TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE health_metrics ADD COLUMN risk_level TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE health_metrics ADD COLUMN reference_range TEXT NOT NULL DEFAULT ''",
+      ];
+      for (final sql in alters) {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
+    }
   }
 
   Future<void> _dropAllTables(Database db) async {
@@ -424,6 +485,15 @@ class DatabaseHelper {
   Future<void> _upsertSynced(
       String table, String rowId, Map<String, dynamic> data) async {
     final db = await database;
+    await db.transaction((txn) async {
+      await _upsertWithin(txn, table, rowId, data);
+    });
+    onLocalWrite?.call();
+  }
+
+  /// 在已开启的事务内执行 upsert + 入队（供批量写入复用，不单独开事务）
+  Future<void> _upsertWithin(Transaction txn, String table, String rowId,
+      Map<String, dynamic> data) async {
     final row = Map<String, dynamic>.from(data)
       ..remove('id')
       ..remove('sync_version')
@@ -436,15 +506,12 @@ class DatabaseHelper {
         .where((c) => c != 'id' && c != 'sync_version')
         .map((c) => '$c = excluded.$c')
         .join(', ');
-    await db.transaction((txn) async {
-      await txn.rawInsert(
-        'INSERT INTO $table (${cols.join(', ')}) VALUES ($placeholders) '
-        'ON CONFLICT(id) DO UPDATE SET $updateSet',
-        [for (final c in cols) row[c]],
-      );
-      await _enqueue(txn, table, rowId, 'upsert', _businessFields(row));
-    });
-    onLocalWrite?.call();
+    await txn.rawInsert(
+      'INSERT INTO $table (${cols.join(', ')}) VALUES ($placeholders) '
+      'ON CONFLICT(id) DO UPDATE SET $updateSet',
+      [for (final c in cols) row[c]],
+    );
+    await _enqueue(txn, table, rowId, 'upsert', _businessFields(row));
   }
 
   /// 用户数据统一删除：本地物理删 + 队列记录 delete（服务端置 deleted_at）。
@@ -658,6 +725,23 @@ class DatabaseHelper {
     await _deleteSynced('workouts', id);
   }
 
+  // ============ 训练计划操作（FIT-1）============
+  Future<String> saveWorkoutPlan(WorkoutPlan plan) async {
+    final rowId = plan.id ?? _uuid.v4();
+    await _upsertSynced('workout_plans', rowId, plan.toMap());
+    return rowId;
+  }
+
+  Future<List<WorkoutPlan>> getWorkoutPlans() async {
+    final db = await database;
+    final maps = await db.query('workout_plans', orderBy: 'created_at DESC');
+    return maps.map((m) => WorkoutPlan.fromMap(m)).toList();
+  }
+
+  Future<void> deleteWorkoutPlan(String id) async {
+    await _deleteSynced('workout_plans', id);
+  }
+
   // ============ 饮食操作 ============
   Future<String> saveDietRecord(DietRecord record) async {
     final rowId = record.id ?? _uuid.v4();
@@ -684,6 +768,41 @@ class DatabaseHelper {
 
   Future<void> deleteDietRecord(String id) async {
     await _deleteSynced('diet_records', id);
+  }
+
+  // ============ 断食记录（FIT-7）============
+
+  Future<String> saveFastingSession(FastingSession session) async {
+    final rowId = session.id ?? _uuid.v4();
+    await _upsertSynced('fasting_sessions', rowId, session.toMap());
+    return rowId;
+  }
+
+  Future<List<FastingSession>> getFastingSessions({int? limit}) async {
+    final db = await database;
+    final maps = await db.query(
+      'fasting_sessions',
+      orderBy: 'start_at DESC',
+      limit: limit,
+    );
+    return maps.map((m) => FastingSession.fromMap(m)).toList();
+  }
+
+  /// 进行中的那条（至多一条，取开始最晚的兜底）
+  Future<FastingSession?> getActiveFastingSession() async {
+    final db = await database;
+    final maps = await db.query(
+      'fasting_sessions',
+      where: 'end_at IS NULL',
+      orderBy: 'start_at DESC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return FastingSession.fromMap(maps.first);
+  }
+
+  Future<void> deleteFastingSession(String id) async {
+    await _deleteSynced('fasting_sessions', id);
   }
 
   // ============ 食物库操作（静态表，不入队）============
@@ -961,7 +1080,7 @@ class DatabaseHelper {
     final db = await database;
     final exports = <String, dynamic>{};
     for (final table in [
-      'user_profile', 'workouts', 'diet_records', 'food_catalog',
+      'user_profile', 'workouts', 'workout_plans', 'diet_records', 'food_catalog',
       'finance_records', 'budgets', 'assets', 'debts',
       'knowledge_entries', 'books', 'book_notes',
       'life_status', 'ai_advice',
@@ -1039,6 +1158,33 @@ class DatabaseHelper {
 
   Future<void> deleteHealthMetric(String id) async {
     await _deleteSynced('health_metrics', id);
+  }
+
+  /// P7-T5：批量写入指标（报告归纳入库一次提交）。
+  /// 整批同一事务，全部成功或全部回滚；每条照常写入同步队列。
+  Future<int> insertHealthMetricsBatch(List<HealthMetric> metrics) async {
+    if (metrics.isEmpty) return 0;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final m in metrics) {
+        await _upsertWithin(
+            txn, 'health_metrics', m.id ?? _uuid.v4(), m.toMap());
+      }
+    });
+    onLocalWrite?.call();
+    return metrics.length;
+  }
+
+  /// P7-T5：查询某份报告归纳入库产生的全部指标
+  Future<List<HealthMetric>> getHealthMetricsByReport(String reportId) async {
+    final db = await database;
+    final maps = await db.query(
+      'health_metrics',
+      where: 'source_report_id = ?',
+      whereArgs: [reportId],
+      orderBy: 'date DESC',
+    );
+    return maps.map((m) => HealthMetric.fromMap(m)).toList();
   }
 
   // ============ 穿戴数据快照（本地专用，不参与云同步）============

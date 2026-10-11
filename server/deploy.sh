@@ -68,12 +68,6 @@ check_prereqs() {
   command -v curl   >/dev/null || die "缺少 curl，请先安装：apt install -y curl"
   command -v openssl >/dev/null || die "缺少 openssl，请先安装：apt install -y openssl"
 
-  # 发行版检测（Docker 安装用）
-  PKG_MGR=""
-  if   command -v apt-get >/dev/null; then PKG_MGR="apt"
-  elif command -v yum     >/dev/null; then PKG_MGR="yum"
-  fi
-
   # JSON 解析依赖：优先 python3，其次 python，再次 jq
   if command -v python3 >/dev/null; then JSON_TOOL="python3"
   elif command -v python >/dev/null; then JSON_TOOL="python"
@@ -256,21 +250,6 @@ ensure_tunnel() {
 }
 
 # ---------- 步骤 5：启动服务 + 健康等待 ----------
-ensure_python() {
-  if command -v python3 >/dev/null && python3 -c "import httpx" 2>/dev/null; then return; fi
-  info "安装验收依赖（python3/httpx）"
-  if [ "$DRY_RUN" = 1 ]; then warn "[dry-run] pip3 install httpx"; return; fi
-  if ! command -v python3 >/dev/null; then
-    case "$PKG_MGR" in
-      apt) apt-get install -y python3 python3-pip >/dev/null ;;
-      yum) yum install -y python3 >/dev/null ;;
-      *) die "请先安装 python3（验收脚本需要）" ;;
-    esac
-  fi
-  pip3 install -q httpx >/dev/null 2>&1 || python3 -m pip install -q httpx >/dev/null 2>&1 \
-    || die "httpx 安装失败，请手动：pip3 install httpx"
-}
-
 start_services() {
   step "启动服务"
   run docker compose up -d --build || die "docker compose 启动失败，排查：docker compose logs api"
@@ -290,13 +269,22 @@ start_services() {
 run_acceptance() {
   step "线上验收（13 项）"
   if [ "$DRY_RUN" = 1 ]; then
-    warn "[dry-run] python3 scripts/acceptance.py --base-url https://$FQDN"; return
+    warn "[dry-run] 容器内运行 scripts/acceptance.py + 公网 /health 检查"; return
   fi
-  ensure_python
-  if python3 scripts/acceptance.py --base-url "https://$FQDN"; then
+  # 13 项业务验收：直接拷进 api 容器运行（镜像自带 httpx，宿主机零依赖）
+  docker compose cp scripts/acceptance.py api:/tmp/acceptance.py >/dev/null \
+    || die "验收脚本拷入容器失败"
+  if docker compose exec -T api python /tmp/acceptance.py --base-url http://localhost:8000; then
     ok "验收 13/13 全部通过"
   else
-    die "线上验收未全绿。请检查上方失败项；常见原因：DNS 未生效（等 1-2 分钟重试 bash deploy.sh --update）、隧道未连通（docker compose logs cloudflared）"
+    die "线上验收未全绿。请检查上方失败项；排查：docker compose logs api"
+  fi
+  # 公网链路检查：域名 + DNS + 隧道（用宿主机 curl）
+  info "公网入口检查：https://$FQDN/health"
+  if curl -fsS "https://$FQDN/health" 2>/dev/null | grep -q '"status":"ok"'; then
+    ok "公网入口正常：https://$FQDN"
+  else
+    die "公网入口未就绪。常见原因：DNS 未生效（等 1-2 分钟重跑 bash deploy.sh --update）、隧道未连通（docker compose logs cloudflared）"
   fi
 }
 

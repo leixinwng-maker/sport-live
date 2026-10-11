@@ -34,7 +34,7 @@
 - `LocalOcrService`：ML Kit 中文离线 OCR，非移动端抛 `UnsupportedError`。
 - `HealthReportAddScreen`：FilePicker 选图 → 识别 → 解读 → 保存；已实现「视觉优先、本地 OCR 降级」骨架。
 - 表与模型（DB v10）：`health_reports`（file_path/file_type/ocr_text/ai_summary）、`health_metrics`（24 种指标类型 + 单位表）、`health_profile`；归档页 `_ReportsTab._showDetail` 已有报告详情对话框。
-- `AgentService`：已有 `get_health_metrics` 工具；云同步按 `{table,id,data}` 整行透传，**新增列对云端透明，后端无需改表**。
+- `AgentService`：已有 `get_health_metrics` 工具；云同步按 `{table,id,data}` 整行透传，**新增列需注册服务端规格并跑启动迁移**（交付时已补齐：tables.py 新列与 workout_plans/fastings_sessions 表规格，main.py 启动幂等补列）。
 - 依赖已就位：`flutter_secure_storage`、`http`、`file_picker`、`google_mlkit_text_recognition`。
 
 ### 差距

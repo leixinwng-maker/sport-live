@@ -1,4 +1,4 @@
-"""数据模型注册表：16 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
+"""数据模型注册表：19 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
 
 设计要点：
 - 每张业务表统一追加同步字段：
@@ -103,6 +103,26 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
                 _t("duration", Integer, True),
                 _t("intensity", Integer, True),
                 _t("exercises", Text, True),
+            ),
+        ),
+        TableSpec(
+            "workout_plans",
+            (
+                _t("name", Text, True),
+                _t("goal", Text),
+                _t("split", Text),
+                _t("days_per_week", Integer),
+                _t("days", Text, True),
+                _t("source", Text, True),
+                _t("created_at", Text, True),
+            ),
+        ),
+        TableSpec(
+            "fasting_sessions",
+            (
+                _t("start_at", Text, True),
+                _t("end_at", Text),
+                _t("target_hours", Integer, True),
             ),
         ),
         TableSpec(
@@ -245,6 +265,9 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
                 _t("value", Float, True),
                 _t("unit", Text),
                 _t("note", Text),
+                _t("source_report_id", Text),
+                _t("risk_level", Text),
+                _t("reference_range", Text),
             ),
         ),
         TableSpec(
@@ -256,6 +279,9 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
                 _t("file_type", Text),
                 _t("ocr_text", Text),
                 _t("ai_summary", Text),
+                _t("report_type", Text),
+                _t("risk_level", Text),
+                _t("actions_json", Text),
                 _t("created_at", Text, True),
             ),
         ),

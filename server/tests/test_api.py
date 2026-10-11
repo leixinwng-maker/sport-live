@@ -63,7 +63,7 @@ async def test_push_pull_roundtrip(client):
                     "date": "2026-10-04",
                     "type": "力量",
                     "duration": 45,
-                    "intensity": "中",
+                    "intensity": 3,
                     "exercises": "卧推",
                 },
             }
@@ -83,6 +83,121 @@ async def test_push_pull_roundtrip(client):
     assert len(body["changes"]) == 1
     assert body["changes"][0]["id"] == "w1"
     assert body["changes"][0]["data"]["type"] == "力量"
+
+
+async def test_push_p7_report_columns_roundtrip(client):
+    """P7 报告新列（report_type/risk_level/actions_json 等）push→pull 透传。"""
+    token = (await _register(client))["access_token"]
+    push = {
+        "device_id": "dev-1",
+        "platform": "android",
+        "changes": [
+            {
+                "table": "health_reports",
+                "id": "hr1",
+                "op": "upsert",
+                "base_version": 0,
+                "updated_at": "2026-10-11T08:00:00Z",
+                "data": {
+                    "date": "2026-10-10",
+                    "title": "年度体检",
+                    "file_path": "/reports/hr1.pdf",
+                    "file_type": "pdf",
+                    "ocr_text": "血常规…",
+                    "ai_summary": "总体正常",
+                    "report_type": "体检",
+                    "risk_level": "低",
+                    "actions_json": "[]",
+                    "created_at": "2026-10-11T07:00:00Z",
+                },
+            },
+            {
+                "table": "health_metrics",
+                "id": "hm1",
+                "op": "upsert",
+                "base_version": 0,
+                "updated_at": "2026-10-11T08:00:00Z",
+                "data": {
+                    "date": "2026-10-10",
+                    "type": "血糖",
+                    "value": 5.6,
+                    "unit": "mmol/L",
+                    "note": "空腹",
+                    "source_report_id": "hr1",
+                    "risk_level": "正常",
+                    "reference_range": "3.9-6.1",
+                },
+            },
+        ],
+    }
+    resp = await client.post("/sync/push", json=push, headers=_auth(token))
+    assert resp.status_code == 200, resp.text
+    results = resp.json()["results"]
+    assert [r["status"] for r in results] == ["applied", "applied"]
+
+    resp = await client.post(
+        "/sync/pull", json={"device_id": "dev-2"}, headers=_auth(token)
+    )
+    assert resp.status_code == 200
+    data_by_id = {c["id"]: c["data"] for c in resp.json()["changes"]}
+    assert data_by_id["hr1"]["report_type"] == "体检"
+    assert data_by_id["hr1"]["risk_level"] == "低"
+    assert data_by_id["hr1"]["actions_json"] == "[]"
+    assert data_by_id["hm1"]["source_report_id"] == "hr1"
+    assert data_by_id["hm1"]["risk_level"] == "正常"
+    assert data_by_id["hm1"]["reference_range"] == "3.9-6.1"
+
+
+async def test_push_fit_tables_roundtrip(client):
+    """FIT 新表（workout_plans / fasting_sessions）push→pull 透传。"""
+    token = (await _register(client))["access_token"]
+    push = {
+        "device_id": "dev-1",
+        "platform": "android",
+        "changes": [
+            {
+                "table": "workout_plans",
+                "id": "wp1",
+                "op": "upsert",
+                "base_version": 0,
+                "updated_at": "2026-10-11T08:00:00Z",
+                "data": {
+                    "name": "五分化",
+                    "goal": "增肌",
+                    "split": "胸背腿肩臂",
+                    "days_per_week": 5,
+                    "days": "[]",
+                    "source": "official",
+                    "created_at": "2026-10-11T07:00:00Z",
+                },
+            },
+            {
+                "table": "fasting_sessions",
+                "id": "fs1",
+                "op": "upsert",
+                "base_version": 0,
+                "updated_at": "2026-10-11T08:00:00Z",
+                "data": {
+                    "start_at": "2026-10-10T20:00:00Z",
+                    "end_at": "2026-10-11T12:00:00Z",
+                    "target_hours": 16,
+                },
+            },
+        ],
+    }
+    resp = await client.post("/sync/push", json=push, headers=_auth(token))
+    assert resp.status_code == 200, resp.text
+    results = resp.json()["results"]
+    assert [r["status"] for r in results] == ["applied", "applied"]
+
+    resp = await client.post(
+        "/sync/pull", json={"device_id": "dev-2"}, headers=_auth(token)
+    )
+    assert resp.status_code == 200
+    data_by_id = {c["id"]: c["data"] for c in resp.json()["changes"]}
+    assert data_by_id["wp1"]["name"] == "五分化"
+    assert data_by_id["wp1"]["days_per_week"] == 5
+    assert data_by_id["fs1"]["target_hours"] == 16
 
 
 async def test_push_requires_auth(client):

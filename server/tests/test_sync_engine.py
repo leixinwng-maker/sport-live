@@ -25,7 +25,7 @@ def _item(row_id="r1", op="upsert", base=0, minutes=0, data=None, table="workout
             "date": "2026-10-04",
             "type": "力量",
             "duration": 45,
-            "intensity": "中",
+            "intensity": 3,
             "exercises": "卧推",
         },
     )
@@ -40,7 +40,7 @@ async def test_upsert_without_conflict(session):
 
     # 以正确 base_version 更新：clean apply，不算冲突
     results = await merge_changes(session, USER, [_item(base=1, minutes=5, data={
-        "date": "2026-10-04", "type": "有氧", "duration": 30, "intensity": "低", "exercises": "跑步",
+        "date": "2026-10-04", "type": "有氧", "duration": 30, "intensity": 2, "exercises": "跑步",
     })])
     await session.commit()
     assert results[0].status == "applied"

@@ -10,7 +10,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+from sqlalchemy.engine import Connection
 
 from app.api import auth as auth_api
 from app.api import data as data_api
@@ -22,6 +23,38 @@ from app.database import SessionLocal, engine
 from app.models import metadata
 from app.schemas.common import HealthOut
 
+# 存量库增量列迁移：create_all 只建缺失表、不给已有表加列，
+# 客户端新版本通过同步 push 的整行 payload 携带新列，服务端必须同步扩列，
+# 否则 push 会因 unknown field 整批 400、客户端队列卡死。
+# 每项：(表名, [(列名, DDL 类型), ...])；新库由 create_all 直接建成完整结构，自动跳过。
+_ADDED_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
+    "health_metrics": (
+        ("source_report_id", "TEXT"),
+        ("risk_level", "TEXT"),
+        ("reference_range", "TEXT"),
+    ),
+    "health_reports": (
+        ("report_type", "TEXT"),
+        ("risk_level", "TEXT"),
+        ("actions_json", "TEXT"),
+    ),
+}
+
+
+def _run_column_migrations(sync_conn: Connection) -> None:
+    """幂等补列：仅当表已存在且列缺失时执行 ALTER TABLE ADD COLUMN。"""
+    insp = inspect(sync_conn)
+    existing_tables = set(insp.get_table_names())
+    for table_name, columns in _ADDED_COLUMNS.items():
+        if table_name not in existing_tables:
+            continue
+        existing_cols = {c["name"] for c in insp.get_columns(table_name)}
+        for col_name, col_type in columns:
+            if col_name not in existing_cols:
+                sync_conn.exec_driver_sql(
+                    f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}"
+                )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +63,7 @@ async def lifespan(app: FastAPI):
     if settings.auto_create_tables:
         async with engine.begin() as conn:
             await conn.run_sync(metadata.create_all)
+            await conn.run_sync(_run_column_migrations)
         from app.seed import ensure_seeded
 
         async with SessionLocal() as session:

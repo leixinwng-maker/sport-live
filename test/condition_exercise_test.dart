@@ -137,8 +137,9 @@ void main() {
   });
 
   test('CE-5 工具输出分层：先强证据、后弱证据，两层顺序固定', () async {
-    final out =
-        await service.executeTool('search_condition_exercise', {'condition': '高血压'});
+    final out = (await service
+            .executeTool('search_condition_exercise', {'condition': '高血压'}))
+        .text;
 
     expect(out, contains('第一层'));
     expect(out, contains('第二层'));
@@ -148,8 +149,9 @@ void main() {
   });
 
   test('CE-6 证据越级禁令：硬拉只能出现在第二层，且第二层声明无疗效主张', () async {
-    final out =
-        await service.executeTool('search_condition_exercise', {'condition': '高血压'});
+    final out = (await service
+            .executeTool('search_condition_exercise', {'condition': '高血压'}))
+        .text;
 
     // 硬拉属抗阻示例，只能落在第二层（弱证据）之后
     final iSecond = out.indexOf('第二层');
@@ -163,8 +165,9 @@ void main() {
   });
 
   test('CE-7 固定免责话术与就医提示必带', () async {
-    final out =
-        await service.executeTool('search_condition_exercise', {'condition': '高血压'});
+    final out = (await service
+            .executeTool('search_condition_exercise', {'condition': '高血压'}))
+        .text;
 
     expect(out, contains('不构成医疗建议'));
     expect(out, contains('遵医嘱'));
@@ -172,12 +175,17 @@ void main() {
   });
 
   test('CE-8 未命中与空参数的安全兜底', () async {
-    final miss = await service.executeTool('search_condition_exercise', {'condition': '某罕见病ZZZ'});
+    final miss = (await service
+            .executeTool('search_condition_exercise', {'condition': '某罕见病ZZZ'}))
+        .text;
     expect(miss, contains('本地库暂无'));
     expect(miss, contains('请勿编造'));
 
-    expect(await service.executeTool('search_condition_exercise', {}), 'condition 参数不能为空');
-    expect(await service.executeTool('search_condition_exercise', {'condition': '  '}),
+    expect((await service.executeTool('search_condition_exercise', {})).text,
+        'condition 参数不能为空');
+    expect(
+        (await service.executeTool('search_condition_exercise', {'condition': '  '}))
+            .text,
         'condition 参数不能为空');
   });
 

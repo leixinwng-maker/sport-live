@@ -6,7 +6,10 @@ import '../../theme/taoist_theme.dart';
 
 /// 健康指标录入页
 class HealthMetricEditScreen extends StatefulWidget {
-  const HealthMetricEditScreen({super.key});
+  /// 预选指标类型（如从身体数据趋势页带当前指标进来）。
+  final String? initialType;
+
+  const HealthMetricEditScreen({super.key, this.initialType});
 
   @override
   State<HealthMetricEditScreen> createState() => _HealthMetricEditScreenState();
@@ -18,6 +21,16 @@ class _HealthMetricEditScreenState extends State<HealthMetricEditScreen> {
   final _noteController = TextEditingController();
   String _unit = '';
   DateTime _date = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialType;
+    if (initial != null && HealthMetric.metricTypes.contains(initial)) {
+      _type = initial;
+      _unit = HealthMetric.typeUnits[initial] ?? '';
+    }
+  }
 
   @override
   void dispose() {

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/agent_provider.dart';
 import '../../providers/app_provider.dart';
@@ -8,7 +11,10 @@ import '../../services/vision/vision_exceptions.dart';
 import '../../services/vision/vision_service.dart';
 import '../../theme/taoist_theme.dart';
 import 'cards/diet_plan_card.dart';
+import 'cards/finance_records_card.dart';
+import 'cards/health_metrics_card.dart';
 import 'cards/workout_plan_card.dart';
+import 'cards/workout_records_card.dart';
 
 /// ============================================================================
 /// AI 智能体对话页（P3 主入口）：数据感知的多轮对话
@@ -23,6 +29,8 @@ class AIScreen extends StatefulWidget {
 class _AIScreenState extends State<AIScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  final _picker = ImagePicker();
+  final List<String> _pendingImages = [];
   int _lastCount = 0;
   bool _lastSending = false;
 
@@ -61,11 +69,116 @@ class _AIScreenState extends State<AIScreen> {
 
   void _submit(String text) {
     final t = text.trim();
-    if (t.isEmpty) return;
+    final images = List<String>.from(_pendingImages);
+    if (t.isEmpty && images.isEmpty) return;
     FocusScope.of(context).unfocus();
     _inputController.clear();
-    context.read<AgentProvider>().sendMessage(t);
+    setState(() => _pendingImages.clear());
+    context.read<AgentProvider>().sendMessage(t, imagePaths: images);
     _scrollToBottom();
+  }
+
+  /// 选择图片：拍照或从相册选取（一次最多 3 张）
+  Future<void> _pickImages() async {
+    const maxImages = 3;
+    if (_pendingImages.length >= maxImages) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('一次最多发送 3 张图片')),
+      );
+      return;
+    }
+    final remaining = maxImages - _pendingImages.length;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('拍照'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('从相册选择'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    try {
+      if (action == 'camera') {
+        final x = await _picker.pickImage(
+            source: ImageSource.camera, imageQuality: 85);
+        if (x != null) setState(() => _pendingImages.add(x.path));
+      } else {
+        final xs = await _picker.pickMultiImage(imageQuality: 85);
+        final picked = xs.take(remaining).map((e) => e.path).toList();
+        if (picked.isNotEmpty) {
+          setState(() => _pendingImages.addAll(picked));
+        }
+      }
+    } catch (_) {
+      // 用户取消或权限被拒：静默忽略
+    }
+  }
+
+  /// 待发送图片预览条
+  Widget _buildImagePreview() {
+    if (_pendingImages.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 76,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 8),
+        children: [
+          for (var i = 0; i < _pendingImages.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(_pendingImages[i]),
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 64,
+                        height: 64,
+                        color: TaoistTheme.mistGray,
+                        child: const Icon(Icons.broken_image_outlined,
+                            size: 20, color: TaoistTheme.cloudGray),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _pendingImages.removeAt(i)),
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close,
+                            size: 12, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmNewSession(AgentProvider agent) async {
@@ -281,6 +394,35 @@ class _AIScreenState extends State<AIScreen> {
         crossAxisAlignment:
             isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
+          // 用户消息附带的截图
+          if (isUser && m.imagePaths.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final p in m.imagePaths)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(p),
+                        width: 140,
+                        height: 140,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 140,
+                          height: 140,
+                          color: TaoistTheme.mistGray,
+                          child: const Icon(Icons.broken_image_outlined,
+                              size: 32, color: TaoistTheme.cloudGray),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Row(
             mainAxisAlignment:
                 isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -400,6 +542,27 @@ class _AIScreenState extends State<AIScreen> {
         onSaved: onSaved,
       );
     }
+    if (type == 'health_metrics') {
+      return HealthMetricsCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'finance_records') {
+      return FinanceRecordsCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'workout_records') {
+      return WorkoutRecordsCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
     return WorkoutPlanCard(
       payload: payload,
       saved: m.payloadSaved,
@@ -465,60 +628,71 @@ class _AIScreenState extends State<AIScreen> {
             top: BorderSide(color: TaoistTheme.mistGray, width: 0.5),
           ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: agent.sending ? null : _submit,
-                decoration: InputDecoration(
-                  hintText: '问我任何关于你数据的问题…',
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  filled: true,
-                  fillColor: TaoistTheme.paperWhite,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide:
-                        const BorderSide(color: TaoistTheme.mistGray),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide:
-                        const BorderSide(color: TaoistTheme.mistGray),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide:
-                        const BorderSide(color: TaoistTheme.jadeGreen),
+            _buildImagePreview(),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: agent.sending ? null : _pickImages,
+                  icon: const Icon(Icons.image_outlined,
+                      size: 24, color: TaoistTheme.cloudGray),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _inputController,
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: agent.sending ? null : _submit,
+                    decoration: InputDecoration(
+                      hintText: '问我任何关于你数据的问题…',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      filled: true,
+                      fillColor: TaoistTheme.paperWhite,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide:
+                            const BorderSide(color: TaoistTheme.mistGray),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide:
+                            const BorderSide(color: TaoistTheme.mistGray),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide:
+                            const BorderSide(color: TaoistTheme.jadeGreen),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: agent.sending
-                  ? const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : ElevatedButton(
-                      onPressed: () => _submit(_inputController.text),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: TaoistTheme.jadeGreen,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.zero,
-                        shape: const CircleBorder(),
-                      ),
-                      child: const Icon(Icons.send_rounded, size: 19),
-                    ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: agent.sending
+                      ? const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : ElevatedButton(
+                          onPressed: () => _submit(_inputController.text),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TaoistTheme.jadeGreen,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.zero,
+                            shape: const CircleBorder(),
+                          ),
+                          child: const Icon(Icons.send_rounded, size: 19),
+                        ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1339,6 +1513,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   bool _visionKeyVisible = false;
   bool _testingVision = false;
   bool _savingVision = false;
+  bool _apiKeySaved = false; // 主 AI Key 是否已保存过（留空沿用）
   String _selectedVisionPreset = '自定义';
 
   String _selectedProvider = '通义千问';
@@ -1369,7 +1544,29 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   @override
   void initState() {
     super.initState();
+    _loadMainConfig();
     _loadVisionConfig();
+  }
+
+  /// 回显已保存的主 AI 配置（Key 不回显明文；已保存时输入框留空、保存可沿用）
+  Future<void> _loadMainConfig() async {
+    final ai = context.read<AppProvider>().aiEngine;
+    if (!mounted) return;
+    setState(() {
+      _baseUrlController.text = ai.savedBaseUrl;
+      _modelController.text =
+          ai.savedModel.isEmpty ? 'qwen-turbo' : ai.savedModel;
+      _visionModelController.text = ai.savedVisionModel;
+      _apiKeySaved = ai.isConfigured;
+      // 地址与预设一致时点亮对应服务商标签，否则归为自定义
+      _selectedProvider = '自定义';
+      for (final entry in _providers.entries) {
+        if (entry.key != '自定义' && entry.value['baseUrl'] == ai.savedBaseUrl) {
+          _selectedProvider = entry.key;
+          break;
+        }
+      }
+    });
   }
 
   Future<void> _loadVisionConfig() async {
@@ -1420,17 +1617,31 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   }
 
   Future<void> _save() async {
-    if (_baseUrlController.text.isEmpty || _apiKeyController.text.isEmpty) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final baseUrl = _baseUrlController.text.trim();
+    if (baseUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写完整的配置信息')),
+        const SnackBar(content: Text('请填写接口地址')),
       );
       return;
     }
+    // Key 已保存过时允许留空沿用（界面不回显明文 Key）
+    var apiKey = _apiKeyController.text.trim();
+    if (apiKey.isEmpty) {
+      if (!provider.aiConfigured) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请填写 API Key')),
+        );
+        return;
+      }
+      apiKey = provider.aiEngine.savedApiKey;
+    }
 
-    final provider = Provider.of<AppProvider>(context, listen: false);
+    // 先取 messenger 再 pop：pop 后原 context 失效，取不到 ScaffoldMessenger
+    final messenger = ScaffoldMessenger.of(context);
     await provider.saveAIConfig(
-      baseUrl: _baseUrlController.text.trim(),
-      apiKey: _apiKeyController.text.trim(),
+      baseUrl: baseUrl,
+      apiKey: apiKey,
       model: _modelController.text.trim().isEmpty
           ? 'qwen-turbo'
           : _modelController.text.trim(),
@@ -1439,9 +1650,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
 
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AI配置已保存')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('AI配置已保存')));
     }
   }
 
@@ -1581,9 +1790,9 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
           TextField(
             controller: _apiKeyController,
             obscureText: true,
-            decoration: const InputDecoration(
-              hintText: 'sk-...',
-              prefixIcon: Icon(Icons.key),
+            decoration: InputDecoration(
+              hintText: _apiKeySaved ? '已保存，留空沿用原 Key' : 'sk-...',
+              prefixIcon: const Icon(Icons.key),
             ),
           ),
           const SizedBox(height: 16),

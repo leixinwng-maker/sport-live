@@ -1,0 +1,3386 @@
+{
+  "version": "1.0.0",
+  "description": "EXMO（运动医学本体）EXM 命名空间术语摘录：仅搬运 label/definition/父类/同义词，未做任何改写或翻译。",
+  "license": "CC BY 4.0",
+  "source": "EXMO (Exercise Medicine Ontology)",
+  "url": "https://github.com/DarkKnight0-0/exmo",
+  "ontologyUrl": "https://bioportal.bioontology.org/ontologies/EXMO",
+  "terms": [
+    {
+      "id": "EXM:0000001",
+      "label": "exercise",
+      "altLabels": [],
+      "definition": "Physical activity which is usually regular and done with the intention of improving or maintaining physical fitness or health.",
+      "parents": [
+        "EXM:0000014"
+      ]
+    },
+    {
+      "id": "EXM:0000002",
+      "label": "high-intensity interval training",
+      "altLabels": [
+        "HIIT"
+      ],
+      "definition": "A cardiovascular exercise strategy with alternating short periods of intense anaerobic exercise with less-intense recovery periods.",
+      "parents": [
+        "EXM:0000215",
+        "EXM:0000350"
+      ]
+    },
+    {
+      "id": "EXM:0000003",
+      "label": "ventricular ejection fraction",
+      "altLabels": [],
+      "definition": "The percentage of the end-diastolic volume pumped out of the heart during SYSTOLE.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000004",
+      "label": "aerobic exercise",
+      "altLabels": [],
+      "definition": "Sustained exercise that places an increased oxygen demand on the cardiovascular system and promotes an increased efficiency of the body's use of oxygen.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000005",
+      "label": "left ventricular ejection fraction",
+      "altLabels": [
+        "LVEF"
+      ],
+      "definition": "The fraction of the left ventricular end diastolic volume ejected with each beat. The left ventricular ejection fraction is equal to the left ventricular stroke volume divided by the left ventricular end diastolic volume.",
+      "parents": [
+        "EXM:0000003"
+      ]
+    },
+    {
+      "id": "EXM:0000007",
+      "label": "health status",
+      "altLabels": [],
+      "definition": "The level of health of the individual, group, or population as subjectively assessed by the individual or by more objective measures.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000008",
+      "label": "body composition",
+      "altLabels": [],
+      "definition": "The relative amounts of various components in the body, such as percentage of body fat.",
+      "parents": [
+        "EXM:0000146"
+      ]
+    },
+    {
+      "id": "EXM:0000009",
+      "label": "body fat percentage",
+      "altLabels": [],
+      "definition": "The amount of an individual's total body mass that is fat, expressed as a percent.",
+      "parents": [
+        "EXM:0000008"
+      ]
+    },
+    {
+      "id": "EXM:0000010",
+      "label": "body protein percentage",
+      "altLabels": [],
+      "definition": "The amount of an individual's total body mass that is protein, expressed as a percent.",
+      "parents": [
+        "EXM:0000008"
+      ]
+    },
+    {
+      "id": "EXM:0000011",
+      "label": "body mineral percentage",
+      "altLabels": [],
+      "definition": "The amount of an individual's total body mass that is mineral, expressed as a percent.",
+      "parents": [
+        "EXM:0000008"
+      ]
+    },
+    {
+      "id": "EXM:0000012",
+      "label": "body water percentage",
+      "altLabels": [],
+      "definition": "The amount of an individual's total body mass that is water, expressed as a percent.",
+      "parents": [
+        "EXM:0000008"
+      ]
+    },
+    {
+      "id": "EXM:0000013",
+      "label": "exercise equipment",
+      "altLabels": [],
+      "definition": "equipment used in exercise",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000014",
+      "label": "physical activity",
+      "altLabels": [
+        "PA"
+      ],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000015",
+      "label": "exercise prescription",
+      "altLabels": [],
+      "definition": "Exercise prescription commonly refers to the specific plan of fitness-related activities that are designed for a specified purpose, which is often developed by a fitness or rehabilitation specialist for the client or patient.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000016",
+      "label": "characteristic of exercise",
+      "altLabels": [],
+      "definition": "Concept used to describe exercise",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000017",
+      "label": "type of exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000018",
+      "label": "exercise frequence",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000019",
+      "label": "exercise intensity",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000020",
+      "label": "exercise time",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000021",
+      "label": "isokinetic exercise",
+      "altLabels": [],
+      "definition": "An exercise that involves movement at a constant rate with a variable force throughout a specified range of motion.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000022",
+      "label": "isometric exercise",
+      "altLabels": [],
+      "definition": "An exercise that is performed by exerting force against an immovable object or by holding an object in a static position.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000023",
+      "label": "isotonic exercise",
+      "altLabels": [],
+      "definition": "An exercise that involves the movement of a constant weight or load through a specified range of motion.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000024",
+      "label": "light exercise",
+      "altLabels": [],
+      "definition": "20-60 minutes of exercise which elevates your heart rate to 35-60% of your maximum heart rate performed at least 3-4 times per week.\" [NCI: C39771] {comment=\"< 3.0 MET\"}",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000025",
+      "label": "very light exercise",
+      "altLabels": [],
+      "definition": "Light exercise for less than 20 minutes, 20-60 minutes of exercise which elevates your heart rate to less than 35% of your maximum heart rate, or light exercise less than 3 times per week.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000026",
+      "label": "moderate exercise",
+      "altLabels": [],
+      "definition": "20-60 minutes of exercise which elevates your heart rate to 60-80% of your maximum heart rate performed at least 3-4 times per week.\" [NCI: C39772] {comment=\"3 - 6 MET\"}",
+      "parents": [
+        "EXM:0000004",
+        "EXM:0000331"
+      ]
+    },
+    {
+      "id": "EXM:0000027",
+      "label": "strenuous exercise",
+      "altLabels": [],
+      "definition": "20-60 minutes of exercise which elevates your heart rate to 80-90% of your maximum heart rate performed at least 3-4 times per week.\" [NCI: C39773] {comment=\"≥ 6.0 MET\"}",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000028",
+      "label": "gender",
+      "altLabels": [],
+      "definition": "Characteristics of people that are socially constructed, including norms, behaviors, and roles based on sex. As a social construct, gender varies from society to society and can change over time.\" [NCI: C17357] {comment=\"Do not use this term for non-human animals.\"}",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000029",
+      "label": "sex",
+      "altLabels": [],
+      "definition": "The assemblage of physical properties or qualities by which male is distinguished from female; the physical difference between male and female; the distinguishing peculiarity of male or female.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000030",
+      "label": "male phenotype",
+      "altLabels": [],
+      "definition": "An animal who is observed by researcher or clinician to be male, the sex that ordinarily produces sperm.",
+      "parents": [
+        "EXM:0000029"
+      ]
+    },
+    {
+      "id": "EXM:0000031",
+      "label": "female phenotype",
+      "altLabels": [],
+      "definition": "An animal who is observed by researcher or clinician to be female, the sex that ordinarily produces ova.",
+      "parents": [
+        "EXM:0000029"
+      ]
+    },
+    {
+      "id": "EXM:0000032",
+      "label": "male gender",
+      "altLabels": [],
+      "definition": "An individual who reports belonging to the cultural gender role distinction of male.\" [NCI: C46109] {comment=\"Do not use this term for non-human animals.\"}",
+      "parents": [
+        "EXM:0000028"
+      ]
+    },
+    {
+      "id": "EXM:0000033",
+      "label": "female gender",
+      "altLabels": [],
+      "definition": "An individual who reports belonging to the cultural gender role distinction of female.\" [NCI: C46110] {comment=\"Do not use this term for non-human animals.\"}",
+      "parents": [
+        "EXM:0000028"
+      ]
+    },
+    {
+      "id": "EXM:0000034",
+      "label": "family history",
+      "altLabels": [
+        "FH"
+      ],
+      "definition": "A record of a patient's background regarding health and disease events of blood relatives. A patient's family medical history may be important in diagnosing existing conditions.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000035",
+      "label": "medical history",
+      "altLabels": [],
+      "definition": "A record of a patient's background regarding health and the occurrence of disease events of the individual. In addition, personal medical history may be a variable in epidemiologic studies.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000036",
+      "label": "race",
+      "altLabels": [],
+      "definition": "A geographic ancestral origin category that is assigned to a population group based mainly on physical characteristics that are thought to be distinct and inherent.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000037",
+      "label": "body weight",
+      "altLabels": [],
+      "definition": "The mass or quantity of heaviness of an individual. It is expressed by units of pounds or kilograms.",
+      "parents": [
+        "EXM:0000146"
+      ]
+    },
+    {
+      "id": "EXM:0000038",
+      "label": "skeletal muscle mass",
+      "altLabels": [],
+      "definition": "Total mass of skeletal muscle.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000039",
+      "label": "skeletal muscle",
+      "altLabels": [],
+      "definition": "A subtype of striated muscle, attached by TENDONS to the SKELETON. Skeletal muscles are innervated and their movement can be consciously controlled. They are also called voluntary muscles.",
+      "parents": [
+        "EXM:0000238"
+      ]
+    },
+    {
+      "id": "EXM:0000040",
+      "label": "body fat mass",
+      "altLabels": [],
+      "definition": "The mass or quantity of heaviness of an individual‘s fat",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000041",
+      "label": "body mass index",
+      "altLabels": [
+        "BMI"
+      ],
+      "definition": "An individual's weight in kilograms divided by the square of the height in meters.\" [NCI: C16358] {comment=\"BMI = body mass / height ²\"}",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000042",
+      "label": "waist–hip ratio",
+      "altLabels": [
+        "WHR"
+      ],
+      "definition": "The ratio of the abdominal circumference at the navel to maximum hip and buttocks circumference; looks at the proportion of fat stored on the body around the waist and hip. Carrying extra weight around the waist is a greater health risk than carrying extra weight around the hips or thighs.",
+      "parents": [
+        "EXM:0000038"
+      ]
+    },
+    {
+      "id": "EXM:0000043",
+      "label": "basal metabolic rate",
+      "altLabels": [
+        "BMR"
+      ],
+      "definition": "The measurement of a subject's energy expenditure when at rest.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000044",
+      "label": "fasting blood glucose",
+      "altLabels": [
+        "FBG"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000045",
+      "label": "oxygen uptake",
+      "altLabels": [
+        "VO2"
+      ],
+      "definition": "Oxygen uptake is a measure of a person’s ability to take in oxygen via the respiratory system and deliver it to the working tissues via the cardiovascular system, and the ability of working tissues (predominantly skeletal muscle) to use oxygen.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000046",
+      "label": "right ventricular ejection fraction",
+      "altLabels": [
+        "RVEF"
+      ],
+      "definition": "Right ventricular ejection fraction (RVEF), is a measure of the efficiency of pumping into the pulmonary circulation.",
+      "parents": [
+        "EXM:0000003"
+      ]
+    },
+    {
+      "id": "EXM:0000047",
+      "label": "maximum oxygen uptake",
+      "altLabels": [
+        "VO2 max",
+        "VO2 peak"
+      ],
+      "definition": "The highest rate of oxygen consumption a subject reaches during an aerobic capacity test.",
+      "parents": [
+        "EXM:0000045"
+      ]
+    },
+    {
+      "id": "EXM:0000048",
+      "label": "cardiac function",
+      "altLabels": [],
+      "definition": "Functions of pumping the blood in adequate or required amounts and pressure throughout the body.\" [] {comment=\"ICF: b410\"}",
+      "parents": [
+        "EXM:0000140"
+      ]
+    },
+    {
+      "id": "EXM:0000049",
+      "label": "pulmonary function",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000140"
+      ]
+    },
+    {
+      "id": "EXM:0000050",
+      "label": "cardiac output",
+      "altLabels": [
+        "CO"
+      ],
+      "definition": "The total volume of blood pumped by the heart over a set period of time, conventionally one minute; it is calculated as heart rate times stroke volume (CO= HR x SV), and is additionally dependent on preload and afterload for functional output.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000051",
+      "label": "cardiac index",
+      "altLabels": [
+        "CI"
+      ],
+      "definition": "The measure of an individual's cardiac output as divided by their body surface area (CI= CO/BSA). This calculation is a useful function to determine an individual's cardiac performance in relation to their body size, providing an overview of global cardiovascular function.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000052",
+      "label": "stroke volume",
+      "altLabels": [
+        "SV"
+      ],
+      "definition": "The amount of BLOOD pumped out of the HEART per beat, not to be confused with cardiac output (volume/time). It is calculated as the difference between the end-diastolic volume and the end-systolic volume.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000053",
+      "label": "peak filling rate",
+      "altLabels": [
+        "PFR"
+      ],
+      "definition": "Peak filling rate (PFR) defined as the maximum dV/dt divided by LV end-diastolic volume was obtained as the index of LV diastolic function.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000054",
+      "label": "time to peak filling rate",
+      "altLabels": [
+        "TPFR"
+      ],
+      "definition": "The interval, in milliseconds, between the point of minimal ventricular volume and the point at which the peak filling rate occurs is labeled as the time to peak filling rate.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000055",
+      "label": "vital capacity",
+      "altLabels": [
+        "VC"
+      ],
+      "definition": "The volume of air that is exhaled by a maximal expiration following a maximal inspiration.\" [MSH: D014797] {comment=\"VC = TLC -RV\"}",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000056",
+      "label": "total lung capacity",
+      "altLabels": [
+        "TLC"
+      ],
+      "definition": "The volume of air contained in the lungs at the end of a maximal inspiration.\" [MSH: D014109] {comment=\"It is the equivalent to each of the following sums: VITAL CAPACITY plus RESIDUAL VOLUME; INSPIRATORY CAPACITY plus FUNCTIONAL RESIDUAL CAPACITY; TIDAL VOLUME plus INSPIRATORY RESERVE VOLUME plus functional residual capacity; or tidal volume plus inspiratory reserve volume plus EXPIRATORY RESERVE VOLUME plus residual volume.\", comment=\"TLC = VC +RV\"}",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000057",
+      "label": "residual volume",
+      "altLabels": [
+        "RV"
+      ],
+      "definition": "The volume of air remaining in the lungs after a maximal exhalation.\" [NCI: C89836] {comment=\"RV = TLC - VC\"}",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000058",
+      "label": "maximum voluntary ventilation",
+      "altLabels": [
+        "MVV"
+      ],
+      "definition": "Measure of the maximum amount of air that can be breathed in and blown out over a sustained interval such as 15 or 20 seconds.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000059",
+      "label": "forced expiratory volume",
+      "altLabels": [
+        "FEV"
+      ],
+      "definition": "Volume of air that a subject with fully inflated lungs can breathe out per unit time.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000060",
+      "label": "forced expiratory volume in 1 second",
+      "altLabels": [
+        "FEV 1.0",
+        "FEV1"
+      ],
+      "definition": "The volume exhaled during the first second of a forced expiratory maneuver that is started from the level of total lung capacity.",
+      "parents": [
+        "EXM:0000059"
+      ]
+    },
+    {
+      "id": "EXM:0000061",
+      "label": "forced expiratory volume in 3 seconds",
+      "altLabels": [
+        "FEV3"
+      ],
+      "definition": "The volume exhaled during the first three seconds of a forced expiratory maneuver that is started from the level of total lung capacity.",
+      "parents": [
+        "EXM:0000059"
+      ]
+    },
+    {
+      "id": "EXM:0000062",
+      "label": "minute ventilation",
+      "altLabels": [
+        "VE",
+        "MV"
+      ],
+      "definition": "The volume of gas inhaled (inhaled minute volume) or exhaled (exhaled minute volume) from a person's lungs per minute.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000063",
+      "label": "forced vital capacity",
+      "altLabels": [
+        "FVC"
+      ],
+      "definition": "The volume of air that can be forcibly exhaled following maximal inhalation.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000064",
+      "label": "alveolar ventilation",
+      "altLabels": [
+        "VA"
+      ],
+      "definition": "Alveolar ventilation is the exchange of gas between the alveoli and the external environment. It is the process by which oxygen is brought into the lungs from the atmosphere and by which the carbon dioxide carried into the lungs in the mixed venous blood is expelled from the body.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000065",
+      "label": "closing volume",
+      "altLabels": [
+        "CV"
+      ],
+      "definition": "The lung volume at which the dependent lung zones cease to ventilate presumably as a result of airway closure.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000066",
+      "label": "tidal volume",
+      "altLabels": [
+        "VT",
+        "TV"
+      ],
+      "definition": "The volume of air inspired or expired during each normal, quiet respiratory cycle.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000067",
+      "label": "functional residual capacity",
+      "altLabels": [
+        "FRC"
+      ],
+      "definition": "The volume of air remaining in the LUNGS at the end of a normal, quiet expiration.\" [MSH: D005652] {comment=\"It is the sum of the RESIDUAL VOLUME and the EXPIRATORY RESERVE VOLUME.\"}",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000068",
+      "label": "forced expiratory flow",
+      "altLabels": [
+        "FEF"
+      ],
+      "definition": "The flow (or speed) of air coming out of the lung during the middle portion of a forced expiration.",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000069",
+      "label": "peak expiratory flow rate",
+      "altLabels": [
+        "PEF",
+        "PEFR"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000049"
+      ]
+    },
+    {
+      "id": "EXM:0000070",
+      "label": "blood pressure",
+      "altLabels": [
+        "BP"
+      ],
+      "definition": "The pressure of the circulating blood against the walls of the blood vessels.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000071",
+      "label": "diastolic blood pressure",
+      "altLabels": [
+        "DBP",
+        "DIABP"
+      ],
+      "definition": "The minimum blood pressure in the systemic arterial circulation during the cardiac cycle.",
+      "parents": [
+        "EXM:0000070"
+      ]
+    },
+    {
+      "id": "EXM:0000072",
+      "label": "body temperature",
+      "altLabels": [
+        "BT"
+      ],
+      "definition": "The measure of the level of heat of a human or animal.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000073",
+      "label": "axillary temperature",
+      "altLabels": [],
+      "definition": "Core body temperature measured in axillary region.",
+      "parents": [
+        "EXM:0000072"
+      ]
+    },
+    {
+      "id": "EXM:0000074",
+      "label": "core body temperature",
+      "altLabels": [
+        "TEMPCB"
+      ],
+      "definition": "A measurement of the temperature within the deep tissues of the body.",
+      "parents": [
+        "EXM:0000072"
+      ]
+    },
+    {
+      "id": "EXM:0000075",
+      "label": "oral temperature",
+      "altLabels": [],
+      "definition": "core body temperature measured in sublingual space",
+      "parents": [
+        "EXM:0000072"
+      ]
+    },
+    {
+      "id": "EXM:0000076",
+      "label": "rectal temperature",
+      "altLabels": [],
+      "definition": "Core body temperature measured in rectum.",
+      "parents": [
+        "EXM:0000072"
+      ]
+    },
+    {
+      "id": "EXM:0000077",
+      "label": "tympanic temperature",
+      "altLabels": [],
+      "definition": "Core body temperature measured at tympanic membrane.",
+      "parents": [
+        "EXM:0000072"
+      ]
+    },
+    {
+      "id": "EXM:0000078",
+      "label": "blood lipid",
+      "altLabels": [],
+      "definition": "level and type of lipid found in the blood.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000079",
+      "label": "pulse rate",
+      "altLabels": [
+        "PR"
+      ],
+      "definition": "The rate of the pulse as observed in an artery, expressed as beats per minute. It can be measured at several anatomic sites, including the wrist, neck, temple, groin, behind the knees, or on top of the foot.",
+      "parents": [
+        "EXM:0000083"
+      ]
+    },
+    {
+      "id": "EXM:0000080",
+      "label": "resting heart rate",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000083"
+      ]
+    },
+    {
+      "id": "EXM:0000081",
+      "label": "peak heart rate during exercise testing",
+      "altLabels": [],
+      "definition": "The maxium number of times heart beats per minute during exercise test.",
+      "parents": [
+        "EXM:0000083"
+      ]
+    },
+    {
+      "id": "EXM:0000082",
+      "label": "systolic blood pressure",
+      "altLabels": [
+        "SBP",
+        "SYSBP"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000070"
+      ]
+    },
+    {
+      "id": "EXM:0000083",
+      "label": "heart rate",
+      "altLabels": [
+        "HR"
+      ],
+      "definition": "A measurement that describes the frequency of rate of contractions of the systemic (often left) ventricle measured within a unit time.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000084",
+      "label": "total cholesterol",
+      "altLabels": [
+        "TC"
+      ],
+      "definition": "Total cholesterol is defined as the sum of HDL, LDL, and VLDL. Usually, only the total, HDL, and triglycerides are measured.",
+      "parents": [
+        "EXM:0000078"
+      ]
+    },
+    {
+      "id": "EXM:0000085",
+      "label": "triglyceride",
+      "altLabels": [
+        "TG"
+      ],
+      "definition": "Fats composed of three fatty acid chains linked to a glycerol molecule.",
+      "parents": [
+        "EXM:0000078"
+      ]
+    },
+    {
+      "id": "EXM:0000086",
+      "label": "high density liptein cholesterol",
+      "altLabels": [
+        "HDL cholesterol",
+        "HDLC"
+      ],
+      "definition": "Cholesterol which is contained in or bound to high-density lipoproteins (HDL), including CHOLESTEROL ESTERS and free cholesterol.",
+      "parents": [
+        "EXM:0000078"
+      ]
+    },
+    {
+      "id": "EXM:0000087",
+      "label": "low density lipoprotein cholesterol",
+      "altLabels": [
+        "LDLC",
+        "LDL cholesterol"
+      ],
+      "definition": "Cholesterol which is contained in or bound to low density lipoproteins (LDL), including cholesterol esters and free cholesterol.",
+      "parents": [
+        "EXM:0000078"
+      ]
+    },
+    {
+      "id": "EXM:0000088",
+      "label": "muscle strength",
+      "altLabels": [],
+      "definition": "The amount of force generated by MUSCLE CONTRACTION. Muscle strength can be measured during isometric, isotonic, or isokinetic contraction, either manually or using a device such as a MUSCLE STRENGTH DYNAMOMETER.",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000089",
+      "label": "muscle endurance",
+      "altLabels": [],
+      "definition": "Muscular endurance refers to how long muscles can sustain exercise.",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000090",
+      "label": "exergaming",
+      "altLabels": [],
+      "definition": "video games that are also a form of exercise",
+      "parents": [
+        "EXM:0000091"
+      ]
+    },
+    {
+      "id": "EXM:0000091",
+      "label": "home exercise",
+      "altLabels": [],
+      "definition": "exercise at home",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000092",
+      "label": "athletic injury",
+      "altLabels": [],
+      "definition": "Injuries incurred during participation in competitive or non-competitive sports.",
+      "parents": [
+        "EXM:0000314"
+      ]
+    },
+    {
+      "id": "EXM:0000093",
+      "label": "physical therapy exercise",
+      "altLabels": [],
+      "definition": "A regimen or plan of physical activities designed and prescribed for specific therapeutic goals. Its purpose is to restore normal musculoskeletal function or to reduce pain caused by diseases or injuries.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000094",
+      "label": "exercise volume",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000095",
+      "label": "exercise progression",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000096",
+      "label": "electrocardiogram",
+      "altLabels": [
+        "EKG",
+        "ECG"
+      ],
+      "definition": "A study that evaluates the effect of a treatment on cardiac electrical activity, as assessed by electrocardiography.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000097",
+      "label": "questionnaire",
+      "altLabels": [],
+      "definition": "Predetermined sets of questions used to collect data - clinical data, social status, occupational group, etc. The term is often applied to a self-completed survey instrument.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000099",
+      "label": "risk stratification",
+      "altLabels": [],
+      "definition": "a technique for systematically categorizing patients based on their health status and other factors",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000100",
+      "label": "physical fitness testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000101",
+      "label": "general health evaluation",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000102",
+      "label": "body composition testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000103",
+      "label": "cardiovascular endurance testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000104",
+      "label": "strength and endurance testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000105",
+      "label": "flexibility testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000106",
+      "label": "12-minute run test",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000103"
+      ]
+    },
+    {
+      "id": "EXM:0000107",
+      "label": "exercise stress test",
+      "altLabels": [],
+      "definition": "Controlled physical activity which is performed in order to allow assessment of physiological functions, particularly cardiovascular and pulmonary, but also aerobic capacity. Maximal (most intense) exercise is usually required but submaximal exercise is also used.",
+      "parents": [
+        "EXM:0000103"
+      ]
+    },
+    {
+      "id": "EXM:0000108",
+      "label": "VO2 max testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000103"
+      ]
+    },
+    {
+      "id": "EXM:0000109",
+      "label": "muscle endurance testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000104"
+      ]
+    },
+    {
+      "id": "EXM:0000110",
+      "label": "shoulder flexibility testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000105"
+      ]
+    },
+    {
+      "id": "EXM:0000111",
+      "label": "sit-and-reach testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000105"
+      ]
+    },
+    {
+      "id": "EXM:0000112",
+      "label": "trunk lift testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000105"
+      ]
+    },
+    {
+      "id": "EXM:0000113",
+      "label": "bioelectric impedance analysis",
+      "altLabels": [],
+      "definition": "A method to assess body composition, i.e., the relative percentages of body weight comprised of fat tissue and lean body mass. It is based on the principle that the resistance to an applied electric current is inversely related to the amount of lean body mass within the body. Impedance is greatest in fat tissue, which contains only 10-20% water, while lean body mass, which contains 70-75% water, allows the signal to pass much more easily.",
+      "parents": [
+        "EXM:0000102"
+      ]
+    },
+    {
+      "id": "EXM:0000114",
+      "label": "skinfold measurement",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000102"
+      ]
+    },
+    {
+      "id": "EXM:0000115",
+      "label": "strength testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000104"
+      ]
+    },
+    {
+      "id": "EXM:0000116",
+      "label": "push-up test",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000104"
+      ]
+    },
+    {
+      "id": "EXM:0000117",
+      "label": "core strength and stability test",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000104"
+      ]
+    },
+    {
+      "id": "EXM:0000119",
+      "label": "joint mobility exercise",
+      "altLabels": [],
+      "definition": "Use of active or passive body movement to maintain or restore joint flexibility",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000120",
+      "label": "ankle mobility exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000119"
+      ]
+    },
+    {
+      "id": "EXM:0000121",
+      "label": "hip joint exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000119"
+      ]
+    },
+    {
+      "id": "EXM:0000122",
+      "label": "muscular strength development exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000206"
+      ]
+    },
+    {
+      "id": "EXM:0000123",
+      "label": "lower limb strength training",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000122"
+      ]
+    },
+    {
+      "id": "EXM:0000124",
+      "label": "core training",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000122"
+      ]
+    },
+    {
+      "id": "EXM:0000125",
+      "label": "jumping exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000126",
+      "label": "running exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000127",
+      "label": "cardiopulmonary exercise test",
+      "altLabels": [
+        "CPET"
+      ],
+      "definition": "A clinical tool to evaluate exercise capacity and to assess cardiac function under stress.",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000128",
+      "label": "cardiopulmonary exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000129",
+      "label": "balance exercise",
+      "altLabels": [],
+      "definition": "Use of specific activities, postures, and movements to maintain, enhance, or restore balance",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000130",
+      "label": "agility exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000131",
+      "label": "flexibility exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000132",
+      "label": "functional movement screen",
+      "altLabels": [
+        "FMS"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000134",
+      "label": "selective functional movement assessment",
+      "altLabels": [],
+      "definition": "The SFMA is a clinical model used to assist diagnosis and treatment of musculoskeletal disorders by identifying dysfunctions in movement patterns.",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000135",
+      "label": "Y-balance test",
+      "altLabels": [],
+      "definition": "a simple, yet reliable, test used to measure dynamic balance",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000136",
+      "label": "hop test",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000137",
+      "label": "drop jump landing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000139",
+      "label": "physical fitness",
+      "altLabels": [],
+      "definition": "The ability to carry out daily tasks and perform physical activities in a highly functional state, often as a result of physical conditioning.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000140",
+      "label": "cardiorespiratory fitness",
+      "altLabels": [
+        "CRF"
+      ],
+      "definition": "The ability of the heart and lungs to deliver blood and oxygen to the tissues during aerobic activity. It is a general measure of the relative conditioning of the heart and respiratory system.",
+      "parents": [
+        "EXM:0000139"
+      ]
+    },
+    {
+      "id": "EXM:0000141",
+      "label": "flexibility",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000146"
+      ]
+    },
+    {
+      "id": "EXM:0000142",
+      "label": "rating of perceived exertion",
+      "altLabels": [
+        "RPE"
+      ],
+      "definition": "A scale for a subject to rate their perception of the intensity of their own physical effort.\" [] {comment=\"NCI: C122028\"}",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000143",
+      "label": "tummy time",
+      "altLabels": [],
+      "definition": "Tummy time is a colloquialism for placing infant children in the prone position while awake and supervised, to encourage development of the neck and trunk muscles and prevent skull deformations.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000144",
+      "label": "maximal aerobic power",
+      "altLabels": [],
+      "definition": "the maximum rate at which oxygen can be used during a specified period, usually during intense exercise\" [https://journals.lww.com/acsm-healthfitness/Fulltext/2011/11000/Maximal_Aerobic_Power__An_Important_Clinical_and.12.aspx#\\:~\\:text=Maximal%20aerobic%20power%20describes%20the%20functional%20capacity%20of\\,to%20remove%20and%20use%20oxygen%20from%20the%20blood.] {comment=\"Maximal aerobic power describes the functional capacity of the cardiorespiratory system.\"}",
+      "parents": [
+        "EXM:0000140"
+      ]
+    },
+    {
+      "id": "EXM:0000145",
+      "label": "submaximal endurance",
+      "altLabels": [],
+      "definition": "submaximal endurance capacity. increased by endurance training. average absolute power output a person can maintain during a fixed period of time on cycle ergometer, OR average speed a person can maintain during a fixed period of time.",
+      "parents": [
+        "EXM:0000140"
+      ]
+    },
+    {
+      "id": "EXM:0000146",
+      "label": "morphplogical fitness",
+      "altLabels": [],
+      "definition": "A non-performance component of physical fitness related to body composition factors such as body circumferences, body fat content and regional body fat distribution.",
+      "parents": [
+        "EXM:0000139"
+      ]
+    },
+    {
+      "id": "EXM:0000148",
+      "label": "body fat distribution",
+      "altLabels": [],
+      "definition": "Deposits of ADIPOSE TISSUE throughout the body. The pattern of fat deposits in the body regions is an indicator of health status. Excess ABDOMINAL FAT increases health risks more than excess fat around the hips or thighs, therefore, WAIST-HIP RATIO is often used to determine health risks.",
+      "parents": [
+        "EXM:0000146"
+      ]
+    },
+    {
+      "id": "EXM:0000149",
+      "label": "bone density",
+      "altLabels": [],
+      "definition": "The amount of mineral per square centimeter of BONE. This is the definition used in clinical practice. Actual bone density would be expressed in grams per milliliter. It is most frequently measured by X-RAY ABSORPTIOMETRY or TOMOGRAPHY, X RAY COMPUTED. Bone density is an important predictor for OSTEOPOROSIS.",
+      "parents": [
+        "EXM:0000146"
+      ]
+    },
+    {
+      "id": "EXM:0000150",
+      "label": "muscular fitness",
+      "altLabels": [],
+      "definition": "Muscular fitness is a general term that describes the general health, strength, and endurance of one's muscles.",
+      "parents": [
+        "EXM:0000139"
+      ]
+    },
+    {
+      "id": "EXM:0000151",
+      "label": "muscular power",
+      "altLabels": [],
+      "definition": "Muscular power is mainly determined by muscular strength, maximum movement velocity, and neuromuscular activation.",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000152",
+      "label": "explosive strength",
+      "altLabels": [],
+      "definition": "Explosive strength, a component of speed strength, refers to acceleration or rate of force development, or \\\"the neuromuscular system's ability to generate high action velocities .\\",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000153",
+      "label": "isometric strength",
+      "altLabels": [],
+      "definition": "Isometric strength is defined as the capacity to produce force or torque with a voluntary isometric (muscle[s] maintain[s] a constant length) contraction.",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000154",
+      "label": "metabolic fitness",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000139"
+      ]
+    },
+    {
+      "id": "EXM:0000155",
+      "label": "glucose tolerance",
+      "altLabels": [],
+      "definition": "physiological ability of the body to properly metabolize glucose.",
+      "parents": [
+        "EXM:0000154"
+      ]
+    },
+    {
+      "id": "EXM:0000156",
+      "label": "lipid metabolism",
+      "altLabels": [],
+      "definition": "Anabolic and catabolic biochemical changes to lipids within a cell as materials needed for important life processes.",
+      "parents": [
+        "EXM:0000154"
+      ]
+    },
+    {
+      "id": "EXM:0000157",
+      "label": "motor fitness",
+      "altLabels": [],
+      "definition": "Motor fitness is a term that describes an athlete’s ability to perform effectively during sports or other physical activity.",
+      "parents": [
+        "EXM:0000139"
+      ]
+    },
+    {
+      "id": "EXM:0000158",
+      "label": "agility",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000157"
+      ]
+    },
+    {
+      "id": "EXM:0000159",
+      "label": "balance",
+      "altLabels": [],
+      "definition": "Balance is an ability to maintain the line of gravity (vertical line from centre of mass) of a body within the base of support with minimal postural sway.",
+      "parents": [
+        "EXM:0000157"
+      ]
+    },
+    {
+      "id": "EXM:0000160",
+      "label": "coordination",
+      "altLabels": [],
+      "definition": "Motor coordination is the orchestrated movement of multiple body parts as required to accomplish intended actions.",
+      "parents": [
+        "EXM:0000157"
+      ]
+    },
+    {
+      "id": "EXM:0000161",
+      "label": "speed of movement",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000157"
+      ]
+    },
+    {
+      "id": "EXM:0000162",
+      "label": "metabolic equivalent of task",
+      "altLabels": [
+        "MET"
+      ],
+      "definition": "A mathematic formula used to estimate individual oxygen consumption, and thus energy expenditure, at rest and for various physical activities.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000163",
+      "label": "sleep",
+      "altLabels": [],
+      "definition": "A readily reversible suspension of sensorimotor interaction with the environment, usually associated with recumbency and immobility.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000164",
+      "label": "resistance training",
+      "altLabels": [],
+      "definition": "A type of strength-building exercise program that requires the body muscle to exert a force against some form of resistance, such as weight, stretch bands, water, or immovable objects. Resistance exercise is a combination of static and dynamic contractions involving shortening and lengthening of skeletal muscles.",
+      "parents": [
+        "EXM:0000350"
+      ]
+    },
+    {
+      "id": "EXM:0000165",
+      "label": "stretching exercise",
+      "altLabels": [],
+      "definition": "A physical exercise in which a specific muscle or tendon is deliberately flexed or stretched in order to improve the muscle's elasticity.\" [] {comment=\"NCI: C154225\"}",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000166",
+      "label": "aerobics",
+      "altLabels": [],
+      "definition": "Aerobics is a form of physical exercise that combines rhythmic aerobic exercise with stretching and strength training routines with the goal of improving all elements of fitness (flexibility, muscular strength, and cardio-vascular fitness).",
+      "parents": [
+        "EXM:0000004",
+        "EXM:0000165"
+      ]
+    },
+    {
+      "id": "EXM:0000167",
+      "label": "badminton",
+      "altLabels": [],
+      "definition": "Badminton is a racquet sport played using racquets to hit a shuttlecock across a net.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000168",
+      "label": "basketball game",
+      "altLabels": [],
+      "definition": "A competitive team sport played on a rectangular court having a raised basket at each end.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000169",
+      "label": "boxing",
+      "altLabels": [],
+      "definition": "A two-person sport in which the fists are skillfully used to attack and defend.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000170",
+      "label": "mind/body exercise",
+      "altLabels": [],
+      "definition": "A form of exercise that combines body movement with mental focus and controlled breathing to improve strength, balance, flexibility, and overall health. Examples of mind/body exercises are yoga, tai chi, and qigong.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000171",
+      "label": "yoga",
+      "altLabels": [],
+      "definition": "Yoga as exercise is a physical activity consisting mainly of postures, often connected by flowing sequences, sometimes accompanied by breathing exercises, and frequently ending with relaxation lying down or meditation.",
+      "parents": [
+        "EXM:0000170"
+      ]
+    },
+    {
+      "id": "EXM:0000172",
+      "label": "tai ji",
+      "altLabels": [],
+      "definition": "A form of traditional Chinese mind/body exercise and meditation that uses slow sets of body movements and controlled breathing. Tai chi is done to improve balance, flexibility, muscle strength, and overall health.",
+      "parents": [
+        "EXM:0000170"
+      ]
+    },
+    {
+      "id": "EXM:0000173",
+      "label": "qigong",
+      "altLabels": [],
+      "definition": "A form of traditional Chinese mind/body exercise and meditation that uses slow and precise body movements with controlled breathing and mental focusing to improve balance, flexibility, muscle strength, and overall health.",
+      "parents": [
+        "EXM:0000170"
+      ]
+    },
+    {
+      "id": "EXM:0000174",
+      "label": "bicycling",
+      "altLabels": [],
+      "definition": "Riding a bicycle for transportation or recreation.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000175",
+      "label": "long-distance running",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000176",
+      "label": "gate ball",
+      "altLabels": [],
+      "definition": "Gateball is a mallet team sport inspired by croquet.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000177",
+      "label": "hiking",
+      "altLabels": [],
+      "definition": "Hiking is a long, vigorous walk, usually on trails or footpaths in the countryside.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000178",
+      "label": "hiking in mountains",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000177"
+      ]
+    },
+    {
+      "id": "EXM:0000179",
+      "label": "hiking on flat ground",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000177"
+      ]
+    },
+    {
+      "id": "EXM:0000180",
+      "label": "jogging",
+      "altLabels": [],
+      "definition": "Running at a low rate of speed. It can be done as a means of conditioning or for general health and well being.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000181",
+      "label": "swimming",
+      "altLabels": [],
+      "definition": "The act of propelling the body through water by movement of the arms and/or legs.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000182",
+      "label": "walking",
+      "altLabels": [],
+      "definition": "The act of traveling by foot.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000183",
+      "label": "morderate walking",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000182"
+      ]
+    },
+    {
+      "id": "EXM:0000184",
+      "label": "brisk walking",
+      "altLabels": [],
+      "definition": "Brisk walking is a type of exercise where a person walks quickly in order to increase the heart rate and get in shape.",
+      "parents": [
+        "EXM:0000182"
+      ]
+    },
+    {
+      "id": "EXM:0000185",
+      "label": "dancing",
+      "altLabels": [],
+      "definition": "A physical activity that consists of moving your feet and body rhythmically, usually in response to music.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000186",
+      "label": "fencing",
+      "altLabels": [],
+      "definition": "Fencing is a group of three related combat sports. The three disciplines in modern fencing are the foil, the épée, and the sabre (also saber); winning points are made through the weapon's contact with an opponent.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000187",
+      "label": "golf",
+      "altLabels": [],
+      "definition": "A game whose object is to sink a ball into each of 9 or 18 successive holes on a golf course using as few strokes as possible.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000188",
+      "label": "netball game",
+      "altLabels": [],
+      "definition": "Netball is a ball sport played by two teams of seven players.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000189",
+      "label": "table tennis",
+      "altLabels": [],
+      "definition": "Table tennis, also known as ping-pong and whiff-whaff, is a sport in which two or four players hit a lightweight ball, also known as the ping-pong ball, back and forth across a table using small rackets.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000190",
+      "label": "skiing",
+      "altLabels": [],
+      "definition": "A snow sport which uses skis to glide over the snow.\" [MSH: D012865] {comment=\"It does not include water-skiing.\"}",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000191",
+      "label": "alpine skiing",
+      "altLabels": [],
+      "definition": "Alpine skiing, or downhill skiing, is the pastime of sliding down snow-covered slopes on skis with fixed-heel bindings, unlike other types of skiing (cross-country, Telemark, or ski jumping), which use skis with free-heel bindings.",
+      "parents": [
+        "EXM:0000190"
+      ]
+    },
+    {
+      "id": "EXM:0000192",
+      "label": "cross-country skiing",
+      "altLabels": [],
+      "definition": "Cross-country skiing is a form of skiing where skiers rely on their own locomotion to move across snow-covered terrain, rather than using ski lifts or other forms of assistance.",
+      "parents": [
+        "EXM:0000190"
+      ]
+    },
+    {
+      "id": "EXM:0000193",
+      "label": "taekwondo",
+      "altLabels": [],
+      "definition": "Taekwondo is a Korean form of martial arts, characterized by punching and kicking techniques, with emphasis on head-height kicks, jumping spinning kicks, and fast kicking techniques.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000194",
+      "label": "tennis",
+      "altLabels": [],
+      "definition": "A game played by two or four players with rackets and an elastic ball on a level court divided by a low net.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000195",
+      "label": "softball game",
+      "altLabels": [],
+      "definition": "Softball is a game similar to baseball played with a larger ball (11 to 16 inches or 28 to 40 cm circumference) on a field that has base lengths of 60 feet, a pitcher's mound that ranges from 35 to 43 (professional is 43) feet away from home plate, and a home run fence that is 220–300 feet away from home plate, depending on the type of softball being played.",
+      "parents": [
+        "EXM:0000269"
+      ]
+    },
+    {
+      "id": "EXM:0000196",
+      "label": "association football game",
+      "altLabels": [],
+      "definition": "A game in which a round inflated ball is advanced by kicking or propelling with any part of the body except the hands or arms. The object of the game is to place the ball in opposite goals.",
+      "parents": [
+        "EXM:0000252"
+      ]
+    },
+    {
+      "id": "EXM:0000197",
+      "label": "squash",
+      "altLabels": [],
+      "definition": "Squash is a racket and ball sport played by two players in a four-walled court with a small, hollow rubber ball.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000198",
+      "label": "swiss ball exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000199",
+      "label": "jumping rope",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000200",
+      "label": "gardening",
+      "altLabels": [],
+      "definition": "Cultivation of PLANTS; (FRUIT; VEGETABLES; MEDICINAL HERBS) on small plots of ground or in containers.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000201",
+      "label": "yard work",
+      "altLabels": [],
+      "definition": "The act of tending a yard as a chore or hobby.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000202",
+      "label": "stair climbing",
+      "altLabels": [],
+      "definition": "Stair climbing is the climbing of a flight of stairs.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000203",
+      "label": "volleyball game",
+      "altLabels": [],
+      "definition": "A team sport in which two teams hit an inflated ball back and forth over a high net using their hands.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000204",
+      "label": "sprinting",
+      "altLabels": [],
+      "definition": "Sprinting is running over a short distance at the top-most speed of the body in a limited period of time.",
+      "parents": [
+        "EXM:0000350"
+      ]
+    },
+    {
+      "id": "EXM:0000205",
+      "label": "bodybuilding",
+      "altLabels": [],
+      "definition": "Bodybuilding is the use of progressive resistance exercise to control and develop one's muscles (muscle building) by muscle hypertrophy for aesthetic purposes.",
+      "parents": [
+        "EXM:0000164"
+      ]
+    },
+    {
+      "id": "EXM:0000206",
+      "label": "strength training",
+      "altLabels": [],
+      "definition": "resistance exercise that builds strength",
+      "parents": [
+        "EXM:0000164"
+      ]
+    },
+    {
+      "id": "EXM:0000207",
+      "label": "bodyweight exercise",
+      "altLabels": [],
+      "definition": "Bodyweight exercises (also called bodyweight workouts) are strength-training exercises that use an individual's own weight to provide resistance against gravity.",
+      "parents": [
+        "EXM:0000206"
+      ]
+    },
+    {
+      "id": "EXM:0000208",
+      "label": "suspension training",
+      "altLabels": [],
+      "definition": "The term suspension training refers to an approach to strength training that uses a system of ropes and webbing called a \\\"suspension trainer\\\" to allow users to work against their own body weight.",
+      "parents": [
+        "EXM:0000207"
+      ]
+    },
+    {
+      "id": "EXM:0000209",
+      "label": "weight training",
+      "altLabels": [],
+      "definition": "Weight training is a common type of strength training for developing the strength and size of skeletal muscles.[2] It uses the force of gravity in the form of weighted bars, dumbbells or weight stacks in order to oppose the force generated by muscle through concentric or eccentric contraction. Weight training uses a variety of specialized equipment to target specific muscle groups and types of movement.",
+      "parents": [
+        "EXM:0000206"
+      ]
+    },
+    {
+      "id": "EXM:0000210",
+      "label": "calisthenics",
+      "altLabels": [],
+      "definition": "A system of free movements designed to develop muscular tone and promote physical fitness.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000211",
+      "label": "circuit training",
+      "altLabels": [],
+      "definition": "Circuit training is a form of body conditioning that involves endurance training, resistance training, high-intensity aerobics, and exercises performed in a circuit, similar to high-intensity interval training.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000212",
+      "label": "cross-training",
+      "altLabels": [],
+      "definition": "Cross-training is athletic training in sports other than the athlete's usual sport. The goal is improving overall performance. It takes advantage of the particular effectiveness of one training method to negate the shortcomings of another.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000213",
+      "label": "birth weight",
+      "altLabels": [],
+      "definition": "The mass or quantity of heaviness of an individual at BIRTH. It is expressed by units of pounds or kilograms.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000214",
+      "label": "person",
+      "altLabels": [],
+      "definition": "A living subject of the species homo sapiens.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000215",
+      "label": "interval training",
+      "altLabels": [],
+      "definition": "Interval training is a type of training exercise that involves a series of high-intensity workouts interspersed with rest or relief periods.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000216",
+      "label": "muscle hypertrophy",
+      "altLabels": [],
+      "definition": "The muscle system process that results in enlargement or overgrowth of all or part of a muscle organ due to an increase in the size of its muscle cells. Physiological hypertrophy is a normal process during development (it stops in cardiac muscle after adolescence) and can also be brought on in response to demand. In athletes cardiac and skeletal muscles undergo hypertrophy stimulated by increasing muscle activity on exercise. Smooth muscle cells in the uterus undergo hypertrophy during pregnancy.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000217",
+      "label": "pregnant woman",
+      "altLabels": [],
+      "definition": "Human females who are pregnant, as cultural, psychological, or sociological entities.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000218",
+      "label": "outdoor fitness",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000219",
+      "label": "physical therapy",
+      "altLabels": [],
+      "definition": "The use of exercises and physical activity to restore movement, reduce pain, strengthen muscles, and improve balance and posture in order to restore the ability to function. Therapists provide education and suggest activity modification suited to an individual.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000220",
+      "label": "virtual reality exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000090"
+      ]
+    },
+    {
+      "id": "EXM:0000221",
+      "label": "barbell",
+      "altLabels": [],
+      "definition": "A barbell is a piece of exercise equipment used in weight training, bodybuilding, weightlifting and powerlifting, consisting of a long bar, usually with weights attached at each end.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000222",
+      "label": "bench",
+      "altLabels": [],
+      "definition": "Weight training benches may be of various designs: fixed horizontal, fixed inclined, fixed in a folded position, with one adjustable portion, with two or more adjustable portions, with racks to hold bars, etc. In the limit, the definition of a bench blurs into that of combinations that mix a bench and associated equipment. Benches are manufactured by many different vendors, in an array of qualities, features, and prices.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000223",
+      "label": "BOSU",
+      "altLabels": [],
+      "definition": "A BOSU Balance Trainer (or BOSU ball) is a fitness training device, invented in 1999 by David Weck.[1] It consists of an inflated rubber hemisphere attached to a rigid platform. The device is often used for balance training.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000224",
+      "label": "cone",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000225",
+      "label": "dumbbell",
+      "altLabels": [],
+      "definition": "The dumbbell, a type of free weight, is a piece of equipment used in weight training. It can be used individually or in pairs, with one in each hand.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000226",
+      "label": "heavy ropes",
+      "altLabels": [],
+      "definition": "Battling ropes are used for fitness training to increase full body strength and conditioning.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000227",
+      "label": "hurdle",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000228",
+      "label": "kettlebell",
+      "altLabels": [],
+      "definition": "The kettlebell is a cast iron or cast steel ball with a handle attached to the top (resembling a cannonball with a handle). It is used to perform many types of exercises, including ballistic exercises that combine cardiovascular, strength and flexibility training. They are also the primary equipment used in the weight lifting sport of kettlebell lifting.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000229",
+      "label": "ladder",
+      "altLabels": [],
+      "definition": "Portable structures typically consisting of two pairs of legs and a series of evenly spaced perpendicular rungs or steps used for climbing. Ladders are typically around 6-10 feet tall, although some shorter ladders (often called stepladders) are approximately 3-4 feet tall and some (called telescoping or extension ladders) may reach up to 20 feet in length. Ladders are typically made of fiberglass, aluminum, or wood.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000230",
+      "label": "medicine ball",
+      "altLabels": [],
+      "definition": "A medicine ball (also known as an exercise ball, a med ball, or a fitness ball) is a weighted ball whose diameter is about a shoulder-width, (approx. 13.7 inches (350 mm)), often used for rehabilitation and strength training.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000231",
+      "label": "pull-up bar",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000232",
+      "label": "resistance band",
+      "altLabels": [],
+      "definition": "A resistance band is an elastic band used for strength training. They are also commonly used in physical therapy, specifically by convalescents of muscular injuries, including cardiac rehab patients to allow slow rebuilding of strength.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000233",
+      "label": "stability ball",
+      "altLabels": [],
+      "definition": "An exercise ball is a ball constructed of soft elastic, typically in 5 diameters of 10-centimeter increments, from 35 centimeters (14 inches) to 85 centimeters (34 inches), and filled with air. The air pressure is changed by removing a valve stem and either filling with air or letting the ball deflate. It is most often used in physical therapy, athletic training and exercise. It can also be used for weight training.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000234",
+      "label": "TRX suspension trainer",
+      "altLabels": [],
+      "definition": "a performance training tool that leverages gravity and the user’s body weight to complete the exercises",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000235",
+      "label": "weight machine",
+      "altLabels": [],
+      "definition": "A weight machine is an exercise machine used for weight training that uses gravity as the primary source of resistance and a combination of simple machines to convey that resistance to the person using the machine. Each of the simple machines (pulley, lever, wheel, incline) changes the mechanical advantage of the overall machine relative to the weight.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000236",
+      "label": "racket",
+      "altLabels": [],
+      "definition": "A racket or racquet is a sports implement consisting of a handled frame with an open hoop across which a network of strings or catgut is stretched tightly.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000237",
+      "label": "badminton racket",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000236"
+      ]
+    },
+    {
+      "id": "EXM:0000238",
+      "label": "muscle",
+      "altLabels": [],
+      "definition": "A fibrous soft tissue with the ability to contract to produce force and motion.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000239",
+      "label": "ball",
+      "altLabels": [],
+      "definition": "A ball is a round object (usually spherical, but can sometimes be ovoid) with various uses. It is used in ball games, where the play of the game follows the state of the ball as it is hit, kicked or thrown by players. Balls can also be used for simpler activities, such as catch or juggling. Balls made from hard-wearing materials are used in engineering applications to provide very low friction bearings, known as ball bearings. Black-powder weapons use stone and metal balls as projectiles.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000240",
+      "label": "shuttlecock",
+      "altLabels": [],
+      "definition": "A shuttlecock (also called a birdie or shuttle) is a high-drag projectile used in the sport of badminton. It has an open conical shape formed by feathers or plastic (or a synthetic alternative) embedded into a rounded cork (or rubber) base. The shuttlecock's shape makes it extremely aerodynamically stable. Regardless of initial orientation, it will turn to fly cork first, and remain in the cork-first orientation.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000241",
+      "label": "basketball",
+      "altLabels": [],
+      "definition": "A basketball is a spherical ball used in basketball games.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000242",
+      "label": "bicycle",
+      "altLabels": [],
+      "definition": "A bicycle, also called a bike or cycle, is a human-powered or motor-powered, pedal-driven, single-track vehicle, having two wheels attached to a frame, one behind the other.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000243",
+      "label": "golf ball",
+      "altLabels": [],
+      "definition": "A golf ball is a special ball designed to be used in the game of golf.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000244",
+      "label": "golf club",
+      "altLabels": [],
+      "definition": "A golf club is a club used to hit a golf ball in a game of golf.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000245",
+      "label": "rope",
+      "altLabels": [],
+      "definition": "A rope is a group of yarns, plies, fibers or strands that are twisted or braided together into a larger and stronger form.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000246",
+      "label": "ball game",
+      "altLabels": [],
+      "definition": "Ball games (or ballgames), also ball sports, are any form of game or sport which feature a ball as part of play.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000247",
+      "label": "netball",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000248",
+      "label": "ski",
+      "altLabels": [],
+      "definition": "A ski is a narrow strip of semi-rigid material worn underfoot to glide over snow.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000249",
+      "label": "ski pole",
+      "altLabels": [],
+      "definition": "Ski poles, also referred to as poles (in North America), sticks (UK), or stocks (Australia),[1][2] are used by skiers for balance and propulsion.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000250",
+      "label": "baduanjin",
+      "altLabels": [],
+      "definition": "The Baduanjin qigong(八段錦) is one of the most common forms of Chinese qigong used as exercise.",
+      "parents": [
+        "EXM:0000173"
+      ]
+    },
+    {
+      "id": "EXM:0000251",
+      "label": "football",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000252",
+      "label": "football game",
+      "altLabels": [],
+      "definition": "Football is a family of team sports that involve, to varying degrees, kicking a ball to score a goal.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000253",
+      "label": "association football",
+      "altLabels": [],
+      "definition": "A football, soccer ball, football ball, or association football ball is the ball used in the sport of association football.",
+      "parents": [
+        "EXM:0000251"
+      ]
+    },
+    {
+      "id": "EXM:0000254",
+      "label": "rugby football",
+      "altLabels": [],
+      "definition": "Rugby football is a collective name for the family of team sports of rugby union and rugby league, as well as the earlier forms of football from which both games, as well as Australian rules football and gridiron football, evolved.",
+      "parents": [
+        "EXM:0000252"
+      ]
+    },
+    {
+      "id": "EXM:0000255",
+      "label": "rugby ball",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000251"
+      ]
+    },
+    {
+      "id": "EXM:0000256",
+      "label": "gridiron football game",
+      "altLabels": [],
+      "definition": "Gridiron football, also known as North American football or, in North America, simply football, is a family of football team sports primarily played in the United States and Canada.",
+      "parents": [
+        "EXM:0000252"
+      ]
+    },
+    {
+      "id": "EXM:0000257",
+      "label": "gridiron football",
+      "altLabels": [],
+      "definition": "In Canada and the United States, a football (also called a pigskin) is a ball, roughly in the form of a prolate spheroid, used in the context of playing gridiron football.",
+      "parents": [
+        "EXM:0000251"
+      ]
+    },
+    {
+      "id": "EXM:0000258",
+      "label": "American football",
+      "altLabels": [],
+      "definition": "American football, referred to simply as football in the United States and also known as gridiron, is a team sport played by two teams of eleven players on a rectangular field with goalposts at each end.",
+      "parents": [
+        "EXM:0000256"
+      ]
+    },
+    {
+      "id": "EXM:0000259",
+      "label": "Canadian football",
+      "altLabels": [],
+      "definition": "Canadian football is a sport played in Canada in which two teams of 12 players each compete for territorial control of a field of play 110 yards (101 m) long and 65 yards (59 m) wide attempting to advance a pointed oval-shaped ball into the opposing team's scoring area (end zone).",
+      "parents": [
+        "EXM:0000256"
+      ]
+    },
+    {
+      "id": "EXM:0000260",
+      "label": "softball",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000261",
+      "label": "baseball game",
+      "altLabels": [],
+      "definition": "Baseball is a bat-and-ball game played between two opposing teams, typically of nine players each, that take turns batting and fielding.",
+      "parents": [
+        "EXM:0000269"
+      ]
+    },
+    {
+      "id": "EXM:0000262",
+      "label": "baseball",
+      "altLabels": [],
+      "definition": "A baseball is a ball used in the sport of the same name. The ball comprises a rubber or cork center wrapped in yarn and covered with white natural horsehide or cowhide, or a synthetic composite leather.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000263",
+      "label": "bat",
+      "altLabels": [],
+      "definition": "The stick-like implement used to hit the ball in bat-and-ball sports.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000264",
+      "label": "softball bat",
+      "altLabels": [],
+      "definition": "The bat used by the batter can be made of wood, aluminum, or composite materials such as carbon fiber. Sizes may vary but they may be no more than 34 inches (86 cm) long, 2.4 inches (6 cm) in diameter, or 38 ounces (1.1 kg) in mass.\" [] {def=\"https://en.wikipedia.org/wiki/Softball#Bat\"}",
+      "parents": [
+        "EXM:0000263"
+      ]
+    },
+    {
+      "id": "EXM:0000265",
+      "label": "baseball bat",
+      "altLabels": [],
+      "definition": "A baseball bat is a smooth wooden or metal club used in the sport of baseball to hit the ball after it is thrown by the pitcher.",
+      "parents": [
+        "EXM:0000263"
+      ]
+    },
+    {
+      "id": "EXM:0000266",
+      "label": "glove",
+      "altLabels": [],
+      "definition": "A glove is a garment covering the hand.\" [] {def=\"https://en.wikipedia.org/wiki/Glove\"}",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000267",
+      "label": "baseball glove",
+      "altLabels": [],
+      "definition": "A baseball glove or mitt is a large glove (traditionally made of leather, today other options do exist) worn by baseball players of the defending team, which assists players in catching and fielding balls hit by a batter or thrown by a teammate.",
+      "parents": [
+        "EXM:0000266"
+      ]
+    },
+    {
+      "id": "EXM:0000268",
+      "label": "batting glove",
+      "altLabels": [],
+      "definition": "Batting gloves are a component in bat-and-ball games sportswear. Typically consisting of a leather palm and back made of nylon or another synthetic fabric, the glove covers one or both hands of a batter, providing comfort, prevention of blisters, warmth, improved grip, and shock absorption when hitting the ball. Batting gloves are considered an essential part of cricket equipment, though they are not mandatory at any level of the game.",
+      "parents": [
+        "EXM:0000266"
+      ]
+    },
+    {
+      "id": "EXM:0000269",
+      "label": "bat-and-ball game",
+      "altLabels": [],
+      "definition": "Bat-and-ball games (or safe haven games) are field games played by two opposing teams, in which the action starts when the defending team throws a ball at a dedicated player of the attacking team, who tries to hit it with a bat and run between various safe areas in the field to score runs (points), while the defending team can use the ball in various ways against the attacking team's players to force them off the field when they are not in safe zones, and thus prevent them from further scoring.",
+      "parents": [
+        "EXM:0000246"
+      ]
+    },
+    {
+      "id": "EXM:0000270",
+      "label": "softball glove",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000266"
+      ]
+    },
+    {
+      "id": "EXM:0000271",
+      "label": "squash racket",
+      "altLabels": [],
+      "definition": "Squash rackets have maximum dimensions of 686 mm (27.0 in) long and 215 mm (8.5 in) wide, with a maximum strung area of 500 square centimeters (77.5 sq in). The permitted maximum weight is 255 grams (9.0 oz), but most have a weight between 90 and 150 grams (3–5.3 oz.). The strings of the racket usually have a tension of 25-30.",
+      "parents": [
+        "EXM:0000236"
+      ]
+    },
+    {
+      "id": "EXM:0000272",
+      "label": "squash ball",
+      "altLabels": [],
+      "definition": "Squash balls are between 39.5 and 40.5 mm in diameter, and weigh 23 to 25 grams. They are made with two pieces of rubber compound, glued together to form a hollow sphere and buffed to a matte finish.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000273",
+      "label": "stair",
+      "altLabels": [],
+      "definition": "Stairs is a structure designed to bridge a large vertical distance by dividing it into smaller vertical distances, called steps. Stairs may be straight, round, or may consist of two or more straight pieces connected at angles.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000274",
+      "label": "table tennis racket",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000263"
+      ]
+    },
+    {
+      "id": "EXM:0000275",
+      "label": "table tennis ball",
+      "altLabels": [],
+      "definition": "The international rules specify that the game is played with a sphere having a mass of 2.7 grams (0.095 oz) and a diameter of 40 millimetres (1.57 in).",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000276",
+      "label": "tennis ball",
+      "altLabels": [],
+      "definition": "A tennis ball is a ball designed for the sport of tennis. Tennis balls are fluorescent yellow in organised competitions, but in recreational play can be virtually any color. Tennis balls are covered in a fibrous felt which modifies their aerodynamic properties, and each has a white curvilinear oval covering it.\" [] {def=\"https://en.wikipedia.org/wiki/Tennis_ball\"}",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000277",
+      "label": "tennis racket",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000236"
+      ]
+    },
+    {
+      "id": "EXM:0000278",
+      "label": "volleyball",
+      "altLabels": [],
+      "definition": "A volleyball is a ball used to play indoor volleyball, beach volleyball, or other less common variations of the sport. Volleyballs are round and traditionally consist of eighteen nearly rectangular panels of synthetic or genuine leather, arranged in six identical sections of three panels each, wrapped around a bladder. A valve permits the internal air pressure to be adjusted.",
+      "parents": [
+        "EXM:0000239"
+      ]
+    },
+    {
+      "id": "EXM:0000279",
+      "label": "athlete",
+      "altLabels": [],
+      "definition": "Individuals who have developed skills, physical stamina and strength or participants in SPORTS or other physical activities.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000280",
+      "label": "child",
+      "altLabels": [],
+      "definition": "An age group comprised of individuals who are not yet an adult. The specific cut-off age will vary by purpose.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000281",
+      "label": "adolescent",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000282",
+      "label": "adult",
+      "altLabels": [],
+      "definition": "An age group comprised of humans who have reached reproductive age.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000283",
+      "label": "elderly",
+      "altLabels": [],
+      "definition": "An age group comprised of individuals 65 years of age and older.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000284",
+      "label": "postpartum woman",
+      "altLabels": [],
+      "definition": "commonly used to refer to the females during first six weeks following childbirth",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000285",
+      "label": "chronic condition",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000286",
+      "label": "sensor",
+      "altLabels": [],
+      "definition": "A device designed to respond to a stimulus by generating a signal that can be measured or interpreted.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000287",
+      "label": "electrocardiogram sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000288",
+      "label": "airflow sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000289",
+      "label": "sphygmomanometer",
+      "altLabels": [],
+      "definition": "Instruments for measuring arterial blood pressure consisting of an inflatable cuff, inflating bulb, and a gauge showing the blood pressure.",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000290",
+      "label": "electromyography sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000291",
+      "label": "body temperature sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000292",
+      "label": "patient position sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000293",
+      "label": "accelerometer",
+      "altLabels": [],
+      "definition": "An instrument used for measuring a change in velocity.",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000294",
+      "label": "pulse oximeter",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000295",
+      "label": "galvanic skin response sensor",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000286"
+      ]
+    },
+    {
+      "id": "EXM:0000296",
+      "label": "wearable electronic device",
+      "altLabels": [],
+      "definition": "Electronic implements worn on the body as an implant or as an accessory.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000297",
+      "label": "smart glasses",
+      "altLabels": [],
+      "definition": "Computerized eyewear with multiple technological applications for advanced computing and interoperability. Smart glasses are optimized to facilitate information and data access, capture, display, transfer, and manipulation.",
+      "parents": [
+        "EXM:0000296"
+      ]
+    },
+    {
+      "id": "EXM:0000298",
+      "label": "smart watch",
+      "altLabels": [],
+      "definition": "A smartwatch is a wearable computer in the form of a watch; modern smartwatches provide a local touchscreen interface for daily use, while an associated smartphone app provides for management and telemetry.",
+      "parents": [
+        "EXM:0000296"
+      ]
+    },
+    {
+      "id": "EXM:0000300",
+      "label": "treadmill",
+      "altLabels": [],
+      "definition": "A treadmill is a device generally used for walking, running, or climbing while staying in the same place.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000301",
+      "label": "stationary bike",
+      "altLabels": [],
+      "definition": "A stationary bicycle is a device used as exercise equipment for indoor cycling.",
+      "parents": [
+        "EXM:0000013"
+      ]
+    },
+    {
+      "id": "EXM:0000302",
+      "label": "cardiac rehabilitation",
+      "altLabels": [],
+      "definition": "Restoration of functions to the maximum degree possible in a person or persons suffering from a CARDIOVASCULAR DISEASE. It also includes cardiac conditioning and SECONDARY PREVENTION in patients with elevated cardiovascular risk profile.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000303",
+      "label": "fasting plasma glucose",
+      "altLabels": [
+        "FPG"
+      ],
+      "definition": "Fasting plasma glucose (FPG) levels are determined by taking a blood sample from participants who have fasted for at least 8 hours. It can be measured in mmol/L or in mg/dL. For comparability, these values are converted in mmol/L. Other related biomarkers, such as haemoglobin A1c (HbA1c), can be used to help calculate national estimates.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000304",
+      "label": "obesity",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000305",
+      "label": "exercise addiction",
+      "altLabels": [],
+      "definition": "Exercise addiction is a state characterized by a compulsive engagement in any form of physical exercise, despite negative consequences.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000306",
+      "label": "overweight",
+      "altLabels": [],
+      "definition": "A status with BODY WEIGHT that is above certain standards. In the scale of BODY MASS INDEX, overweight is defined as having a BMI of 25.0-29.9 kg/m2. Overweight may or may not be due to increases in body fat (ADIPOSE TISSUE), hence overweight does not equal \\\"over fat\\\".",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000307",
+      "label": "disability",
+      "altLabels": [],
+      "definition": "Any physical or mental impairment that interferes with an individual's ability to perform desired activities.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000308",
+      "label": "disease",
+      "altLabels": [],
+      "definition": "A disposition (i) to undergo pathological processes that (ii) exists in an organism because of one or more disorders in that organism.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000309",
+      "label": "exercise intervention",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000310",
+      "label": "sedentary behavior",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000014"
+      ]
+    },
+    {
+      "id": "EXM:0000311",
+      "label": "aquatic exercise",
+      "altLabels": [],
+      "definition": "exercise performed in water",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000312",
+      "label": "aquatic exercise therapy",
+      "altLabels": [],
+      "definition": "Aquatic therapy refers to treatments and exercises performed in water for relaxation, fitness, physical rehabilitation, and other therapeutic benefit.",
+      "parents": [
+        "EXM:0000219"
+      ]
+    },
+    {
+      "id": "EXM:0000314",
+      "label": "injury",
+      "altLabels": [],
+      "definition": "Injury, also known as physical trauma, is damage to the body caused by an external force.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000315",
+      "label": "skeleton",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000316",
+      "label": "ligament",
+      "altLabels": [],
+      "definition": "Shiny, flexible bands of fibrous tissue connecting together articular extremities of bones. They are pliant, tough, and inextensile.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000317",
+      "label": "perimenopausal woman",
+      "altLabels": [],
+      "definition": "The term \\\"perimenopausal woman\\\", which literally means \\\"woman around the menopause\\\", refers to woman during the menopause transition years before the date of the final episode of flow.",
+      "parents": [
+        "EXM:0000214"
+      ]
+    },
+    {
+      "id": "EXM:0000318",
+      "label": "sit up exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000207"
+      ]
+    },
+    {
+      "id": "EXM:0000319",
+      "label": "spinal cord injury",
+      "altLabels": [],
+      "definition": "Traumatic damage of the spinal cord.",
+      "parents": [
+        "EXM:0000314"
+      ]
+    },
+    {
+      "id": "EXM:0000320",
+      "label": "cognitive function",
+      "altLabels": [],
+      "definition": "Cognitive functioning refers to multiple mental abilities, including learning, thinking, reasoning, remembering, problem solving, decision making, and attention.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000321",
+      "label": "physical function",
+      "altLabels": [],
+      "definition": "An individual's capacity to undertake physical activities, such as everyday tasks.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000322",
+      "label": "intellectual disability",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000307"
+      ]
+    },
+    {
+      "id": "EXM:0000323",
+      "label": "waist circumference",
+      "altLabels": [
+        "WC"
+      ],
+      "definition": "A circumferential measurement of the waist, which may be classified as the area immediately below the lowest rib, at the narrowest part of the torso, midpoint between the lowest rib and the iliac crest, or immediately above the iliac crest.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000324",
+      "label": "grip strength",
+      "altLabels": [],
+      "definition": "An assessment of muscle strength that measures that force with which one holds or grasps.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000325",
+      "label": "2-hour postprandial glucose",
+      "altLabels": [
+        "2hPG",
+        "PMID: 35197411"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000326",
+      "label": "total energy expenditure",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000327",
+      "label": "total daily energy expenditure",
+      "altLabels": [
+        "TDEE"
+      ],
+      "definition": "the Basal Metabolic Rate (BMR) + the Thermic Effect of Activity (TEA) + the Thermic Effect of Food (TEF)",
+      "parents": [
+        "EXM:0000326"
+      ]
+    },
+    {
+      "id": "EXM:0000328",
+      "label": "thermic effect of physical activity",
+      "altLabels": [
+        "TEPA"
+      ],
+      "definition": "The thermic effect of physical activity (TEPA) is the amount of energy burned during all physical activity.\" [https://wikipedikia.org/what-is-the-thermic-effect-of-exercise/] {comment=\"TEPA can range anywhere from 15 to 30% of TDEE.\"}",
+      "parents": [
+        "EXM:0000016"
+      ]
+    },
+    {
+      "id": "EXM:0000329",
+      "label": "thermic effect of food",
+      "altLabels": [
+        "TEF"
+      ],
+      "definition": "Specific dynamic action (SDA), also known as thermic effect of food (TEF) or dietary induced thermogenesis (DIT), is the amount of energy expenditure above the basal metabolic rate due to the cost of processing food for use and storage.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000330",
+      "label": "leisure physical activity",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000014"
+      ]
+    },
+    {
+      "id": "EXM:0000331",
+      "label": "moderate physical activity",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000333"
+      ]
+    },
+    {
+      "id": "EXM:0000332",
+      "label": "vigorous physical activity",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000333"
+      ]
+    },
+    {
+      "id": "EXM:0000333",
+      "label": "moderate-to-vigorous physical activity",
+      "altLabels": [
+        "MVPA"
+      ],
+      "definition": "",
+      "parents": [
+        "EXM:0000014"
+      ]
+    },
+    {
+      "id": "EXM:0000334",
+      "label": "physical disability",
+      "altLabels": [],
+      "definition": "A physical disability is a limitation on a person's physical functioning, mobility, dexterity or stamina.",
+      "parents": [
+        "EXM:0000307"
+      ]
+    },
+    {
+      "id": "EXM:0000335",
+      "label": "cool-down exercise",
+      "altLabels": [],
+      "definition": "Tapering-off physical activity from vigorous to light, to gradually return the body to pre-exercise condition and metabolic state.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000336",
+      "label": "warm-up exercise",
+      "altLabels": [],
+      "definition": "Physical activities done to prepare the body for more intense physical activities.",
+      "parents": [
+        "EXM:0000004"
+      ]
+    },
+    {
+      "id": "EXM:0000337",
+      "label": "injury of musculoskeletal system",
+      "altLabels": [],
+      "definition": "Damage to the muscles, bones and their supportive structural attachments.",
+      "parents": [
+        "EXM:0000314"
+      ]
+    },
+    {
+      "id": "EXM:0000338",
+      "label": "body balance",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000339",
+      "label": "bone strength",
+      "altLabels": [],
+      "definition": "Bone strength can be defined as bone’s resistance to fracture (i.e., failure load) for a given condition (e.g., impact arising from a fall).",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000341",
+      "label": "muscular tension",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000344",
+      "label": "recreational activity",
+      "altLabels": [],
+      "definition": "Any activity that is intended for refreshment or diversion.",
+      "parents": [
+        "EXM:0000014"
+      ]
+    },
+    {
+      "id": "EXM:0000345",
+      "label": "recreational exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000004",
+        "EXM:0000344"
+      ]
+    },
+    {
+      "id": "EXM:0000346",
+      "label": "high-intensity functional training",
+      "altLabels": [
+        "HIFT"
+      ],
+      "definition": "High-intensity functional training (HIFT) is an exercise modality that emphasizes functional, multi-joint movements that can be modified to any fitness level and elicit greater muscle recruitment than more traditional exercise.",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000347",
+      "label": "cardiopulmonary endurance",
+      "altLabels": [],
+      "definition": "Cardiopulmonary endurance is the ability of body to perform aerobic exercise or activity for long periods of time without tiring.",
+      "parents": [
+        "EXM:0000140"
+      ]
+    },
+    {
+      "id": "EXM:0000349",
+      "label": "liuzijue",
+      "altLabels": [],
+      "definition": "The Six Healing Sounds or Liu Zi Jue is one of the common forms of Chinese qigong, and involves the coordination of movement and breathing patterns with specific sounds.",
+      "parents": [
+        "EXM:0000173"
+      ]
+    },
+    {
+      "id": "EXM:0000350",
+      "label": "anaerobic exercise",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000351",
+      "label": "range of motion",
+      "altLabels": [
+        "ROM"
+      ],
+      "definition": "Range of motion (or ROM), is the linear or angular distance that a moving object may normally travel while properly attached to another.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000352",
+      "label": "range of motion exercise",
+      "altLabels": [],
+      "definition": "Actions performed to provide the active or passive exercises to maintain joint function",
+      "parents": [
+        "EXM:0000001"
+      ]
+    },
+    {
+      "id": "EXM:0000353",
+      "label": "range of motion testing",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000100"
+      ]
+    },
+    {
+      "id": "EXM:0000354",
+      "label": "skeletal bone",
+      "altLabels": [],
+      "definition": "Calcified connective tissue that forms the skeletal components of the body.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000355",
+      "label": "energy",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000356",
+      "label": "brain health",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000357",
+      "label": "smoking history",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000358",
+      "label": "heart rhythm",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000359",
+      "label": "carpal tunnel syndrome",
+      "altLabels": [
+        "CTS"
+      ],
+      "definition": "Entrapment of the MEDIAN NERVE in the carpal tunnel, which is formed by the flexor retinaculum and the CARPAL BONES.",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000360",
+      "label": "stenosing tendovaginitis of radial styloid",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000361",
+      "label": "rotator cuff injury",
+      "altLabels": [],
+      "definition": "Injuries to the ROTATOR CUFF of the shoulder joint.",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000362",
+      "label": "tennis elbow",
+      "altLabels": [],
+      "definition": "A condition characterized by pain in or near the lateral humeral epicondyle or in the forearm extensor muscle mass as a result of unusual strain. It occurs due repetitive stresses on the elbow from activities such as tennis playing.",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000363",
+      "label": "injury of cruciate ligament of knee",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000364",
+      "label": "acute sprain of ankle joint",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000365",
+      "label": "acute lumbar muscle sprain",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000366",
+      "label": "musculi piriformis syndrome",
+      "altLabels": [],
+      "definition": "",
+      "parents": [
+        "EXM:0000337"
+      ]
+    },
+    {
+      "id": "EXM:0000367",
+      "label": "acceleration",
+      "altLabels": [],
+      "definition": "An increase in the rate of speed.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000368",
+      "label": "electromyography",
+      "altLabels": [
+        "EMG"
+      ],
+      "definition": "Recording of the changes in electric potential of muscle by means of surface or needle electrodes.",
+      "parents": [
+        "EXM:0000150"
+      ]
+    },
+    {
+      "id": "EXM:0000369",
+      "label": "galvanic skin response",
+      "altLabels": [
+        "UMLS CUI: C0016989",
+        "GSR"
+      ],
+      "definition": "A change in electrical resistance of the skin, occurring in emotion and in certain other conditions.",
+      "parents": [
+        "EXM:0000007"
+      ]
+    },
+    {
+      "id": "EXM:0000370",
+      "label": "oxygen saturation",
+      "altLabels": [],
+      "definition": "Extent to which HEMOGLOBIN is saturated with OXYGEN typically as measured in arterial blood. It can be measured by various methods (e.g., PULSE OXYMETER, blood gas analysis). A low blood oxygen saturation level indicates a condition called HYPOXEMIA.",
+      "parents": [
+        "EXM:0000048"
+      ]
+    },
+    {
+      "id": "EXM:0000371",
+      "label": "molecule",
+      "altLabels": [],
+      "definition": "An aggregate of two or more atoms in a defined arrangement held together by chemical bonds.",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000372",
+      "label": "dopamine",
+      "altLabels": [],
+      "definition": "One of the catecholamine NEUROTRANSMITTERS in the brain. It is derived from TYROSINE and is the precursor to NOREPINEPHRINE and EPINEPHRINE. Dopamine is a major transmitter in the extrapyramidal system of the brain, and important in regulating movement. A family of receptors (RECEPTORS, DOPAMINE) mediate its action.",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000373",
+      "label": "endorphin",
+      "altLabels": [],
+      "definition": "One of the three major groups of endogenous opioid peptides. They are large peptides derived from the PRO-OPIOMELANOCORTIN precursor. The known members of this group are alpha-, beta-, and gamma-endorphin. The term endorphin is also sometimes used to refer to all opioid peptides, but the narrower sense is used here; OPIOID PEPTIDES is used for the broader group.",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000374",
+      "label": "serotonin",
+      "altLabels": [],
+      "definition": "A biochemical messenger and regulator, synthesized from the essential amino acid L-TRYPTOPHAN. In humans it is found primarily in the central nervous system, gastrointestinal tract, and blood platelets. Serotonin mediates several important physiological functions including neurotransmission, gastrointestinal motility, hemostasis, and cardiovascular integrity. Multiple receptor families (RECEPTORS, SEROTONIN) explain the broad physiological actions and distribution of this biochemical mediator.",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000375",
+      "label": "norepinephrine",
+      "altLabels": [],
+      "definition": "Precursor of epinephrine that is secreted by the ADRENAL MEDULLA and is a widespread central and autonomic neurotransmitter. Norepinephrine is the principal transmitter of most postganglionic sympathetic fibers, and of the diffuse projection system in the brain that arises from the LOCUS CERULEUS. It is also found in plants and is used pharmacologically as a sympathomimetic.",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000376",
+      "label": "neurotransmitter",
+      "altLabels": [],
+      "definition": "Endogenous signaling molecules secreted by neurons that alter the behavior of neurons or effector cells. Neurotransmitter is used here in its most general sense, including not only messengers that act directly to regulate ion channels, but also those that act through second messenger systems, and those that act at a distance from their site of release. Included are neuromodulators, neuroregulators, neuromediators, neurohormones, and neurohumors, whether or not acting at synapses.",
+      "parents": [
+        "EXM:0000371"
+      ]
+    },
+    {
+      "id": "EXM:0000377",
+      "label": "adenosine triphosphate",
+      "altLabels": [],
+      "definition": "An adenine nucleotide containing three phosphate groups esterified to the sugar moiety. In addition to its crucial roles in metabolism adenosine triphosphate is a neurotransmitter.",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000378",
+      "label": "glutamate",
+      "altLabels": [],
+      "definition": "A non-essential alpha-amino acid and excitatory neurotransmitter. Glutamic acid can serve as a precursor for the synthesis of the inhibitory neurotransmitter gamma-aminobutyric acid (GABA).",
+      "parents": [
+        "EXM:0000376"
+      ]
+    },
+    {
+      "id": "EXM:0000379",
+      "label": "exercise plan",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000380",
+      "label": "monitoring",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000381",
+      "label": "adjustment",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    },
+    {
+      "id": "EXM:0000382",
+      "label": "safety and risk management",
+      "altLabels": [],
+      "definition": "",
+      "parents": []
+    }
+  ]
+}

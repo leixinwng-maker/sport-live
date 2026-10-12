@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection
 
@@ -93,6 +95,12 @@ def create_app() -> FastAPI:
     app.include_router(auth_api.router)
     app.include_router(sync_api.router)
     app.include_router(data_api.router)
+
+    # 法务静态页（隐私政策 / 用户协议，供上架审核与 App 内引用）：
+    # /legal/privacy-policy.html、/legal/user-agreement.html
+    legal_dir = Path(__file__).resolve().parent / "static" / "legal"
+    legal_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/legal", StaticFiles(directory=legal_dir), name="legal")
 
     @app.get("/health", response_model=HealthOut, tags=["meta"])
     async def health() -> HealthOut:

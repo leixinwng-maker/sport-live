@@ -76,6 +76,25 @@ class AIEngine {
   /// 是否已配置视觉模型
   bool get hasVisionModel => _visionModel.isNotEmpty;
 
+  // ==== 配置回显（配置页读取；apiKey 仅供「留空沿用旧 Key」场景） ====
+  String get savedBaseUrl => _baseUrl;
+  String get savedModel => _model;
+  String get savedVisionModel => _visionModel;
+  String get savedApiKey => _apiKey;
+
+  /// 归一化请求根地址：去尾部斜杠与误填的 /v1 后缀（用户常把
+  /// 「https://xxx/v1」整个粘进来，本类统一补 /v1/...，避免拼出 /v1/v1 导致 404）。
+  String get _apiBase {
+    var base = _baseUrl.trim();
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    if (base.endsWith('/v1')) {
+      base = base.substring(0, base.length - 3);
+    }
+    return base;
+  }
+
   /// 调用大模型
   /// [messages] 对话消息列表
   Future<String> chat(List<Map<String, String>> messages) async {
@@ -83,7 +102,7 @@ class AIEngine {
       throw Exception('请先在设置中配置AI服务');
     }
 
-    final url = '$_baseUrl/v1/chat/completions';
+    final url = '$_apiBase/v1/chat/completions';
     final response = await http.post(
       Uri.parse(url),
       headers: {
@@ -115,7 +134,7 @@ class AIEngine {
       throw Exception('请先在设置中配置AI服务');
     }
 
-    final url = '$_baseUrl/v1/chat/completions';
+    final url = '$_apiBase/v1/chat/completions';
     final response = await http.post(
       Uri.parse(url),
       headers: {
@@ -178,7 +197,7 @@ class AIEngine {
       throw Exception('请先在设置中配置AI服务');
     }
 
-    final url = '$_baseUrl/v1/chat/completions';
+    final url = '$_apiBase/v1/chat/completions';
     final response = await http.post(
       Uri.parse(url),
       headers: {
@@ -231,7 +250,7 @@ class AIEngine {
         },
     ];
 
-    final url = '$_baseUrl/v1/chat/completions';
+    final url = '$_apiBase/v1/chat/completions';
     final response = await http.post(
       Uri.parse(url),
       headers: {
@@ -312,7 +331,7 @@ class AIEngine {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
     }
-    final url = '$_baseUrl/v1/chat/completions';
+    final url = '$_apiBase/v1/chat/completions';
     final response = await http.post(
       Uri.parse(url),
       headers: {

@@ -25,6 +25,8 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   local_auth: ^2.3.0
   sqflite_sqlcipher: ^3.1.0
+  # GB 路线：直接只读解析 Gadgetbridge 导出的 SQLite 数据库
+  sqlite3: ^2.4.0
   connectivity_plus: ^6.0.5
   crypto: ^3.0.3
   lunar: ^1.7.8

@@ -9,6 +9,7 @@ import 'providers/app_provider.dart';
 import 'providers/wearable_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/legal/agreement_screen.dart';
 import 'screens/lock/lock_screen.dart';
 import 'theme/taoist_theme.dart';
 
@@ -45,17 +46,19 @@ class MyApp extends StatelessWidget {
         theme: TaoistTheme.lightTheme,
         darkTheme: TaoistTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: AppLockGate(
-          child: Consumer<AppProvider>(
-            builder: (context, provider, _) {
-              final need = provider.needsLogin;
-              if (need == null) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return need ? const LoginScreen() : const HomeScreen();
-            },
+        home: AgreementGate(
+          child: AppLockGate(
+            child: Consumer<AppProvider>(
+              builder: (context, provider, _) {
+                final need = provider.needsLogin;
+                if (need == null) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return need ? const LoginScreen() : const HomeScreen();
+              },
+            ),
           ),
         ),
       ),

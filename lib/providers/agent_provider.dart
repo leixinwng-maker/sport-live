@@ -4,8 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/agent_service.dart';
+import '../services/vision/vision_service.dart';
 import 'app_provider.dart';
 import 'wearable_provider.dart';
+
+/// 聊天发图默认识别提示词：完整提取截图全部文字（通用，不限报告类型）
+const String kChatImagePrompt =
+    '这是用户上传的截图（可能是运动手表数据、体检报告、训练App记录、支付/账单截图等）。'
+    '请完整提取图片中的全部文字内容，包括：标题、日期时间、项目/条目名称、数值、单位、'
+    '分类、状态标记等，尽量保持原文的行序与表格结构。只输出提取到的文字，不要解释或总结。';
 
 /// 一条智能体聊天消息
 class ChatMessage {
@@ -19,13 +26,26 @@ class ChatMessage {
   /// assistant 消息是否为失败提示（可重试）
   final bool error;
 
+  /// FIT-2：待确认方案载荷（`{type, data, saved}`）；无方案时为 null。
+  /// 兼容旧持久化记录：旧 JSON 无此字段 → 解析为 null。
+  final Map<String, dynamic>? payload;
+
+  /// 随消息发送的截图本地路径（仅 user 消息可能非空）。
+  /// 兼容旧持久化记录：旧 JSON 无此字段 → 解析为空。
+  final List<String> imagePaths;
+
   const ChatMessage({
     required this.role,
     required this.content,
     required this.time,
     this.toolCount = 0,
     this.error = false,
+    this.payload,
+    this.imagePaths = const [],
   });
+
+  /// 卡片是否已保存（仅当 payload 存在时有效）
+  bool get payloadSaved => payload?['saved'] == true;
 
   Map<String, dynamic> toJson() => {
         'role': role,
@@ -33,9 +53,23 @@ class ChatMessage {
         'time': time.millisecondsSinceEpoch,
         'toolCount': toolCount,
         'error': error,
+        if (payload != null) 'payload': payload,
+        if (imagePaths.isNotEmpty) 'imagePaths': imagePaths,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? payload;
+    final rawPayload = json['payload'];
+    if (rawPayload is Map && rawPayload.isNotEmpty) {
+      payload = Map<String, dynamic>.from(rawPayload);
+    }
+    final images = <String>[];
+    final rawImages = json['imagePaths'];
+    if (rawImages is List) {
+      for (final p in rawImages) {
+        if (p is String && p.isNotEmpty) images.add(p);
+      }
+    }
     return ChatMessage(
       role: json['role'] == 'assistant' ? 'assistant' : 'user',
       content: json['content']?.toString() ?? '',
@@ -44,6 +78,28 @@ class ChatMessage {
       ),
       toolCount: (json['toolCount'] as num?)?.toInt() ?? 0,
       error: json['error'] == true,
+      payload: payload,
+      imagePaths: images,
+    );
+  }
+
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    DateTime? time,
+    int? toolCount,
+    bool? error,
+    Map<String, dynamic>? payload,
+    List<String>? imagePaths,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      time: time ?? this.time,
+      toolCount: toolCount ?? this.toolCount,
+      error: error ?? this.error,
+      payload: payload ?? this.payload,
+      imagePaths: imagePaths ?? this.imagePaths,
     );
   }
 }
@@ -63,7 +119,6 @@ class AgentProvider extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   bool _sending = false;
   String? _toolStatus;
-  int _pendingToolCalls = 0;
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get sending => _sending;
@@ -93,20 +148,71 @@ class AgentProvider extends ChangeNotifier {
   }
 
   /// 发送用户消息（编排 agent 循环，UI 通过 toolStatus 观察查询进度）
-  Future<void> sendMessage(String text) async {
+  ///
+  /// [imagePaths] 随消息发送的截图路径：先经 [VisionService] 识别为文字，
+  /// 再把识别文本拼进 userText 走现有 agent 循环（不依赖主模型具备视觉能力）。
+  Future<void> sendMessage(String text, {List<String>? imagePaths}) async {
     final service = _agentService;
     final userText = text.trim();
-    if (service == null || userText.isEmpty || _sending) return;
+    final images = List<String>.of(imagePaths ?? const []);
+    if (service == null || _sending) return;
+    if (userText.isEmpty && images.isEmpty) return;
 
     _messages.add(ChatMessage(
       role: 'user',
-      content: userText,
+      content: userText.isEmpty ? '（发送了图片）' : userText,
       time: DateTime.now(),
+      imagePaths: images,
     ));
     _sending = true;
     _toolStatus = null;
-    _pendingToolCalls = 0;
     notifyListeners();
+
+    // 图片 → 文字（三级降级：独立视觉配置 → 主Key+视觉模型 → 本地 OCR）
+    final ocrParts = <String>[];
+    String? visionError;
+    for (var i = 0; i < images.length; i++) {
+      _toolStatus = images.length > 1
+          ? '正在识别图片（${i + 1}/${images.length}）…'
+          : '正在识别图片…';
+      notifyListeners();
+      try {
+        final recognized = await VisionService.instance.recognizeImage(
+          filePath: images[i],
+          prompt: kChatImagePrompt,
+        );
+        if (recognized != null && recognized.trim().isNotEmpty) {
+          ocrParts.add(recognized.trim());
+        }
+      } catch (e) {
+        visionError = e.toString();
+        break;
+      }
+    }
+
+    if (ocrParts.isEmpty) {
+      _messages.add(ChatMessage(
+        role: 'assistant',
+        content: visionError == null
+            ? '图片识别失败：未获得可用文字。请在「AI 配置」中设置视觉模型'
+                '（或在使用支持本地识别的设备上重试），也可以直接把截图内容用文字发给我。'
+            : '图片识别失败：$visionError\n'
+                '可在「AI 配置」中检查视觉模型设置，或改用文字描述发送。',
+        time: DateTime.now(),
+        error: true,
+      ));
+      _sending = false;
+      _toolStatus = null;
+      notifyListeners();
+      await _persist();
+      return;
+    }
+
+    final effectiveText = userText.isEmpty
+        ? '[用户发送了 ${images.length} 张截图，以下为识别出的文字内容，'
+            '是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}'
+        : '$userText\n\n[以下是用户随消息上传的 ${images.length} 张截图'
+            '识别出的文字内容，是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}';
 
     // 历史消息（排除刚发送的这条与失败气泡）
     final history = <Map<String, dynamic>>[
@@ -114,14 +220,13 @@ class AgentProvider extends ChangeNotifier {
         if (!m.error) {'role': m.role, 'content': m.content},
     ];
 
-    String reply;
+    final AgentReply reply;
     try {
       reply = await service.sendMessage(
         history: history,
-        userText: userText,
+        userText: effectiveText,
         onStatus: (s) {
           _toolStatus = s;
-          if (s.startsWith('正在查询')) _pendingToolCalls++;
           notifyListeners();
         },
       );
@@ -141,9 +246,10 @@ class AgentProvider extends ChangeNotifier {
 
     _messages.add(ChatMessage(
       role: 'assistant',
-      content: reply.isEmpty ? '（模型未返回内容，请重试）' : reply,
+      content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
       time: DateTime.now(),
-      toolCount: _pendingToolCalls,
+      toolCount: reply.toolCount,
+      payload: reply.action?.toJson(),
     ));
     _sending = false;
     _toolStatus = null;
@@ -165,16 +271,20 @@ class AgentProvider extends ChangeNotifier {
 
     // 向前找最近的 user 消息作为重发内容（防御持久化裁剪后的边界情况）
     String userText = '';
+    List<String> userImages = const [];
     for (int i = errIdx - 1; i >= 0; i--) {
       if (_messages[i].role == 'user') {
         userText = _messages[i].content;
+        userImages = _messages[i].imagePaths;
         break;
       }
     }
     _messages.removeAt(errIdx);
     notifyListeners();
-    if (userText.isNotEmpty) {
-      await sendMessage(userText);
+    if (userText.isNotEmpty || userImages.isNotEmpty) {
+      // 图片占位文案不重发，交由 sendMessage 重新生成
+      if (userImages.isNotEmpty && userText == '（发送了图片）') userText = '';
+      await sendMessage(userText, imagePaths: userImages);
     } else {
       await _persist();
     }
@@ -185,6 +295,19 @@ class AgentProvider extends ChangeNotifier {
     if (_sending || _messages.isEmpty) return;
     _messages.clear();
     _toolStatus = null;
+    notifyListeners();
+    await _persist();
+  }
+
+  /// FIT-2：把第 [index] 条消息的待确认方案标记为「已保存」（卡片保存成功后调用）
+  ///
+  /// 仅改内存态与持久化，不触碰业务数据；业务落库由调用方走 AppProvider 完成。
+  Future<void> markPayloadSaved(int index) async {
+    if (index < 0 || index >= _messages.length) return;
+    final m = _messages[index];
+    final payload = m.payload;
+    if (payload == null || payload['saved'] == true) return;
+    _messages[index] = m.copyWith(payload: {...payload, 'saved': true});
     notifyListeners();
     await _persist();
   }

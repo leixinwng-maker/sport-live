@@ -121,7 +121,7 @@ void main() {
 
   test('SU-3 输出必带出处与固定免责话术', () async {
     final out =
-        await service.executeTool('lookup_supplement', {'query': '维生素D'});
+        (await service.executeTool('lookup_supplement', {'query': '维生素D'})).text;
 
     expect(out, contains('维生素D'));
     expect(out, contains('600 IU'));
@@ -132,8 +132,9 @@ void main() {
   });
 
   test('SU-4 咖啡因特殊人群：结论带「咨询医师或药师」且不出现个体化剂量', () async {
-    final out = await service.executeTool(
-        'lookup_supplement', {'query': '咖啡因 孕妇'});
+    final out = (await service.executeTool(
+            'lookup_supplement', {'query': '咖啡因 孕妇'}))
+        .text;
 
     expect(out, contains('200 mg'));
     expect(out, contains('咨询医师或药师'));
@@ -141,8 +142,9 @@ void main() {
   });
 
   test('SU-5 未命中不编造：明确无本地依据并建议咨询医师或药师', () async {
-    final out = await service.executeTool(
-        'lookup_supplement', {'query': '量子纠缠zzqq'});
+    final out = (await service.executeTool(
+            'lookup_supplement', {'query': '量子纠缠zzqq'}))
+        .text;
 
     expect(out, contains('本地补剂常识库暂无'));
     expect(out, contains('请勿编造'));
@@ -150,9 +152,9 @@ void main() {
   });
 
   test('SU-6 空参数安全兜底', () async {
-    expect(await service.executeTool('lookup_supplement', {}),
+    expect((await service.executeTool('lookup_supplement', {})).text,
         'query 参数不能为空');
-    expect(await service.executeTool('lookup_supplement', {'query': '  '}),
+    expect((await service.executeTool('lookup_supplement', {'query': '  '})).text,
         'query 参数不能为空');
   });
 

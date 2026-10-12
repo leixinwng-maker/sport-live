@@ -114,7 +114,8 @@ void main() {
   });
 
   test('T4-1 search_medical_evidence：命中并按证据强度排序，含强制出处', () async {
-    final out = await service.executeTool('search_medical_evidence', {'condition': '高血压'});
+    final out =
+        (await service.executeTool('search_medical_evidence', {'condition': '高血压'})).text;
 
     expect(out, contains('循证检索结果'));
     expect(out, contains('高血压'));
@@ -127,14 +128,16 @@ void main() {
   });
 
   test('T4-2 search_medical_evidence：未命中时明确声明本地库无相关证据', () async {
-    final out = await service.executeTool('search_medical_evidence', {'condition': '甲状腺功能亢进'});
+    final out = (await service
+            .executeTool('search_medical_evidence', {'condition': '甲状腺功能亢进'}))
+        .text;
 
     expect(out, contains('本地库无相关证据'));
     expect(out, contains('请勿编造'));
   });
 
   test('T4-3 search_medical_evidence：condition 为空安全兜底', () async {
-    final out = await service.executeTool('search_medical_evidence', {});
+    final out = (await service.executeTool('search_medical_evidence', {})).text;
     expect(out, 'condition 参数不能为空');
   });
 
@@ -147,7 +150,7 @@ void main() {
       goal: '减脂',
       bmr: 1600,
     );
-    final out = await service.executeTool('query_met', {'activity': '快走'});
+    final out = (await service.executeTool('query_met', {'activity': '快走'})).text;
 
     expect(out, contains('快走'));
     expect(out, contains('MET 4.3'));
@@ -157,13 +160,15 @@ void main() {
   });
 
   test('T4-5 query_met：无记录/空参数兜底', () async {
-    expect(await service.executeTool('query_met', {'activity': '从未记录的活动XYZ'}),
+    expect(
+        (await service.executeTool('query_met', {'activity': '从未记录的活动XYZ'})).text,
         contains('本地 MET 表暂无'));
-    expect(await service.executeTool('query_met', {'activity': '  '}), 'activity 参数不能为空');
+    expect((await service.executeTool('query_met', {'activity': '  '})).text,
+        'activity 参数不能为空');
   });
 
   test('T4-6 query_exercise：按肌群筛选并返回要领', () async {
-    final out = await service.executeTool('query_exercise', {'muscle': '胸'});
+    final out = (await service.executeTool('query_exercise', {'muscle': '胸'})).text;
 
     expect(out, contains('杠铃卧推'));
     expect(out, contains('俯卧撑'));
@@ -171,7 +176,9 @@ void main() {
     expect(out, contains('要领：'));
 
     // 器械为加分项而非硬过滤：杠铃卧推得分更高（肌群1.5+器械1.0=2.5），俯卧撑仅肌群命中（1.5）
-    final out2 = await service.executeTool('query_exercise', {'muscle': '胸', 'equipment': '杠铃'});
+    final out2 = (await service
+            .executeTool('query_exercise', {'muscle': '胸', 'equipment': '杠铃'}))
+        .text;
     expect(out2, contains('杠铃卧推'));
     final iBarbell = out2.indexOf('杠铃卧推');
     final iPushup = out2.indexOf('俯卧撑');
@@ -181,7 +188,7 @@ void main() {
   });
 
   test('T4-7 query_exercise：参数全空安全兜底', () async {
-    final out = await service.executeTool('query_exercise', {});
+    final out = (await service.executeTool('query_exercise', {})).text;
     expect(out, contains('至少提供'));
   });
 
@@ -198,7 +205,7 @@ void main() {
     ]);
     service = AgentService(AIEngine())..provider = provider;
 
-    final out = await service.executeTool('lookup_food', {'query': '米饭'});
+    final out = (await service.executeTool('lookup_food', {'query': '米饭'})).text;
     expect(out, contains('米饭'));
     expect(out, contains('本地食物库'));
     expect(out, contains('116kcal'));
@@ -206,7 +213,8 @@ void main() {
   });
 
   test('T4-9 lookup_food：条码在联网开关关闭时拒绝联网并提示开启', () async {
-    final out = await service.executeTool('lookup_food', {'query': '6901234567890'});
+    final out =
+        (await service.executeTool('lookup_food', {'query': '6901234567890'})).text;
 
     expect(out, contains('条码联网查询需先'));
     expect(provider.barcodeQueryCount, 0,
@@ -228,7 +236,8 @@ void main() {
     );
     service = AgentService(AIEngine())..provider = provider;
 
-    final out = await service.executeTool('lookup_food', {'query': '6901234567890'});
+    final out =
+        (await service.executeTool('lookup_food', {'query': '6901234567890'})).text;
     expect(out, contains('某品牌酸奶'));
     expect(out, contains('Open Food Facts'));
     expect(out, contains('72kcal'));
@@ -238,12 +247,14 @@ void main() {
     provider = _EvidenceFixture(online: true, barcodeResult: null);
     service = AgentService(AIEngine())..provider = provider;
 
-    final out = await service.executeTool('lookup_food', {'query': '6901234567890'});
+    final out =
+        (await service.executeTool('lookup_food', {'query': '6901234567890'})).text;
     expect(out, contains('已回落本地库'));
   });
 
   test('T4-12 lookup_food：非条码且本地无命中给出引导', () async {
-    final out = await service.executeTool('lookup_food', {'query': '某种不存在的食物'});
+    final out =
+        (await service.executeTool('lookup_food', {'query': '某种不存在的食物'})).text;
     expect(out, contains('本地食物库无'));
     expect(provider.barcodeQueryCount, 0);
   });
@@ -253,6 +264,6 @@ void main() {
     expect(service.toolLabel('query_met'), 'MET 强度');
     expect(service.toolLabel('query_exercise'), '动作库');
     expect(service.toolLabel('lookup_food'), '食物营养');
-    expect(await service.executeTool('lookup_food', {}), 'query 参数不能为空');
+    expect((await service.executeTool('lookup_food', {})).text, 'query 参数不能为空');
   });
 }

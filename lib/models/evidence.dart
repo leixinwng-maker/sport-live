@@ -320,3 +320,295 @@ class LiteratureRef {
     return isOpenAccess ? '开放获取（许可未标注）' : '非开放获取';
   }
 }
+
+/// 本体术语（P6-D1）—— 运动医学本体 EXMO 与康复本体 RehabO
+///
+/// 硬约束：字段自上游本体文件（exmo.obo / rehabo-edit.owl）**原样搬运**，
+/// 仅保留 id / label / 同义词 / 定义 / 父类；**不翻译、不改写、不推断**，
+/// 避免自造术语污染语义标准。EXMO 为 CC BY 4.0（须署名），RehabO 为 CC0。
+class OntologyTerm {
+  /// 术语 CURIE（EXM:0000001 / REHABO:0000000）
+  final String id;
+
+  /// 所属本体：EXMO（运动医学）/ RehabO（康复）
+  final String ontology;
+
+  /// 原始英文标签
+  final String label;
+
+  /// 精确同义词（原始标签，可为空）
+  final List<String> altLabels;
+
+  /// 原始定义（英文；无定义为空串）
+  final String definition;
+
+  /// 父类 CURIE（可为空）
+  final List<String> parents;
+
+  const OntologyTerm({
+    required this.id,
+    required this.ontology,
+    required this.label,
+    this.altLabels = const [],
+    this.definition = '',
+    this.parents = const [],
+  });
+
+  /// 参与检索的文本
+  String get searchText =>
+      '$id $ontology $label ${altLabels.join(' ')} $definition';
+
+  /// 引用一行（供智能体输出出处）
+  String get citation => '$ontology $id ($label)';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'ontology': ontology,
+        'label': label,
+        'altLabels': altLabels,
+        'definition': definition,
+        'parents': parents,
+      };
+
+  factory OntologyTerm.fromMap(Map<String, dynamic> map) => OntologyTerm(
+        id: (map['id'] ?? '').toString(),
+        ontology: (map['ontology'] ?? '').toString(),
+        label: (map['label'] ?? '').toString(),
+        altLabels: ((map['altLabels'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        definition: (map['definition'] ?? '').toString(),
+        parents: ((map['parents'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+      );
+
+  /// 格式化供工具返回（术语原文 + 定义 + 出处）
+  String toToolText() {
+    final buf = StringBuffer();
+    buf.writeln('$label ($id)');
+    if (altLabels.isNotEmpty) buf.writeln('同义词：${altLabels.join(' / ')}');
+    if (definition.isNotEmpty) buf.writeln(definition);
+    if (parents.isNotEmpty) buf.writeln('上级术语：${parents.join(', ')}');
+    buf.writeln('出处：$ontology（原始术语，未翻译）');
+    return buf.toString().trimRight();
+  }
+}
+
+/// 开放数据与本体登记条目（P6-D2）
+///
+/// **只承载元数据与获取指引**（名称/规模/许可/获取方式），不含任何正文数据。
+/// [access] 三态：已接入（数据已随 App 打包）/ 可接入（许可已核实、待接入）/
+/// 登记题录（许可或入口未核实，仅作线索登记，**不接入任何数据**）。
+class DatasetRegistryEntry {
+  final String id;
+
+  /// 中文名
+  final String name;
+
+  /// 英文名 / 全称
+  final String nameEn;
+
+  /// 类型：本体 / 知识图谱 / 数据集 / 食品数据库 / 开源软件
+  final String kind;
+
+  /// 领域（运动医学 / 康复 / 营养 / 生物医学 等）
+  final String domain;
+
+  /// 规模描述
+  final String scale;
+
+  /// 许可协议
+  final String license;
+
+  /// 接入状态：已接入 / 可接入 / 登记题录
+  final String access;
+
+  /// 项目主页（登记题录条目可为空）
+  final String url;
+
+  /// 可直达的数据文件地址（可为空）
+  final String dataUrl;
+
+  /// 说明与合规备注
+  final String note;
+
+  const DatasetRegistryEntry({
+    required this.id,
+    required this.name,
+    this.nameEn = '',
+    required this.kind,
+    required this.domain,
+    this.scale = '',
+    required this.license,
+    required this.access,
+    this.url = '',
+    this.dataUrl = '',
+    this.note = '',
+  });
+
+  /// 已接入/可接入为「可直接使用」，登记题录为「仅线索」
+  bool get isUsable => access == '已接入' || access == '可接入';
+
+  String get searchText =>
+      '$name $nameEn $kind $domain $scale $license $access $note';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'nameEn': nameEn,
+        'kind': kind,
+        'domain': domain,
+        'scale': scale,
+        'license': license,
+        'access': access,
+        'url': url,
+        'dataUrl': dataUrl,
+        'note': note,
+      };
+
+  factory DatasetRegistryEntry.fromMap(Map<String, dynamic> map) =>
+      DatasetRegistryEntry(
+        id: (map['id'] ?? '').toString(),
+        name: (map['name'] ?? '').toString(),
+        nameEn: (map['nameEn'] ?? '').toString(),
+        kind: (map['kind'] ?? '').toString(),
+        domain: (map['domain'] ?? '').toString(),
+        scale: (map['scale'] ?? '').toString(),
+        license: (map['license'] ?? '').toString(),
+        access: (map['access'] ?? '').toString(),
+        url: (map['url'] ?? '').toString(),
+        dataUrl: (map['dataUrl'] ?? '').toString(),
+        note: (map['note'] ?? '').toString(),
+      );
+
+  /// 格式化供工具返回
+  String toToolText() {
+    final buf = StringBuffer();
+    buf.writeln('【$kind｜$access】$name${nameEn.isNotEmpty ? ' ($nameEn)' : ''}');
+    if (domain.isNotEmpty) buf.writeln('领域：$domain');
+    if (scale.isNotEmpty) buf.writeln('规模：$scale');
+    if (license.isNotEmpty) buf.writeln('许可：$license');
+    if (url.isNotEmpty) buf.writeln('主页：$url');
+    if (dataUrl.isNotEmpty) buf.writeln('数据：$dataUrl');
+    if (note.isNotEmpty) buf.writeln(note);
+    return buf.toString().trimRight();
+  }
+}
+
+/// 开放动作库条目（P6-D3）—— Exercises Dataset + Free Exercise DB 归并
+///
+/// 硬约束：构建期已**剥离全部媒体字段**（图片/动图/视频均不收录，其版权属原作者）；
+/// 本类只承载文本数据。中文说明 [steps] 为上游提供的自然中文，非本应用翻译。
+class CatalogExercise {
+  /// 稳定 id（exds-0001 / fedb-xxxx）
+  final String id;
+
+  /// 英文动作名
+  final String name;
+
+  /// 中文名（可能为空，为 Gym visual 数据集附带的中文名）
+  final String nameZh;
+
+  /// 主要目标肌群（已中文化）
+  final String target;
+
+  /// 目标肌群原始英文值（如 abs / biceps）
+  final String targetRaw;
+
+  /// 协同肌群（已中文化）
+  final List<String> secondary;
+
+  /// 身体部位分类（胸/背/腿/肩/手臂/腰腹 等）
+  final String bodyPart;
+
+  /// 器械（自重/杠铃/哑铃/器械/绳索 等）
+  final String equipment;
+
+  /// 难度（可能为空）
+  final String level;
+
+  /// 动作说明（中文 lang=zh 时为中文；lang=en 时为英文原文）
+  final String steps;
+
+  /// 语言：zh / en
+  final String lang;
+
+  /// 来源库名
+  final String source;
+
+  final String license;
+  final String url;
+
+  const CatalogExercise({
+    required this.id,
+    required this.name,
+    this.nameZh = '',
+    required this.target,
+    this.targetRaw = '',
+    this.secondary = const [],
+    required this.bodyPart,
+    required this.equipment,
+    this.level = '',
+    this.steps = '',
+    this.lang = 'zh',
+    this.source = '',
+    this.license = '',
+    this.url = '',
+  });
+
+  /// 展示名：优先中文名，缺省回落英文名
+  String get displayName => nameZh.isNotEmpty ? nameZh : name;
+
+  /// 参与检索的文本
+  String get searchText =>
+      '$name $nameZh $target $targetRaw ${secondary.join(' ')} $bodyPart $equipment $steps';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'nameZh': nameZh,
+        'target': target,
+        'targetRaw': targetRaw,
+        'secondary': secondary,
+        'bodyPart': bodyPart,
+        'equipment': equipment,
+        'level': level,
+        'steps': steps,
+        'lang': lang,
+        'source': source,
+        'license': license,
+        'url': url,
+      };
+
+  factory CatalogExercise.fromMap(Map<String, dynamic> map) => CatalogExercise(
+        id: (map['id'] ?? '').toString(),
+        name: (map['name'] ?? '').toString(),
+        nameZh: (map['nameZh'] ?? '').toString(),
+        target: (map['target'] ?? '').toString(),
+        targetRaw: (map['targetRaw'] ?? '').toString(),
+        secondary: ((map['secondary'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        bodyPart: (map['bodyPart'] ?? '').toString(),
+        equipment: (map['equipment'] ?? '').toString(),
+        level: (map['level'] ?? '').toString(),
+        steps: (map['steps'] ?? '').toString(),
+        lang: (map['lang'] ?? 'zh').toString(),
+        source: (map['source'] ?? '').toString(),
+        license: (map['license'] ?? '').toString(),
+        url: (map['url'] ?? '').toString(),
+      );
+
+  /// 格式化供工具返回
+  String toToolText() {
+    final buf = StringBuffer();
+    buf.writeln('$displayName${nameZh.isNotEmpty ? '（$name）' : ''}');
+    buf.writeln('部位：$bodyPart｜目标肌群：$target'
+        '${secondary.isNotEmpty ? '（协同：${secondary.join('、')}）' : ''}');
+    buf.writeln('器械：$equipment${level.isNotEmpty ? '｜难度：$level' : ''}');
+    if (steps.isNotEmpty) buf.writeln(steps);
+    buf.writeln('来源：$source');
+    return buf.toString().trimRight();
+  }
+}

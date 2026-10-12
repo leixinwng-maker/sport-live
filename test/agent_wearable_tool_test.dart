@@ -72,7 +72,7 @@ void main() {
 
   group('T8-1 授权门禁：未授权只回可读提示、不含任何数据', () {
     test('未注入穿戴数据源时返回「未就绪」', () async {
-      final out = await service.executeTool('get_wearable_summary', {});
+      final out = (await service.executeTool('get_wearable_summary', {})).text;
       expect(out, contains('未就绪'));
     });
 
@@ -87,7 +87,8 @@ void main() {
       service.wearable = wp;
 
       expect(wp.hasConsent, isFalse);
-      final out = await service.executeTool('get_wearable_summary', {'days': 7});
+      final out =
+          (await service.executeTool('get_wearable_summary', {'days': 7})).text;
       expect(out, contains('用户尚未授权健康数据'));
       expect(out, isNot(contains('日均步数')));
       expect(out, isNot(contains('8000')));
@@ -102,7 +103,7 @@ void main() {
 
       expect(wp.hasConsent, isTrue);
       expect(wp.authorized, isFalse);
-      final out = await service.executeTool('get_wearable_summary', {});
+      final out = (await service.executeTool('get_wearable_summary', {})).text;
       expect(out, contains('用户尚未授权健康数据'));
       expect(out, contains('授权读取健康数据'));
     });
@@ -132,7 +133,8 @@ void main() {
       service.wearable = wp;
 
       expect(saved, 11);
-      final out = await service.executeTool('get_wearable_summary', {'days': 7});
+      final out =
+          (await service.executeTool('get_wearable_summary', {'days': 7})).text;
       expect(out, contains('日均步数'));
       expect(out, contains('静息心率'));
       expect(out, contains('睡眠'));
@@ -153,12 +155,12 @@ void main() {
       await wp.syncRecent(days: 7);
       service.wearable = wp;
       expect(
-        await service.executeTool('get_wearable_summary', {}),
+        (await service.executeTool('get_wearable_summary', {})).text,
         contains('日均步数'),
       );
 
       await wp.revokeAuthorization();
-      final out = await service.executeTool('get_wearable_summary', {});
+      final out = (await service.executeTool('get_wearable_summary', {})).text;
       expect(out, contains('用户尚未授权健康数据'));
       expect(out, isNot(contains('日均步数')));
     });
@@ -182,9 +184,12 @@ void main() {
       await wp.agreeConsent();
       service.wearable = wp;
 
-      final d1 = await service.executeTool('get_wearable_summary', {'days': 0});
+      final d1 =
+          (await service.executeTool('get_wearable_summary', {'days': 0})).text;
       expect(d1, contains('近 1 天'), reason: '下限应钳制为 1');
-      final d7 = await service.executeTool('get_wearable_summary', {'days': 'abc'});
+      final d7 = (await service
+              .executeTool('get_wearable_summary', {'days': 'abc'}))
+          .text;
       expect(d7, contains('近 7 天'), reason: '非法值应回落默认 7');
     });
   });

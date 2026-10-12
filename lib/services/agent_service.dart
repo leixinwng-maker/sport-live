@@ -265,7 +265,19 @@ class AgentService {
         '这些工具只生成「待用户确认的卡片」，不会直接保存；用户点卡片上的保存按钮后才写入数据\n'
         '4. 一次只输出一个方案；生成后用一两句话说明思路，并提示用户'
         '「可在下方卡片确认或修改后保存」，不要在文字里重复罗列卡片中的全部明细\n'
-        '5. 用户明确表示「这只是建议、先别记」时，不要调用写工具，直接给文字建议即可';
+        '5. 用户明确表示「这只是建议、先别记」时，不要调用写工具，直接给文字建议即可\n\n'
+        '截图归纳规范（用户随消息上传截图/照片，要求归档到对应板块时必须遵守）：\n'
+        '1. 消息中附带的截图识别文字是唯一事实来源：只能整理其中明确出现的数值与日期，'
+        '严禁编造、估算、换算单位或补充原文没有的数据；识别不完整时先如实说明\n'
+        '2. 体检/化验/体脂秤/手表健康数据 → propose_health_metrics（血压拆收缩压+舒张压两条）；'
+        '工资/账单/支付宝与微信消费/花呗与抖音月付还款 → propose_finance_records'
+        '（还款一律记 expense，备注注明来源）；训记等训练App记录 → propose_workout_records\n'
+        '3. 截图无日期的条目视为今天；多张截图按图逐一整理，同一板块合并成一张卡片\n'
+        '4. 调用整理工具后用一两句话说明归纳结果，并提示用户「可在下方卡片核对或修改后保存」，'
+        '不要在文字里重复罗列卡片明细\n'
+        '5. 未调用写工具或卡片未保存前，严禁声称「已记录/已保存」；'
+        '数据只有用户点卡片保存后才写入档案\n'
+        '6. 截图内容与归纳板块无关时（如闲聊图片），不调用整理工具，按普通消息回答';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -661,6 +673,110 @@ class AgentService {
                 'description': '接入状态（可选）：已接入、可接入、登记题录',
               },
             }),
+        // ===== 截图归纳写工具（聊天发图 → 自动归入对应板块）=====
+        _fn('propose_health_metrics',
+            '把截图（体检报告/化验单/体脂秤/运动手表健康页）识别出的健康数据整理为'
+                '待确认的健康指标卡片。只填写截图原文中出现的数值，严禁编造、估算或换算单位；'
+                '血压须拆成收缩压与舒张压两条',
+            params: {
+              'metrics': {
+                'type': 'array',
+                'description': '指标列表',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'type': {
+                      'type': 'string',
+                      'enum': [
+                        '收缩压', '舒张压', '空腹血糖', '餐后血糖', '总胆固醇',
+                        '甘油三酯', '低密度脂蛋白', '高密度脂蛋白', '尿酸', '静息心率',
+                        '血氧', '体重', '体脂率', '肌肉量', '体水分率', '骨量',
+                        '蛋白质率', '基础代谢', '内脏脂肪等级', '腰围', '臀围', '胸围',
+                        '臂围', '大腿围', '小腿围',
+                      ],
+                      'description': '标准指标类型（须从枚举中选择）',
+                    },
+                    'value': {'type': 'number', 'description': '数值（来自原文）'},
+                    'unit': {'type': 'string', 'description': '单位，省略时按类型自动带默认单位'},
+                    'date': {'type': 'string', 'description': '测量日期 YYYY-MM-DD，省略时视为今天'},
+                    'note': {'type': 'string', 'description': '备注，如：空腹 / 餐后2小时 / 静息'},
+                    'referenceRange': {
+                      'type': 'string',
+                      'description': '参考范围，如 3.9-6.1 mmol/L（原文有才填）',
+                    },
+                  },
+                  'required': ['type', 'value'],
+                },
+              },
+            },
+            requiredParams: ['metrics']),
+        _fn('propose_finance_records',
+            '把截图（工资条/账单/支付宝与微信消费记录/花呗与抖音月付还款）识别出的'
+                '收支数据整理为待确认的财务记录卡片。只填写截图原文中的金额与日期，严禁编造；'
+                '花呗/抖音月付/信用卡还款一律按 expense 记录，备注注明来源',
+            params: {
+              'records': {
+                'type': 'array',
+                'description': '收支记录列表',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'type': {
+                      'type': 'string',
+                      'enum': ['income', 'expense'],
+                      'description': 'income=收入，expense=支出',
+                    },
+                    'category': {
+                      'type': 'string',
+                      'description': '分类，如：工资 / 餐饮 / 交通 / 购物 / 还款',
+                    },
+                    'amount': {'type': 'number', 'description': '金额（元，正数）'},
+                    'date': {'type': 'string', 'description': '日期 YYYY-MM-DD，省略时视为今天'},
+                    'note': {'type': 'string', 'description': '备注，如：花呗还款 / 10月工资'},
+                  },
+                  'required': ['type', 'category', 'amount'],
+                },
+              },
+            },
+            requiredParams: ['records']),
+        _fn('propose_workout_records',
+            '把截图（训记等训练App/手表锻炼记录）识别出的训练历史整理为待确认的'
+                '批量训练记录卡片。每条记录对应一次训练；只填写截图原文中的动作与组次重量，'
+                '严禁编造',
+            params: {
+              'records': {
+                'type': 'array',
+                'description': '训练记录列表（每项一次训练）',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'date': {
+                      'type': 'string',
+                      'description': '训练日期 YYYY-MM-DD，省略时视为今天',
+                    },
+                    'name': {'type': 'string', 'description': '训练名称/类型，如：胸肩 / 腿 / 跑步'},
+                    'duration': {'type': 'integer', 'description': '时长（分钟）'},
+                    'intensity': {'type': 'integer', 'description': '强度 1-5，默认 3'},
+                    'exercises': {
+                      'type': 'array',
+                      'description': '动作列表',
+                      'items': {
+                        'type': 'object',
+                        'properties': {
+                          'name': {'type': 'string', 'description': '动作名称'},
+                          'sets': {'type': 'integer', 'description': '组数，默认 3'},
+                          'reps': {'type': 'integer', 'description': '每组次数，默认 10'},
+                          'weight': {'type': 'number', 'description': '重量 kg，自重可省略'},
+                        },
+                        'required': ['name'],
+                      },
+                    },
+                  },
+                  'required': ['name', 'exercises'],
+                },
+              },
+            },
+            requiredParams: ['records']),
       ];
 
   Map<String, dynamic> _fn(
@@ -712,6 +828,10 @@ class AgentService {
     'propose_diet_plan': '生成饮食方案',
     'log_workout': '记录训练',
     'log_diet': '记录饮食',
+    // 截图归纳写工具
+    'propose_health_metrics': '整理健康指标',
+    'propose_finance_records': '整理收支记录',
+    'propose_workout_records': '整理训练记录',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -731,6 +851,12 @@ class AgentService {
         return _buildDietProposal(args, 'diet_plan');
       case 'log_diet':
         return _buildDietProposal(args, 'diet_log');
+      case 'propose_health_metrics':
+        return _buildHealthMetricsProposal(args);
+      case 'propose_finance_records':
+        return _buildFinanceRecordsProposal(args);
+      case 'propose_workout_records':
+        return _buildWorkoutRecordsProposal(args);
       default:
         return ToolResult(await _runReadTool(name, args));
     }
@@ -828,6 +954,131 @@ class AgentService {
       '该$label尚未保存，需用户在前端卡片上点击保存按钮后才会写入。'
       '请提示用户「可在下方卡片确认或修改后保存」，不要在文字里重复罗列明细。',
       action: PendingAction(type: type, data: data),
+    );
+  }
+
+  /// 生成「健康指标」的待确认载荷（截图归纳：体检/化验/体脂秤/手表）
+  ToolResult _buildHealthMetricsProposal(Map<String, dynamic> args) {
+    final raw = args['metrics'];
+    if (raw is! List || raw.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 metrics（至少一个指标）');
+    }
+    final metrics = <Map<String, dynamic>>[];
+    for (final m in raw) {
+      if (m is! Map) continue;
+      final mm = Map<String, dynamic>.from(m);
+      final type = (mm['type'] ?? '').toString().trim();
+      final value = (mm['value'] as num?)?.toDouble();
+      if (type.isEmpty || value == null) continue;
+      metrics.add({
+        'type': type,
+        'value': value,
+        if ((mm['unit'] ?? '').toString().trim().isNotEmpty)
+          'unit': mm['unit'].toString().trim(),
+        if ((mm['date'] ?? '').toString().trim().isNotEmpty)
+          'date': mm['date'].toString().trim(),
+        if ((mm['note'] ?? '').toString().trim().isNotEmpty)
+          'note': mm['note'].toString().trim(),
+        if ((mm['referenceRange'] ?? '').toString().trim().isNotEmpty)
+          'referenceRange': mm['referenceRange'].toString().trim(),
+      });
+    }
+    if (metrics.isEmpty) {
+      return const ToolResult(
+          '参数校验失败：metrics 中每条都需要 type 与 value（数值须来自原文）');
+    }
+    return ToolResult(
+      '已生成待确认的健康指标卡片（共 ${metrics.length} 条）。'
+      '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入健康档案。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(
+          type: 'health_metrics', data: {'metrics': metrics}),
+    );
+  }
+
+  /// 生成「收支记录」的待确认载荷（截图归纳：工资/账单/消费记录/还款）
+  ToolResult _buildFinanceRecordsProposal(Map<String, dynamic> args) {
+    final raw = args['records'];
+    if (raw is! List || raw.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 records（至少一条收支记录）');
+    }
+    final records = <Map<String, dynamic>>[];
+    for (final r in raw) {
+      if (r is! Map) continue;
+      final rm = Map<String, dynamic>.from(r);
+      final category = (rm['category'] ?? '').toString().trim();
+      final amount = (rm['amount'] as num?)?.toDouble();
+      if (category.isEmpty || amount == null || amount <= 0) continue;
+      final type = rm['type'].toString() == 'income' ? 'income' : 'expense';
+      records.add({
+        'type': type,
+        'category': category,
+        'amount': amount,
+        if ((rm['date'] ?? '').toString().trim().isNotEmpty)
+          'date': rm['date'].toString().trim(),
+        if ((rm['note'] ?? '').toString().trim().isNotEmpty)
+          'note': rm['note'].toString().trim(),
+      });
+    }
+    if (records.isEmpty) {
+      return const ToolResult(
+          '参数校验失败：records 中每条都需要 category 与正数 amount（金额须来自原文）');
+    }
+    return ToolResult(
+      '已生成待确认的收支记录卡片（共 ${records.length} 条）。'
+      '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入财务板块。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(
+          type: 'finance_records', data: {'records': records}),
+    );
+  }
+
+  /// 生成「训练记录（批量）」的待确认载荷（截图归纳：训记等训练App）
+  ToolResult _buildWorkoutRecordsProposal(Map<String, dynamic> args) {
+    final raw = args['records'];
+    if (raw is! List || raw.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 records（至少一次训练）');
+    }
+    final records = <Map<String, dynamic>>[];
+    for (final r in raw) {
+      if (r is! Map) continue;
+      final rm = Map<String, dynamic>.from(r);
+      final name = (rm['name'] ?? '').toString().trim();
+      final rawEx = rm['exercises'];
+      if (name.isEmpty || rawEx is! List) continue;
+      final exercises = <Map<String, dynamic>>[];
+      for (final e in rawEx) {
+        if (e is! Map) continue;
+        final em = Map<String, dynamic>.from(e);
+        final exName = (em['name'] ?? '').toString().trim();
+        if (exName.isEmpty) continue;
+        exercises.add({
+          'name': exName,
+          if (em['sets'] != null) 'sets': em['sets'],
+          if (em['reps'] != null) 'reps': em['reps'],
+          if (em['weight'] != null) 'weight': em['weight'],
+        });
+      }
+      if (exercises.isEmpty) continue;
+      records.add({
+        if ((rm['date'] ?? '').toString().trim().isNotEmpty)
+          'date': rm['date'].toString().trim(),
+        'name': name,
+        if (rm['duration'] != null) 'duration': rm['duration'],
+        if (rm['intensity'] != null) 'intensity': rm['intensity'],
+        'exercises': exercises,
+      });
+    }
+    if (records.isEmpty) {
+      return const ToolResult(
+          '参数校验失败：records 中每条都需要 name 与至少一个动作（须来自原文）');
+    }
+    return ToolResult(
+      '已生成待确认的训练记录卡片（共 ${records.length} 次训练）。'
+      '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入训练板块。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(
+          type: 'workout_records', data: {'records': records}),
     );
   }
 

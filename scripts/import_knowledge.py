@@ -28,6 +28,14 @@ assets/data/evidence_kb.json，供 App 启动时离线加载进本地智脑 RAG�
 - supplement_seed.json：NIH ODS 消费者事实清单 / FDA 消费者资讯（美国政府作品，
   公共领域）与 ISSN 立场声明、EFSA 科学意见（开放获取）要点条目化改写，
   未照搬原文；只给成分、剂量与一般性安全提示，不作诊断、不承诺疗效
+- ontology_exmo.json：EXMO（Exercise Medicine Ontology，CC BY 4.0）EXM 命名空间术语，
+  仅搬运原始 label/definition/altLabel，未翻译、未改写
+- ontology_rehabo.json：RehabO（The Rehabilitation Ontology，CC0 1.0）术语，
+  仅搬运原始 label/definition/altLabel，未翻译、未改写
+- exercise_catalog_seed.json：Exercises Dataset（数据部分 MIT）+ Free Exercise DB
+  （Unlicense）；**仅取数据、剥离全部图片/动图等媒体字段**，媒体版权归原作者不收录
+- dataset_registry_seed.json：各开放数据源/本体/知识图谱的**元数据登记**
+  （名称、规模、许可、获取方式），不含任何正文数据；未核实许可者仅登记题录
 """
 import io
 import json
@@ -39,6 +47,8 @@ from datetime import datetime
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_DIR = os.path.join(ROOT, 'scripts', 'knowledge_sources')
 OUT_PATH = os.path.join(ROOT, 'assets', 'data', 'evidence_kb.json')
+# 开放动作库（2062 条）体量较大，独立成文件，App 侧按需加载，避免拖慢启动
+OUT_CATALOG_PATH = os.path.join(ROOT, 'assets', 'data', 'exercise_catalog.json')
 
 EVIDENCE_REQUIRED = [
     'id', 'domain', 'condition', 'topic', 'recommendation',
@@ -61,6 +71,26 @@ CONDITION_CATEGORIES = ('有氧', '抗阻', '柔韧', '平衡', '身心')
 CONDITION_REQUIRED = [
     'category', 'examples', 'cues', 'cautions', 'source', 'url', 'license',
 ]
+
+# 本体术语（EXMO / RehabO）：字段自上游本体文件搬运，禁止改写或翻译
+ONTOLOGY_REQUIRED = ['id', 'ontology', 'label']
+ONTOLOGY_IDS = ('EXMO', 'RehabO')
+# 各本体的 CURIE 前缀，用于校验术语归属（EXMO 用 EXM: ，RehabO 用 REHABO:）
+ONTOLOGY_ID_PREFIX = {'EXMO': 'EXM:', 'RehabO': 'REHABO:'}
+
+# 开放数据与本体登记表：仅元数据与获取指引，不含正文
+REGISTRY_REQUIRED = ['id', 'name', 'kind', 'domain', 'license', 'access', 'note']
+REGISTRY_KINDS = ('本体', '知识图谱', '数据集', '食品数据库', '开源软件')
+REGISTRY_ACCESS = ('已接入', '可接入', '登记题录')
+# 「已接入/可接入」条目必须给出可直达地址；「登记题录」允许 url 留空（尚无可核实入口）
+REGISTRY_URL_REQUIRED_ACCESS = ('已接入', '可接入')
+
+# 动作库目录（Exercises Dataset + Free Exercise DB 归并）
+CATALOG_REQUIRED = ['id', 'name', 'target', 'bodyPart', 'equipment', 'steps',
+                    'lang', 'source', 'license']
+CATALOG_LANGS = ('zh', 'en')
+CATALOG_MEDIA_KEYS = ('images', 'image', 'gif', 'gif_url', 'media_id', 'attribution',
+                      'instruction_steps', 'image_url', 'video_url')
 
 
 def load_json(path):
@@ -184,6 +214,81 @@ def validate_condition_exercises(rows, exercise_names):
     return problems
 
 
+def tag_ontology(terms, ontology_id):
+    """为上游本体术语打上归属标记（上游文件本身不含该字段）。"""
+    out = []
+    for t in terms:
+        row = dict(t)
+        row['ontology'] = ontology_id
+        out.append(row)
+    return out
+
+
+def validate_ontology(terms):
+    """本体术语校验：3 必填 + ontology 白名单 + id 唯一 + id 前缀与本体一致。"""
+    problems = []
+    seen = set()
+    for i, t in enumerate(terms):
+        for k in ONTOLOGY_REQUIRED:
+            if not str(t.get(k, '')).strip():
+                problems.append('ontologies[%d] id=%s 缺少字段 %s' % (i, t.get('id'), k))
+        oid = t.get('ontology', '')
+        tid = t.get('id', '')
+        if oid and oid not in ONTOLOGY_IDS:
+            problems.append('ontologies[%d] id=%s ontology 非法: %s' % (i, tid, oid))
+        if tid in seen:
+            problems.append('ontologies 重复 id: %s' % tid)
+        seen.add(tid)
+        prefix = ONTOLOGY_ID_PREFIX.get(oid)
+        if prefix and tid and not tid.startswith(prefix):
+            problems.append('ontologies id=%s 前缀与本体 %s 不符（应以 %s 开头）'
+                            % (tid, oid, prefix))
+    return problems
+
+
+def validate_registry(entries):
+    """登记表校验：必填 + kind/access 白名单 + id 唯一 + 已接入/可接入必须有 url。"""
+    problems = []
+    seen = set()
+    for i, r in enumerate(entries):
+        for k in REGISTRY_REQUIRED:
+            if not str(r.get(k, '')).strip():
+                problems.append('datasetRegistry[%d] id=%s 缺少字段 %s' % (i, r.get('id'), k))
+        eid = r.get('id', '')
+        if eid in seen:
+            problems.append('datasetRegistry 重复 id: %s' % eid)
+        seen.add(eid)
+        kind = r.get('kind', '')
+        if kind and kind not in REGISTRY_KINDS:
+            problems.append('datasetRegistry id=%s kind 非法: %s' % (eid, kind))
+        access = r.get('access', '')
+        if access and access not in REGISTRY_ACCESS:
+            problems.append('datasetRegistry id=%s access 非法: %s' % (eid, access))
+        if access in REGISTRY_URL_REQUIRED_ACCESS and not str(r.get('url', '')).strip():
+            problems.append('datasetRegistry id=%s 状态为「%s」但缺少 url' % (eid, access))
+    return problems
+
+
+def validate_catalog(rows):
+    """开放动作库校验：9 必填 + id 唯一 + lang 白名单 + 构建期剥离媒体字段。"""
+    problems = []
+    seen = set()
+    for i, x in enumerate(rows):
+        for k in CATALOG_REQUIRED:
+            if not str(x.get(k, '')).strip():
+                problems.append('exerciseCatalog[%d] id=%s 缺少字段 %s' % (i, x.get('id'), k))
+        cid = x.get('id', '')
+        if cid in seen:
+            problems.append('exerciseCatalog 重复 id: %s' % cid)
+        seen.add(cid)
+        if x.get('lang') not in CATALOG_LANGS:
+            problems.append('exerciseCatalog id=%s lang 非法: %s' % (cid, x.get('lang')))
+        for media_key in CATALOG_MEDIA_KEYS:
+            if media_key in x:
+                problems.append('exerciseCatalog id=%s 含媒体字段 %s（须剥离）' % (cid, media_key))
+    return problems
+
+
 def main():
     ev = load_json(os.path.join(SRC_DIR, 'evidence_seed.json'))
     met = load_json(os.path.join(SRC_DIR, 'met_seed.json'))
@@ -191,6 +296,10 @@ def main():
     ce = load_json(os.path.join(SRC_DIR, 'condition_exercise_seed.json'))
     otc = load_json(os.path.join(SRC_DIR, 'otc_safety_seed.json'))
     supp = load_json(os.path.join(SRC_DIR, 'supplement_seed.json'))
+    onto_exmo = load_json(os.path.join(SRC_DIR, 'ontology_exmo.json'))
+    onto_rehabo = load_json(os.path.join(SRC_DIR, 'ontology_rehabo.json'))
+    catalog = load_json(os.path.join(SRC_DIR, 'exercise_catalog_seed.json'))
+    registry = load_json(os.path.join(SRC_DIR, 'dataset_registry_seed.json'))
 
     # 第一层（疾病 → 类别 + 剂量）与既有证据条目同构，统一并入 evidence
     evidence = list(ev['entries']) + list(ce.get('entries', []))
@@ -199,6 +308,11 @@ def main():
     condition_exercises = ce['conditionExercises']
     otc_safety = list(otc.get('entries', []))
     supplements = list(supp.get('entries', []))
+    # 本体术语：上游不含 ontology 归属字段，构建期统一打标后归并
+    ontologies = (tag_ontology(onto_exmo.get('terms', []), 'EXMO')
+                  + tag_ontology(onto_rehabo.get('terms', []), 'RehabO'))
+    catalog_rows = catalog['exercises']
+    registry_rows = registry['entries']
     exercise_names = {x.get('name') for x in exercises}
     evidence_ids = {e.get('id') for e in evidence}
 
@@ -209,6 +323,9 @@ def main():
     problems += validate_met(met_rows)
     problems += validate_exercises(exercises)
     problems += validate_condition_exercises(condition_exercises, exercise_names)
+    problems += validate_ontology(ontologies)
+    problems += validate_registry(registry_rows)
+    problems += validate_catalog(catalog_rows)
 
     if problems:
         sys.stderr.write('校验失败，共 %d 个问题：\n' % len(problems))
@@ -233,8 +350,12 @@ def main():
          'license': 'Unlicense（公共领域）；仅取动作分类结构，中文名与要点为自撰改写，媒体不收录'},
         {'name': 'hasaneyldrm/exercises-dataset', 'url': 'https://github.com/hasaneyldrm/exercises-dataset',
          'license': '数据部分 MIT（依据仓库 NOTICE/README 判定）；仅取数据（中文说明/肌群/器械），不取图片与动图（媒体版权为 Gym visual ©，未收录）'},
-        {'name': 'EXMO（Exercise Model Ontology）', 'url': 'https://github.com/exmo-project',
-         'license': 'CC-BY-4.0（署名）；仅作内部结构参考，不打包分发 EXMO 本体；如引用类名须署名'},
+        {'name': 'Longhaul Exercises', 'url': 'https://github.com/longhaul-fitness/exercises',
+         'license': 'MIT（Copyright (c) 2023 Longhaul Fitness）；仅取力量/拉伸/有氧动作数据（名称/肌群/步骤），不含任何媒体文件'},
+        {'name': 'EXMO（Exercise Medicine Ontology）', 'url': 'https://github.com/DarkKnight0-0/exmo',
+         'license': 'CC BY 4.0（署名）；内置 EXM 命名空间术语摘录，仅搬运原始 label/definition，未翻译改写'},
+        {'name': 'RehabO（The Rehabilitation Ontology）', 'url': 'https://github.com/mcwdsi/rehabo',
+         'license': 'CC0 1.0（公共领域贡献）；内置术语摘录，仅搬运原始 label/definition，未翻译改写'},
         {'name': 'DOID（Human Disease Ontology）', 'url': 'https://disease-ontology.org/',
          'license': 'CC0（公共领域）；仅用于疾病名称规范化对齐'},
         {'name': 'ISSN Position Stands', 'url': 'https://jissn.biomedcentral.com/',
@@ -259,9 +380,9 @@ def main():
     ]
 
     out = {
-        'version': '1.3.0',
+        'version': '1.5.0',
         'generatedAt': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目。构建期导入，App 内零网络依赖。',
+        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目 + 运动医学/康复本体术语 + 开放数据与本体登记表。构建期导入，App 内零网络依赖。',
         'sources': sources,
         'evidence': evidence,
         'otcSafety': otc_safety,
@@ -269,11 +390,25 @@ def main():
         'met': met_rows,
         'exercises': exercises,
         'conditionExercises': condition_exercises,
+        'ontologies': ontologies,
+        'datasetRegistry': registry_rows,
+    }
+
+    catalog_out = {
+        'version': '1.1.0',
+        'generatedAt': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+        'description': '开放动作库目录：Exercises Dataset（含自然中文说明）+ Free Exercise DB + Longhaul Exercises。构建期导入、仅取数据、剥离全部媒体字段；随 App 离线打包，按需加载。',
+        'generatedFrom': catalog.get('generatedFrom', []),
+        'count': len(catalog_rows),
+        'exercises': catalog_rows,
     }
 
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     with io.open(OUT_PATH, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    with io.open(OUT_CATALOG_PATH, 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(catalog_out, f, ensure_ascii=False, indent=2)
         f.write('\n')
 
     print('已生成 %s' % os.path.relpath(OUT_PATH, ROOT))
@@ -283,6 +418,10 @@ def main():
     print('  met                 = %d 条' % len(met_rows))
     print('  exercises           = %d 条' % len(exercises))
     print('  conditionExercises  = %d 条' % len(condition_exercises))
+    print('  ontologies          = %d 条' % len(ontologies))
+    print('  datasetRegistry     = %d 条' % len(registry_rows))
+    print('已生成 %s' % os.path.relpath(OUT_CATALOG_PATH, ROOT))
+    print('  exerciseCatalog     = %d 条' % len(catalog_rows))
 
 
 if __name__ == '__main__':

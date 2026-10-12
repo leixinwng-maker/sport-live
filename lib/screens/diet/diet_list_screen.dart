@@ -5,6 +5,8 @@ import '../../theme/taoist_theme.dart';
 import '../../models/diet.dart';
 import '../../services/database_helper.dart';
 import 'diet_edit_screen.dart';
+import 'widgets/diet_target_card.dart';
+import 'widgets/fasting_card.dart';
 
 /// 饮食记录列表页
 class DietListScreen extends StatelessWidget {
@@ -57,20 +59,22 @@ class DietListScreen extends StatelessWidget {
             backgroundColor: TaoistTheme.jadeGreen,
             foregroundColor: Colors.white,
           ),
-          body: records.isEmpty
-              ? _buildEmptyState(context)
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 80),
-                  itemCount: dates.length,
-                  itemBuilder: (context, index) {
-                    final date = dates[index];
-                    final dayRecords = grouped[date]!;
-                    return _DayDietCard(
-                      date: date,
-                      records: dayRecords,
-                    );
-                  },
-                ),
+          body: ListView(
+            padding: const EdgeInsets.only(bottom: 80),
+            children: [
+              // FIT-7：今日营养目标达成 + 断食卡
+              const DietTargetCard(),
+              const FastingCard(),
+              if (records.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 48),
+                  child: _buildEmptyState(context),
+                )
+              else
+                for (final date in dates)
+                  _DayDietCard(date: date, records: grouped[date]!),
+            ],
+          ),
         );
       },
     );
@@ -79,7 +83,7 @@ class DietListScreen extends StatelessWidget {
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.restaurant,

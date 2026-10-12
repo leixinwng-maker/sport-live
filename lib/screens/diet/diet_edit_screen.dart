@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/diet.dart';
+import 'barcode_scan_screen.dart';
 import 'diet_list_screen.dart';
+import 'voice_diet_screen.dart';
 
 /// 饮食记录编辑页
 /// 支持从食物库选择食物、输入克数自动计算热量
@@ -112,6 +114,16 @@ class _DietEditScreenState extends State<DietEditScreen> {
               ),
               const Spacer(),
               TextButton.icon(
+                onPressed: _voiceRecord,
+                icon: const Icon(Icons.mic_none, size: 18),
+                label: const Text('语音'),
+              ),
+              TextButton.icon(
+                onPressed: _scanBarcode,
+                icon: const Icon(Icons.qr_code_scanner, size: 18),
+                label: const Text('扫码'),
+              ),
+              TextButton.icon(
                 onPressed: _addFood,
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('添加食物'),
@@ -137,7 +149,7 @@ class _DietEditScreenState extends State<DietEditScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '点击"添加食物"，从食物库选择并输入克数',
+                    '可用语音一句话记录，或从食物库选择、扫描包装条码快速录入',
                     style: TextStyle(
                       fontSize: 13,
                       color: TaoistTheme.cloudGray,
@@ -145,10 +157,27 @@ class _DietEditScreenState extends State<DietEditScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _addFood,
-                    icon: const Icon(Icons.search, size: 18),
-                    label: const Text('从食物库选择'),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _voiceRecord,
+                        icon: const Icon(Icons.mic_none, size: 18),
+                        label: const Text('语音记录'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _addFood,
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('从食物库选择'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _scanBarcode,
+                        icon: const Icon(Icons.qr_code_scanner, size: 18),
+                        label: const Text('扫码录入'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -284,18 +313,53 @@ class _DietEditScreenState extends State<DietEditScreen> {
     );
 
     if (selected != null && mounted) {
-      // 食物库数据为每100g的营养值，默认添加100g
+      _addFromCatalog(selected);
+    }
+  }
+
+  /// 扫码录入：扫描食品包装条码（FIT-7），命中后同样返回 [FoodCatalog]
+  Future<void> _scanBarcode() async {
+    final selected = await Navigator.push<FoodCatalog>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const BarcodeScanScreen(),
+      ),
+    );
+
+    if (selected != null && mounted) {
+      _addFromCatalog(selected);
+    }
+  }
+
+  /// 语音录入（FIT-7）：识别 → 解析 → 匹配食物库 → 返回待确认条目
+  Future<void> _voiceRecord() async {
+    final draft = await Navigator.push<VoiceDietDraft>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const VoiceDietScreen(),
+      ),
+    );
+
+    if (draft != null && mounted) {
       setState(() {
-        _foods.add(FoodItem(
-          name: selected.name,
-          grams: 100,
-          calories: selected.caloriesPer100g,
-          protein: selected.proteinPer100g,
-          fat: selected.fatPer100g,
-          carbs: selected.carbsPer100g,
-        ));
+        _mealType = draft.mealType;
+        _foods.addAll(draft.foods);
       });
     }
+  }
+
+  /// 食物库 / 条码数据均为每 100g 营养值，默认添加 100g
+  void _addFromCatalog(FoodCatalog selected) {
+    setState(() {
+      _foods.add(FoodItem(
+        name: selected.name,
+        grams: 100,
+        calories: selected.caloriesPer100g,
+        protein: selected.proteinPer100g,
+        fat: selected.fatPer100g,
+        carbs: selected.carbsPer100g,
+      ));
+    });
   }
 
   Future<void> _save() async {

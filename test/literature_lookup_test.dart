@@ -216,7 +216,8 @@ void main() {
       final provider = _LitFixture(localEvidence: [local()]);
       service = AgentService(AIEngine())..provider = provider;
 
-      final out = await service.executeTool('search_literature', {'query': '高血压'});
+      final out =
+          (await service.executeTool('search_literature', {'query': '高血压'})).text;
 
       expect(out, contains('循证检索结果'));
       expect(out, contains('指南推荐'));
@@ -227,7 +228,8 @@ void main() {
       final provider = _LitFixture(online: false);
       service = AgentService(AIEngine())..provider = provider;
 
-      final out = await service.executeTool('search_literature', {'query': '罕见病'});
+      final out =
+          (await service.executeTool('search_literature', {'query': '罕见病'})).text;
 
       expect(out, contains('联网文献检索需先在'));
       expect(provider.litQueryCount, 0,
@@ -242,8 +244,9 @@ void main() {
       );
       service = AgentService(AIEngine())..provider = provider;
 
-      final out = await service.executeTool('search_literature',
-          {'query': '高血压', 'year_from': 2015});
+      final out = (await service.executeTool('search_literature',
+              {'query': '高血压', 'year_from': 2015}))
+          .text;
 
       expect(provider.litQueryCount, 1);
       expect(provider.lastQuery, '高血压');
@@ -262,7 +265,9 @@ void main() {
       final provider = _LitFixture(online: true);
       service = AgentService(AIEngine())..provider = provider;
 
-      final out = await service.executeTool('search_literature', {'query': '不存在的主题'});
+      final out = (await service
+              .executeTool('search_literature', {'query': '不存在的主题'}))
+          .text;
 
       expect(provider.litQueryCount, 1);
       expect(out, contains('均无'));
@@ -273,7 +278,8 @@ void main() {
       final provider = _LitFixture();
       service = AgentService(AIEngine())..provider = provider;
 
-      expect(await service.executeTool('search_literature', {}), 'query 参数不能为空');
+      expect((await service.executeTool('search_literature', {})).text,
+          'query 参数不能为空');
       expect(provider.litQueryCount, 0);
       expect(service.toolLabel('search_literature'), '文献检索');
     });

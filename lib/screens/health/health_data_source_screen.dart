@@ -172,10 +172,14 @@ class _HealthDataSourceScreenState extends State<HealthDataSourceScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _statusRow('健康服务可用性',
-                      wp.available ? '可用（Health Connect / 健康 App）' : '不可用'),
+                  _statusRow('数据源通道',
+                      wp.gbMode ? 'Gadgetbridge（手环蓝牙直连）' : '健康服务'),
+                  if (!wp.gbMode)
+                    _statusRow('健康服务可用性',
+                        wp.available ? '可用（Health Connect / 健康 App）' : '不可用'),
                   _statusRow('单独同意', wp.hasConsent ? '已同意' : '未同意'),
-                  _statusRow('读取授权', wp.authorized ? '已授权' : '未授权'),
+                  _statusRow('读取授权',
+                      wp.authorized ? (wp.gbMode ? '已选择导出文件夹' : '已授权') : '未授权'),
                   _statusRow('云同步', wp.cloudSyncEnabled ? '已开启' : '未开启（仅存本机）'),
                   _statusRow(
                       '最近同步',
@@ -190,7 +194,7 @@ class _HealthDataSourceScreenState extends State<HealthDataSourceScreen> {
                   if (wp.consent?.withdrawnAt != null)
                     _statusRow('撤回时间',
                         _fmtDateTime(wp.consent!.withdrawnAt!)),
-                  if (!wp.available)
+                  if (!wp.available && !wp.gbMode)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
                       child: Text(
@@ -271,6 +275,60 @@ class _HealthDataSourceScreenState extends State<HealthDataSourceScreen> {
                     ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Gadgetbridge 直连同步（手环蓝牙直连，无需 Health Connect）
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary:
+                      const Icon(Icons.watch, color: TaoistTheme.bambooGreen),
+                  title: const Text('Gadgetbridge 直连同步'),
+                  subtitle: Text(wp.gbMode
+                      ? '已启用：从 Gadgetbridge 导出库读取手环数据'
+                      : '已安装 Gadgetbridge？开启后无需 Health Connect，直接解析其导出数据'),
+                  value: wp.gbMode,
+                  onChanged: (v) async {
+                    await wp.setGadgetbridgeMode(v);
+                    await _reload();
+                  },
+                ),
+                if (wp.gbMode) ...[
+                  ListTile(
+                    leading: Icon(
+                      wp.authorized
+                          ? Icons.folder_open
+                          : Icons.folder_off_outlined,
+                      color: wp.authorized
+                          ? TaoistTheme.jadeGreen
+                          : TaoistTheme.cloudGray,
+                    ),
+                    title: const Text('导出文件夹'),
+                    subtitle: Text(wp.authorized
+                        ? '已选择 Gadgetbridge 自动导出目录'
+                        : '未选择，点击前往授权（选择导出文件夹）'),
+                    onTap: wp.authorized ? null : _authorize,
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      '使用步骤：\n'
+                      '① 手机安装 Gadgetbridge 并绑定手环；\n'
+                      '② GB「设置 → 自动化 → 自动导出」开启，并选择一个文件夹；\n'
+                      '③ 回到本页选择同一文件夹，即可自动解析手环数据。\n'
+                      '数据经蓝牙直连读取，仅存本机，不经小米云。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.7,
+                        color: TaoistTheme.cloudGray,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 12),

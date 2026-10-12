@@ -3,15 +3,22 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/user_profile.dart';
+import '../../services/agreement_consent.dart';
 import '../../services/app_lock_service.dart';
 import '../../services/cloud_api.dart';
 import '../../services/database_helper.dart';
+import '../../services/rest_timer_settings.dart';
 import '../../services/sync_engine.dart';
+import '../legal/agreement_text_screen.dart';
+import '../legal/legal_documents.dart';
 import 'cloud_sync_screen.dart';
 import '../ai/ai_screen.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../knowledge/book_library_screen.dart';
+import '../knowledge/open_data_screen.dart';
 import '../health/health_data_source_screen.dart';
+import '../diet/widgets/diet_target_card.dart';
+import '../diet/fasting_screen.dart';
 
 /// 设置页
 class SettingsScreen extends StatelessWidget {
@@ -119,6 +126,26 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
+          // 开放数据与本体
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.hub_outlined,
+                  color: TaoistTheme.bambooGreen),
+              title: const Text('开放数据与本体'),
+              subtitle: const Text('运动医学/康复本体·数据源登记表·开放动作库'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OpenDataScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // 账号
           Card(
             child: ListTile(
@@ -210,6 +237,43 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
+          // 组间休息计时（FIT-6）
+          const RestTimerSettingsCard(),
+          const SizedBox(height: 12),
+
+          // 饮食增强（FIT-7）：每日营养目标 + 间歇性断食
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined,
+                      color: TaoistTheme.jadeGreen),
+                  title: const Text('每日营养目标'),
+                  subtitle: Text(
+                    provider.dietTarget.hasCalorieTarget
+                        ? '${provider.dietTarget.calories.toStringAsFixed(0)} 千卡 · '
+                            '蛋白 ${provider.dietTarget.protein.toStringAsFixed(0)}g · '
+                            '碳水 ${provider.dietTarget.carbs.toStringAsFixed(0)}g · '
+                            '脂肪 ${provider.dietTarget.fat.toStringAsFixed(0)}g'
+                        : '未设置，点击配置热量与三大营养素',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showDietTargetEditor(context, provider),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.timelapse,
+                      color: TaoistTheme.bambooGreen),
+                  title: const Text('间歇性断食'),
+                  subtitle: Text(provider.fastingSettings.plan.description),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showFastingSettingsSheet(context, provider),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // 安全
           Card(
             child: AnimatedBuilder(
@@ -237,6 +301,57 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
+          // 协议与隐私
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined,
+                      color: TaoistTheme.jadeGreen),
+                  title: const Text('隐私政策'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const AgreementTextScreen(document: kPrivacyPolicy),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.article_outlined,
+                      color: TaoistTheme.teaBrown),
+                  title: const Text('用户协议'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const AgreementTextScreen(document: kUserAgreement),
+                    ),
+                  ),
+                ),
+                FutureBuilder<AgreementConsent?>(
+                  future: AgreementConsentStore().load(),
+                  builder: (context, snap) {
+                    final c = snap.data;
+                    final subtitle = (c?.isActive ?? false)
+                        ? '已同意 v${c!.version} · ${_fmtAgreedDate(c.agreedAt)}'
+                        : '尚未同意';
+                    return ListTile(
+                      leading: const Icon(Icons.verified_user_outlined,
+                          color: TaoistTheme.bambooGreen),
+                      title: const Text('协议同意状态'),
+                      subtitle: Text(subtitle),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // 关于
           const Card(
             child: ListTile(
@@ -248,6 +363,15 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 协议同意时间格式化（仅日期）
+  static String _fmtAgreedDate(DateTime? t) {
+    if (t == null) return '';
+    final local = t.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd';
   }
 
   /// 退出登录
@@ -369,6 +493,192 @@ class SettingsScreen extends StatelessWidget {
         const SnackBar(content: Text('本地数据已清除，正在从云端重新同步')),
       );
     }
+  }
+}
+
+/// 组间休息计时设置卡片（FIT-6）
+/// 独立加载与保存，避免把设置塞进 AppProvider 的全局状态里。
+class RestTimerSettingsCard extends StatefulWidget {
+  const RestTimerSettingsCard({super.key});
+
+  @override
+  State<RestTimerSettingsCard> createState() => _RestTimerSettingsCardState();
+}
+
+class _RestTimerSettingsCardState extends State<RestTimerSettingsCard> {
+  static const RestTimerSettingsStore _store = RestTimerSettingsStore();
+
+  RestTimerSettings _settings = const RestTimerSettings();
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final settings = await _store.load();
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _loading = false;
+    });
+  }
+
+  Future<void> _update(RestTimerSettings settings) async {
+    setState(() => _settings = settings);
+    await _store.save(settings);
+  }
+
+  /// 选择默认休息时长：预设 + 自定义
+  Future<void> _pickDefaultSeconds() async {
+    const customSentinel = -1;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('默认休息时长',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+              for (final s in RestTimerSettings.presets)
+                ListTile(
+                  dense: true,
+                  title: Text(RestTimerSettings.formatSeconds(s)),
+                  trailing: _settings.defaultSeconds == s
+                      ? const Icon(Icons.check, color: TaoistTheme.jadeGreen)
+                      : null,
+                  onTap: () => Navigator.pop(ctx, s),
+                ),
+              ListTile(
+                dense: true,
+                title: const Text('自定义…'),
+                leading: const Icon(Icons.edit_outlined, size: 18),
+                onTap: () => Navigator.pop(ctx, customSentinel),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (picked == null) return;
+    if (picked == customSentinel) {
+      final custom = await _askCustomSeconds();
+      if (custom == null) return;
+      await _update(_settings.copyWith(defaultSeconds: custom));
+      return;
+    }
+    await _update(_settings.copyWith(defaultSeconds: picked));
+  }
+
+  /// 自定义时长输入（5 ~ 1800 秒）
+  Future<int?> _askCustomSeconds() async {
+    final controller =
+        TextEditingController(text: '${_settings.defaultSeconds}');
+    final value = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('自定义休息时长'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '秒',
+            helperText: '范围 ${RestTimerSettings.minSeconds} ~ '
+                '${RestTimerSettings.maxSeconds} 秒',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final n = int.tryParse(controller.text.trim());
+              Navigator.pop(
+                  ctx, n == null ? null : RestTimerSettings.clampSeconds(n));
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Card(
+        child: ListTile(
+          leading:
+              Icon(Icons.timer_outlined, color: TaoistTheme.bambooGreen),
+          title: Text('组间休息计时'),
+          subtitle: Text('读取设置中…'),
+        ),
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading:
+                const Icon(Icons.timer_outlined, color: TaoistTheme.bambooGreen),
+            title: const Text('默认休息时长'),
+            subtitle: const Text('逐组未单独设置时使用'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  RestTimerSettings.formatSeconds(_settings.defaultSeconds),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: TaoistTheme.teaBrown,
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap: _pickDefaultSeconds,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.check_box_outlined,
+                color: TaoistTheme.bambooGreen),
+            title: const Text('打勾自动计时'),
+            subtitle: const Text('训练记录页勾选完成一组时自动开始倒计时'),
+            value: _settings.autoStartOnCheck,
+            onChanged: (v) => _update(_settings.copyWith(autoStartOnCheck: v)),
+          ),
+          SwitchListTile(
+            secondary:
+                const Icon(Icons.vibration, color: TaoistTheme.bambooGreen),
+            title: const Text('震动提醒'),
+            subtitle: const Text('倒计时结束时震动一次'),
+            value: _settings.vibrateEnabled,
+            onChanged: (v) => _update(_settings.copyWith(vibrateEnabled: v)),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.volume_up_outlined,
+                color: TaoistTheme.bambooGreen),
+            title: const Text('提示音'),
+            subtitle: const Text('倒计时结束时播放系统提示音'),
+            value: _settings.soundEnabled,
+            onChanged: (v) => _update(_settings.copyWith(soundEnabled: v)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

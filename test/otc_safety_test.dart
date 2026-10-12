@@ -118,7 +118,8 @@ void main() {
   });
 
   test('OT-3 输出必带出处与固定免责话术', () async {
-    final out = await service.executeTool('search_otc_safety', {'query': '对乙酰氨基酚'});
+    final out =
+        (await service.executeTool('search_otc_safety', {'query': '对乙酰氨基酚'})).text;
 
     expect(out, contains('对乙酰氨基酚'));
     expect(out, contains('2 g'));
@@ -129,8 +130,9 @@ void main() {
   });
 
   test('OT-4 藿香正气水×头孢：双硫仑风险条目可检索且带出处', () async {
-    final out = await service.executeTool(
-        'search_otc_safety', {'query': '藿香正气水 头孢 双硫仑'});
+    final out = (await service.executeTool(
+            'search_otc_safety', {'query': '藿香正气水 头孢 双硫仑'}))
+        .text;
 
     expect(out, contains('双硫仑'));
     expect(out, contains('头孢'));
@@ -138,8 +140,9 @@ void main() {
   });
 
   test('OT-5 未命中不编造：明确无本地依据并优先建议就医', () async {
-    final out = await service.executeTool(
-        'search_otc_safety', {'query': '量子纠缠zzqq'});
+    final out = (await service.executeTool(
+            'search_otc_safety', {'query': '量子纠缠zzqq'}))
+        .text;
 
     expect(out, contains('本地用药安全库暂无'));
     expect(out, contains('请勿编造'));
@@ -147,8 +150,9 @@ void main() {
   });
 
   test('OT-6 空参数安全兜底', () async {
-    expect(await service.executeTool('search_otc_safety', {}), 'query 参数不能为空');
-    expect(await service.executeTool('search_otc_safety', {'query': '  '}),
+    expect((await service.executeTool('search_otc_safety', {})).text,
+        'query 参数不能为空');
+    expect((await service.executeTool('search_otc_safety', {'query': '  '})).text,
         'query 参数不能为空');
   });
 

@@ -12,6 +12,18 @@ class TaoistTheme {
   static const Color cloudGray = Color(0xFF8A8A8A); // 云灰
   static const Color mistGray = Color(0xFFE8E4DC); // 雾灰
 
+  /// 训练计划来源色：官方（茶褐）/ AI（紫）/ 我的（玉青）
+  static Color planSourceColor(String source) {
+    switch (source) {
+      case 'official':
+        return teaBrown;
+      case 'ai':
+        return const Color(0xFF7B5EA7);
+      default:
+        return jadeGreen;
+    }
+  }
+
   static ThemeData get lightTheme {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: jadeGreen,

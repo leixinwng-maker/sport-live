@@ -1,0 +1,606 @@
+{
+  "version": "1.0.0",
+  "description": "RehabO（康复本体）REHABO 命名空间术语摘录：仅搬运 label/definition/父类/同义词，未做改写或翻译。",
+  "license": "CC0 1.0（公共领域贡献）",
+  "source": "RehabO (The Rehabilitation Ontology)",
+  "url": "https://github.com/mcwdsi/rehabo",
+  "ontologyUrl": "http://purl.obolibrary.org/obo/rehabo.owl",
+  "terms": [
+    {
+      "id": "REHABO:0000000",
+      "label": "rehabilitation therapy",
+      "altLabels": [],
+      "definition": "A therapeutic procedure whose objective is to improve functioning of parts of the body involved in macro movements and whose current level of functioning are clinically abnormal.",
+      "parents": [
+        "OGMS:0000112"
+      ]
+    },
+    {
+      "id": "REHABO:0000001",
+      "label": "physical therapy",
+      "altLabels": [],
+      "definition": "A rehabilitation therapy that improves functioning by (1) increasing muscle strength, range of motion, flexibility, or balance, or (2) reducing pain, either one through non-invasive manipulations of the body.",
+      "parents": [
+        "REHABO:0000000"
+      ]
+    },
+    {
+      "id": "REHABO:0000002",
+      "label": "occupational therapy",
+      "altLabels": [],
+      "definition": "A rehabilitation therapy whose objective is to improve functioning in activities of daily living or occupational tasks, often using supportive devices in contact with the body as aids or through alterations in the patient’s home or work environment.",
+      "parents": [
+        "REHABO:0000000"
+      ]
+    },
+    {
+      "id": "REHABO:0000003",
+      "label": "rehabilitation therapy cue",
+      "altLabels": [],
+      "definition": "A communication that is part of a rehabilitation therapy, whose active participant is the bearer of a therapist role and the GDC communicated is one or more objective specifications or action specifications.",
+      "parents": [
+        "OMRSE:00002068"
+      ]
+    },
+    {
+      "id": "REHABO:0000004",
+      "label": "guided rehabilitation therapy cue",
+      "altLabels": [],
+      "definition": "A rehabilitation therapy cue that communicates an objective specification and invites, either implicitly or explicitly, the patient to find an action specification that achieves the objective.",
+      "parents": [
+        "REHABO:0000003"
+      ]
+    },
+    {
+      "id": "REHABO:0000005",
+      "label": "directed rehabilitation therapy cue",
+      "altLabels": [
+        "direct rehabilitation therapy cue"
+      ],
+      "definition": "A rehabilitation therapy cue that communicates an action specification to achieve an objective of the therapy.",
+      "parents": [
+        "REHABO:0000003"
+      ]
+    },
+    {
+      "id": "REHABO:0000006",
+      "label": "rehabilitation encounter",
+      "altLabels": [],
+      "definition": "A health care encounter that realizes the physiatrist role of a participant and has a rehabilitation therapy as a part.",
+      "parents": [
+        "OGMS:0000097"
+      ]
+    },
+    {
+      "id": "REHABO:0000007",
+      "label": "physical therapy encounter",
+      "altLabels": [],
+      "definition": "A health care encounter that realizes the physical therapist role of a participant and has the provision of physical therapy as a part.",
+      "parents": [
+        "OGMS:0000097"
+      ]
+    },
+    {
+      "id": "REHABO:0000008",
+      "label": "occupational therapy encounter",
+      "altLabels": [],
+      "definition": "A health care encounter that realizes the occupational therapist role of a participant and has the provision of occupational therapy as a part.",
+      "parents": [
+        "OGMS:0000097"
+      ]
+    },
+    {
+      "id": "REHABO:0000009",
+      "label": "occupational therapist role",
+      "altLabels": [],
+      "definition": "An institutional health care role that is created by training and certification in occupational therapy and that is realized by the provision of occupational therapy.",
+      "parents": [
+        "OMRSE:00000300"
+      ]
+    },
+    {
+      "id": "REHABO:0000010",
+      "label": "meta-cognitive strategy training",
+      "altLabels": [],
+      "definition": "A therapeutic procedure that actively engages patients in identifying the key bodily-functional limitations they wish to work on, self-assessing those limitations, developing objective specifications for addressing those limitations, developing new action specifications to achieve those objectives, and then implementing those actions towards those objectives.",
+      "parents": [
+        "OGMS:0000112"
+      ]
+    },
+    {
+      "id": "REHABO:0000011",
+      "label": "active assisted range of motion process",
+      "altLabels": [],
+      "definition": "A range of motion exercise that is carried out by the organism and assisted by a force in addition to the contraction of the muscles that move the joint.",
+      "parents": [
+        "REHABO:0011001"
+      ]
+    },
+    {
+      "id": "REHABO:0000012",
+      "label": "joint motion",
+      "altLabels": [
+        "moving of joint"
+      ],
+      "definition": "A bodily process whereby the bones articulated by a joint change relative positions and orientations with respect to one another.",
+      "parents": [
+        "OGMS:0000060"
+      ]
+    },
+    {
+      "id": "REHABO:0000013",
+      "label": "musculoskeletal system function",
+      "altLabels": [
+        "function of a part of the musculoskeletal system"
+      ],
+      "definition": "A function that inheres in some part of the musculoskeletal system.",
+      "parents": [
+        "BFO:0000034"
+      ]
+    },
+    {
+      "id": "REHABO:0000014",
+      "label": "nervous system function",
+      "altLabels": [
+        "function of a part of the nervous system"
+      ],
+      "definition": "A function that inheres in some part of the nervous system.",
+      "parents": [
+        "BFO:0000034"
+      ]
+    },
+    {
+      "id": "REHABO:0000015",
+      "label": "bodily movement function",
+      "altLabels": [
+        "body motion function",
+        "body movement function",
+        "locomotion function"
+      ],
+      "definition": "A musculoskeletal system function that is realized by intentional muscle contractions that set one or more body parts in motion.",
+      "parents": [
+        "REHABO:0000013"
+      ]
+    },
+    {
+      "id": "REHABO:0000016",
+      "label": "motor control function",
+      "altLabels": [
+        "motor control function of the nervous system"
+      ],
+      "definition": "A function that inheres in the nervous system of an organism and that is realized by coordination of goal-directed movements through integrated nervous system activity.",
+      "parents": [
+        "REHABO:0000014"
+      ]
+    },
+    {
+      "id": "REHABO:0000017",
+      "label": "bodily mobility function",
+      "altLabels": [
+        "body mobility function",
+        "locomotion function"
+      ],
+      "definition": "A function that inheres in an organism and that is complex, being comprised of a bodily movement function and a motor control function, and that is realized by locomotion.",
+      "parents": [
+        "BFO:0000034"
+      ]
+    },
+    {
+      "id": "REHABO:0000018",
+      "label": "wheeled walker",
+      "altLabels": [
+        "rollator"
+      ],
+      "definition": "A locomotion assistive device that (1) supports the body in an upright standing position, (2) has a frame with four legs as part, (3) has two or more wheels as part, and (4) whose locomotion function, if realized, is realized by a process that (a) has as part rolling of its wheels while the organism walks and (b) has continuous (i.e., uninterrupted) support of the organisms weight.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0000019",
+      "label": "hemi walker",
+      "altLabels": [],
+      "definition": "A locomotion assistive device that (1) supports the body in an upright standing position, (2) has four legs as part, (3) is designed to be operated with a single upper limb, and (4) whose locomotion function, if realized, is realized by a process that has alternating parts of (a) weight support and (b) non-weight support when the device is either slid forward, or lifted in the air to move it forward, before the next weight supporting part.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0000020",
+      "label": "single point cane",
+      "altLabels": [],
+      "definition": "A locomotion assistive device that (1) supports the body in an upright standing position, (2) has a single point of contact with the ground as part, (3) has as part a handle where the organism grasps it during locomotion, and (4) whose locomotion function, if realized, is realized by a process that has alternating parts of (a) weight support and (b) non-weight support when the device is lifted in the air to move it forward before the next weight supporting part.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0000021",
+      "label": "quad cane",
+      "altLabels": [
+        "four-point cane"
+      ],
+      "definition": "A locomotion assistive device that (1) supports the body in an upright standing position, (2) has four points of contact with the ground as part, (3) has as part a handle where the organism grasps it during locomotion, and (4) whose locomotion function, if realized, is realized by a process that has alternating parts of (a) weight support and (b) non-weight support when the device is lifted in the air to move it forward before the next weight supporting part.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0000022",
+      "label": "sliding board",
+      "altLabels": [
+        "transfer board"
+      ],
+      "definition": "A locomotion assistive device that (1) supports the body in a seated position, (2) is a rigid flat surface, and (3) whose locomotion function, if realized, is realized by a process that has as part sliding of the organism from one seated surface to another.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0010001",
+      "label": "physical therapist role",
+      "altLabels": [],
+      "definition": "An institutional health care role that is created by training and certification in physical therapy and that is realized by the provision of physical therapy.",
+      "parents": [
+        "OMRSE:00000300"
+      ]
+    },
+    {
+      "id": "REHABO:0010002",
+      "label": "medical device",
+      "altLabels": [],
+      "definition": "An object manufactured with a function either (1) to diagnose, cure, mitigate, treat, or prevent disease or (2) to alter physically (i.e., not chemically) the structure or functioning of some part of the body of an organism.",
+      "parents": [
+        "BFO:0000030"
+      ]
+    },
+    {
+      "id": "REHABO:0010003",
+      "label": "activity of daily living assistive device",
+      "altLabels": [],
+      "definition": "A medical device whose function is to improve the degree (or quality) of realization of an organism's capability to perform one or more activities of daily living.",
+      "parents": [
+        "REHABO:0010002"
+      ]
+    },
+    {
+      "id": "REHABO:0010004",
+      "label": "locomotion assistive device",
+      "altLabels": [],
+      "definition": "An activity of daily living assistive device whose function is to improve the degree of realization of an organism's capability for locomotion.",
+      "parents": [
+        "REHABO:0010003"
+      ]
+    },
+    {
+      "id": "REHABO:0010005",
+      "label": "assistive device for donning or removing clothing",
+      "altLabels": [],
+      "definition": "An activity of daily living assistive device whose function is to improve the degree of realization of an organism's capability to don or remove one or more articles of clothing.",
+      "parents": [
+        "REHABO:0010003"
+      ]
+    },
+    {
+      "id": "REHABO:0010006",
+      "label": "grasping or holding assistive device",
+      "altLabels": [],
+      "definition": "An object manufactured with the function to enhance an organism's capability to grasp or hold onto other objects.",
+      "parents": [
+        "BFO:0000030"
+      ]
+    },
+    {
+      "id": "REHABO:0010007",
+      "label": "wheelchair",
+      "altLabels": [],
+      "definition": "A locomotion assistive device that (1) supports the body in a seated position, (2) has two or more wheels as part, and (3) whose locomotion function, if realized, is realized by a process that has as part rotating of its wheels.",
+      "parents": [
+        "REHABO:0010004"
+      ]
+    },
+    {
+      "id": "REHABO:0010012",
+      "label": "facilitation-requiring disposition",
+      "altLabels": [],
+      "definition": "A disposition inhering in a material entity that is necessarily facilitated by some other disposition.",
+      "parents": [
+        "BFO:0000016"
+      ]
+    },
+    {
+      "id": "REHABO:0010013",
+      "label": "facilitating",
+      "altLabels": [],
+      "definition": "A process that realizes a realizable entity y and that is a proper occurrent part of a process that realizes a realizable entity x, where x does not equal y and x is facilitated by y.",
+      "parents": [
+        "BFO:0000015"
+      ]
+    },
+    {
+      "id": "REHABO:0010014",
+      "label": "requires physical assistance disposition",
+      "altLabels": [],
+      "definition": "A facilitation-requiring disposition inhering in a part of an organism and that is clinically abnormal.",
+      "parents": []
+    },
+    {
+      "id": "REHABO:0010015",
+      "label": "requires assistive device disposition",
+      "altLabels": [],
+      "definition": "A requires physical assistance disposition that is necessarily facilitated by the function of an assistive device.",
+      "parents": [
+        "REHABO:0010014"
+      ]
+    },
+    {
+      "id": "REHABO:0010016",
+      "label": "requires personal assistance disposition",
+      "altLabels": [],
+      "definition": "A requires physical assistance disposition that is necessarily facilitated by a disposition inhering in another organism.",
+      "parents": [
+        "REHABO:0010014"
+      ]
+    },
+    {
+      "id": "REHABO:0010017",
+      "label": "sock aid",
+      "altLabels": [],
+      "definition": "A dressing assistive device made of plastic that (1) has one or more long straps or cords attached to its body as part, (2) is designed to hold a sock or stocking open when placed inside it, and (3) whose donning function, if realized, is realized by a process that has as part the organism's foot sliding into the sock and the sock being pulled over the heel while the device holds the sock open, without the organism bending at the waist.",
+      "parents": [
+        "REHABO:0010005"
+      ]
+    },
+    {
+      "id": "REHABO:0010018",
+      "label": "dressing stick",
+      "altLabels": [],
+      "definition": "A dressing assistive device that (1) is a rigid elongated shaft, and (2) has one or more hooks as part at one or both ends, and (3) whose donning or removing function, if realized, is realized by a process that has as part a hook engaging an article of clothing to pull it onto, or push or pull it off of, part of the organism's body.",
+      "parents": [
+        "REHABO:0010005"
+      ]
+    },
+    {
+      "id": "REHABO:0010019",
+      "label": "shoe horn",
+      "altLabels": [],
+      "definition": "A dressing assistive device that (1) has a curved, rigid blade-shaped body, and (2) whose donning function, if realized, is realized by a process that has as part the organism's heel sliding along the device's curved surface into the back of a shoe.",
+      "parents": [
+        "REHABO:0010005"
+      ]
+    },
+    {
+      "id": "REHABO:0010020",
+      "label": "long handled shoe horn",
+      "altLabels": [],
+      "definition": "A shoe horn that has an elongated handle as part, sufficient to enable donning a shoe without the organism bending at the waist.",
+      "parents": [
+        "REHABO:0010019"
+      ]
+    },
+    {
+      "id": "REHABO:0010021",
+      "label": "reacher device",
+      "altLabels": [],
+      "definition": "A grasping or holding assistive device that (1) is an elongated rigid or semi-rigid shaft, (2) has a jaw or claw mechanism as part at the distal end, (3) has a trigger or lever as part at the proximal (handle) end that operates the jaw, and (4) whose grasping or holding function, if realized, is realized by a process that has as part closing of the jaw around an object at a distance from the organism's body.",
+      "parents": [
+        "REHABO:0010006"
+      ]
+    },
+    {
+      "id": "REHABO:0010022",
+      "label": "bodily energy expenditure",
+      "altLabels": [],
+      "definition": "A bodily process that releases energy from bodily energy stores and that is an occurrent part of another bodily process.",
+      "parents": [
+        "OGMS:0000060"
+      ]
+    },
+    {
+      "id": "REHABO:0010023",
+      "label": "physical exertion",
+      "altLabels": [],
+      "definition": "A bodily energy expenditure that is an occurrent part of muscle contraction.",
+      "parents": [
+        "REHABO:0010022"
+      ]
+    },
+    {
+      "id": "REHABO:0010024",
+      "label": "requires minimal personal assistance disposition",
+      "altLabels": [],
+      "definition": "A requires personal assistance disposition whose realization requires as occurrent part minimal physical exertion on the part of the other organism relative to its bearer.",
+      "parents": [
+        "REHABO:0010016"
+      ]
+    },
+    {
+      "id": "REHABO:0010025",
+      "label": "requires moderate personal assistance disposition",
+      "altLabels": [],
+      "definition": "A requires personal assistance disposition whose realization requires as occurrent part roughly the same physical exertion on the part of the other organism relative to its bearer.",
+      "parents": [
+        "REHABO:0010016"
+      ]
+    },
+    {
+      "id": "REHABO:0010026",
+      "label": "requires maximal personal assistance disposition",
+      "altLabels": [],
+      "definition": "A requires personal assistance disposition whose realization requires far more physical exertion on the part of the other organism relative to its bearer.",
+      "parents": [
+        "REHABO:0010016"
+      ]
+    },
+    {
+      "id": "REHABO:0010027",
+      "label": "requires total personal assistance disposition",
+      "altLabels": [],
+      "definition": "A requires personal assistance disposition whose realization requires that all physical exertion is on the part of the other organism.",
+      "parents": [
+        "REHABO:0010016"
+      ]
+    },
+    {
+      "id": "REHABO:0010028",
+      "label": "patient lift",
+      "altLabels": [],
+      "definition": "An activity of daily living assistive device that uses electrical or hydraulic power to elevate a person above a resting surface and then lower them back down to a resting surface.",
+      "parents": [
+        "REHABO:0010003"
+      ]
+    },
+    {
+      "id": "REHABO:0011001",
+      "label": "range of motion process",
+      "altLabels": [],
+      "definition": "A joint motion all the way to one extreme of apposition of the bones in the joint that is permitted by any ligaments, tendons, capsules, and muscles that are either part of the joint or connected to same.",
+      "parents": [
+        "REHABO:0000012"
+      ]
+    },
+    {
+      "id": "REHABO:0011002",
+      "label": "active range of motion process",
+      "altLabels": [],
+      "definition": "A range of motion process effected solely by the intentional control of the organism through contraction of the muscles that move the joint.",
+      "parents": [
+        "REHABO:0011001"
+      ]
+    },
+    {
+      "id": "REHABO:0011003",
+      "label": "passive range of motion process",
+      "altLabels": [],
+      "definition": "A range of motion process carried out by assistance from a force other than the muscles that move the joint and that pushes the joint to a greater extreme than is typically possible by the organism on its own.",
+      "parents": [
+        "REHABO:0011001"
+      ]
+    },
+    {
+      "id": "REHABO:0011004",
+      "label": "joint function",
+      "altLabels": [
+        "function of a joint"
+      ],
+      "definition": "A function inhering in a joint.",
+      "parents": [
+        "BFO:0000034"
+      ]
+    },
+    {
+      "id": "REHABO:0011005",
+      "label": "muscle function",
+      "altLabels": [
+        "function of a muscle"
+      ],
+      "definition": "A function inhering in a muscle.",
+      "parents": [
+        "BFO:0000034"
+      ]
+    },
+    {
+      "id": "REHABO:0011006",
+      "label": "range of motion function of a joint",
+      "altLabels": [],
+      "definition": "A Joint function that is realized by a range of motion process.",
+      "parents": [
+        "REHABO:0011004"
+      ]
+    },
+    {
+      "id": "REHABO:0011007",
+      "label": "power of a muscle",
+      "altLabels": [
+        "muscle power"
+      ],
+      "definition": "A function of a muscle to generate force per unit time via contraction.",
+      "parents": [
+        "REHABO:0011005"
+      ]
+    },
+    {
+      "id": "REHABO:0011008",
+      "label": "strength of a muscle",
+      "altLabels": [
+        "muscle strength"
+      ],
+      "definition": "A function of a muscle to generate force via contraction.",
+      "parents": [
+        "REHABO:0011005"
+      ]
+    },
+    {
+      "id": "REHABO:0011011",
+      "label": "physical exercise",
+      "altLabels": [],
+      "definition": "A bodily process that is intentional, has an objective of increasing the functioning of some part(s) of the body, is repetitive, and has one or more components of the musculoskeletal system as participants.",
+      "parents": [
+        "OGMS:0000060"
+      ]
+    },
+    {
+      "id": "REHABO:0011012",
+      "label": "range of motion exercise",
+      "altLabels": [],
+      "definition": "A physical exercise whose objective is to maintain the range of motion function of a joint or improve it towards clinically normal (when not currently normal) and whose repetitions are range of motion processes",
+      "parents": [
+        "REHABO:0011011"
+      ]
+    },
+    {
+      "id": "REHABO:0011013",
+      "label": "active range of motion exercise",
+      "altLabels": [],
+      "definition": "A range of motion exercise whose repetitions are active range of motion processes.",
+      "parents": [
+        "REHABO:0011012"
+      ]
+    },
+    {
+      "id": "REHABO:0011014",
+      "label": "passive range of motion exercise",
+      "altLabels": [],
+      "definition": "A range of motion exercise whose repetitions are passive range of motion processes.",
+      "parents": [
+        "REHABO:0011012"
+      ]
+    },
+    {
+      "id": "REHABO:0011015",
+      "label": "active assisted range of motion exercise",
+      "altLabels": [],
+      "definition": "A range of motion exercise whose repetitions are active assisted range of motion processes.",
+      "parents": [
+        "REHABO:0011012"
+      ]
+    },
+    {
+      "id": "REHABO:0011016",
+      "label": "strength exercise",
+      "altLabels": [],
+      "definition": "A physical exercise whose objective is to increase the strength of one or more muscles.",
+      "parents": [
+        "REHABO:0011011"
+      ]
+    },
+    {
+      "id": "REHABO:0011017",
+      "label": "power exercise",
+      "altLabels": [],
+      "definition": "A physical exercise whose objective is to increase the power of one or more muscles.",
+      "parents": [
+        "REHABO:0011011"
+      ]
+    },
+    {
+      "id": "REHABO:0011018",
+      "label": "task object role",
+      "altLabels": [],
+      "definition": "The role of an object during rehabilitation therapy that is realized by the patient performing activities that realize a function of the object, such that the patient increasingly improves their capability(ies) to use an object of a similar type.",
+      "parents": [
+        "BFO:0000023"
+      ]
+    }
+  ]
+}

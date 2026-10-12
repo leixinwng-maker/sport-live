@@ -2,9 +2,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/wearable.dart';
 import '../services/database_helper.dart';
+import '../services/gadgetbridge_gateway.dart';
 import '../services/health_consent.dart';
 import '../services/wearable_aggregator.dart';
 
@@ -188,9 +190,15 @@ class WearableProvider extends ChangeNotifier {
         _db = db ?? DatabaseHelper.instance,
         _consentStore = consentStore ?? HealthConsentStore();
 
-  final WearableGateway _gateway;
+  /// Gadgetbridge 模式开关的持久化键
+  static const _prefGbMode = 'wearable_gateway_gb';
+
+  /// 当前数据源网关（可在 Health Connect 与 Gadgetbridge 间切换）
+  WearableGateway _gateway;
   final DatabaseHelper _db;
   final HealthConsentStore _consentStore;
+  GadgetbridgeGateway? _gbGateway;
+  bool _gbMode = false;
 
   bool _available = false;
   bool _authorized = false;
@@ -228,8 +236,35 @@ class WearableProvider extends ChangeNotifier {
   /// 最近一次错误（可读文案）
   String? get error => _error;
 
+  /// 是否处于 Gadgetbridge 直连模式（否则走 Health Connect / HealthKit）
+  bool get gbMode => _gbMode;
+
+  /// 切换数据源：Gadgetbridge 导出库 / 平台健康服务（持久化，切换后重新探测）
+  Future<void> setGadgetbridgeMode(bool on) async {
+    if (_gbMode == on) return;
+    _gbMode = on;
+    if (on) {
+      _gbGateway ??= GadgetbridgeGateway();
+      _gateway = _gbGateway!;
+    } else {
+      _gateway = HealthPluginGateway();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefGbMode, on);
+    _available = false;
+    _authorized = false;
+    _error = null;
+    await init();
+  }
+
   /// 首次进入：读取同意留痕 + 探测平台可用性与现有授权状态（不弹窗）
   Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _gbMode = prefs.getBool(_prefGbMode) ?? false;
+    if (_gbMode && _gateway is! GadgetbridgeGateway) {
+      _gbGateway ??= GadgetbridgeGateway();
+      _gateway = _gbGateway!;
+    }
     _consent = await _consentStore.load();
     _available = await _gateway.isAvailable();
     if (_available) {
@@ -263,7 +298,9 @@ class WearableProvider extends ChangeNotifier {
       return false;
     }
     if (!_available) {
-      _error = '当前设备不可用健康数据服务（Android 需安装并启用 Health Connect）。';
+      _error = _gbMode
+          ? 'Gadgetbridge 同步仅支持 Android 设备。'
+          : '当前设备不可用健康数据服务（Android 需安装并启用 Health Connect）。';
       notifyListeners();
       return false;
     }
@@ -301,12 +338,16 @@ class WearableProvider extends ChangeNotifier {
   /// 返回本次写入的样本条数；未授权或平台不可用时返回 0 并置 [error]。
   Future<int> syncRecent({int days = 30}) async {
     if (!_available) {
-      _error = '当前设备不可用健康数据服务（Android 需安装并启用 Health Connect）。';
+      _error = _gbMode
+          ? 'Gadgetbridge 同步仅支持 Android 设备。'
+          : '当前设备不可用健康数据服务（Android 需安装并启用 Health Connect）。';
       notifyListeners();
       return 0;
     }
     if (!_authorized) {
-      _error = '尚未授权健康数据，请先完成授权。';
+      _error = _gbMode
+          ? '尚未选择 Gadgetbridge 导出文件夹，请先完成授权。'
+          : '尚未授权健康数据，请先完成授权。';
       notifyListeners();
       return 0;
     }

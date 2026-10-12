@@ -247,7 +247,7 @@ class _BodyCompositionScreenState extends State<BodyCompositionScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          const _FieldLabel('体成分数据（留空的项目不保存）'),
+          const _FieldLabel('体成分 / 围度数据（留空的项目不保存）'),
           const SizedBox(height: 8),
           ...HealthMetric.bodyCompositionTypes.map(_buildMetricRow),
           if (_error.isNotEmpty) ...[
@@ -275,7 +275,7 @@ class _BodyCompositionScreenState extends State<BodyCompositionScreen> {
             child: const Text(
               '说明：\n'
               '1. 识别优先使用视觉模型（需在「AI服务配置」填写视觉模型，如 qwen-vl-plus），未配置时降级本地 OCR（免费、离线）\n'
-              '2. 体成分数据仅保存在本机，不参与云同步、不上传\n'
+              '2. 体成分 / 围度数据保存在本机数据库，可在「健康指标」中查看长期趋势\n'
               '3. 结果仅供参考，不构成医疗诊断，异常指标请及时就医复查',
               style: TextStyle(
                 fontSize: 12,

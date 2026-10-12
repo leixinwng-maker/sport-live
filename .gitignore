@@ -19,9 +19,11 @@ ios/.symlinks/
 ios/Flutter/Flutter.framework
 ios/Flutter/Flutter.podspec
 
-# 书籍原始文件（epub/md 过大，不上传）
-books/
-assets/books/
+# 书籍原始文件（epub/md 过大，不上传），仅保留 .gitkeep 占位保证目录存在
+# 注意：books/ 必须带前导斜杠，否则会匹配任意层级的 books 目录（含 assets/books/），导致否定规则失效
+/books/
+assets/books/*
+!assets/books/.gitkeep
 
 # 本地配置（包含 API Key 等敏感信息）
 .appdata/

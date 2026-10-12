@@ -24,10 +24,12 @@ subprojects {
 
 // 强制所有第三方插件子项目统一使用 compileSdk 36，
 // 避免 flutter_plugin_android_lifecycle 等要求较新 API 的依赖报 AAR 元数据错误。
+// 必须用 afterEvaluate：插件自身 build.gradle 里的 compileSdkVersion 写在插件应用之后，
+// 若用 plugins.withId 回调会在插件评估中被其自带的 34 覆盖回去。
 subprojects {
-    project.plugins.withId("com.android.library") {
-        extensions.configure<com.android.build.gradle.BaseExtension>("android") {
-            compileSdkVersion(36)
+    afterEvaluate {
+        extensions.findByName("android")?.let { ext ->
+            (ext as? com.android.build.gradle.BaseExtension)?.compileSdkVersion(36)
         }
     }
 }

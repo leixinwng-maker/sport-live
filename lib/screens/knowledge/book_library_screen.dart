@@ -301,11 +301,19 @@ class BookReaderScreen extends StatefulWidget {
 
 class _BookReaderScreenState extends State<BookReaderScreen> {
   List<BookNote> _notes = [];
+  String? _content;
 
   @override
   void initState() {
     super.initState();
+    _loadContent();
     _loadNotes();
+  }
+
+  Future<void> _loadContent() async {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final content = await provider.getBookContent(widget.book.id!);
+    if (mounted) setState(() => _content = content);
   }
 
   Future<void> _loadNotes() async {
@@ -363,7 +371,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final content = widget.book.content;
+    final content = _content;
 
     return Scaffold(
       appBar: AppBar(
@@ -412,20 +420,27 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
                 const Divider(height: 1),
                 const SizedBox(height: 16),
                 // 正文（按段落分隔）
-                ...content
-                    .split('\n')
-                    .where((p) => p.trim().isNotEmpty)
-                    .map((para) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            para.trim(),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: TaoistTheme.inkBlack.withValues(alpha: 0.85),
-                              height: 1.8,
+                if (content == null)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  ...content
+                      .split('\n')
+                      .where((p) => p.trim().isNotEmpty)
+                      .map((para) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              para.trim(),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color:
+                                    TaoistTheme.inkBlack.withValues(alpha: 0.85),
+                                height: 1.8,
+                              ),
                             ),
-                          ),
-                        )),
+                          )),
               ],
             ),
           ),

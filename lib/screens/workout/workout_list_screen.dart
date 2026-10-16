@@ -4,6 +4,7 @@ import '../../providers/app_provider.dart';
 import '../../services/workout_stats_service.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/workout.dart';
+import 'training_calendar_screen.dart';
 import 'workout_edit_screen.dart';
 import 'workout_plan_list_screen.dart';
 import 'workout_stats_screen.dart';
@@ -22,6 +23,18 @@ class WorkoutListScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('训练记录'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.calendar_month_outlined),
+                tooltip: '训练日历',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TrainingCalendarScreen(),
+                    ),
+                  );
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.assignment_outlined),
                 tooltip: '训练计划',

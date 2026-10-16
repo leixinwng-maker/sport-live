@@ -29,8 +29,8 @@ class BookSeeder {
     final data = jsonDecode(indexJson) as Map<String, dynamic>;
     final bookList = (data['books'] as List).cast<Map<String, dynamic>>();
 
-    // 已入库书籍标题（避免重复）
-    final existing = await db.getBooks();
+    // 已入库书籍标题（避免重复）——只取元数据，不读正文
+    final existing = await db.getBooksMeta();
     final existingTitles = existing.map((b) => b.title).toSet();
 
     var count = 0;

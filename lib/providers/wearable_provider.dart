@@ -179,7 +179,8 @@ class HealthPluginGateway implements WearableGateway {
 /// 合规要点（PIPL §7）：
 /// - 首次授权前必须经「单独同意页」（[hasConsent]），否则拒绝发起授权；
 /// - 只读拉取，不回写健康平台；
-/// - 本地快照存 `wearable_samples`（不进云、不入 sync_queue）；
+/// - 本地快照存 `wearable_samples`；默认不进云，仅在用户显式开启
+///   云同步（`cloudSyncEnabled`）后才随 `sync_queue` 上传；
 /// - 撤回授权后立即清空本地快照，工具随即返回「未授权」。
 class WearableProvider extends ChangeNotifier {
   WearableProvider({
@@ -277,6 +278,7 @@ class WearableProvider extends ChangeNotifier {
   /// 记录「单独同意」（同意页确认后调用；时间 + 版本号本地留痕）
   Future<void> agreeConsent({bool cloudSyncEnabled = false}) async {
     _consent = await _consentStore.agree(cloudSyncEnabled: cloudSyncEnabled);
+    if (cloudSyncEnabled) await _backfillIfCloudEnabled();
     notifyListeners();
   }
 
@@ -284,7 +286,21 @@ class WearableProvider extends ChangeNotifier {
   Future<void> setCloudSyncEnabled(bool value) async {
     final updated = await _consentStore.setCloudSync(value);
     if (updated != null) _consent = updated;
+    // 由「不上云」切到「上云」：立即把历史快照补入待传队列
+    if (value) await _backfillIfCloudEnabled();
     notifyListeners();
+  }
+
+  /// 已授权且开启云同步时，把「从未上传过」的历史快照补入待传队列。
+  ///
+  /// 幂等：只挑 sync_updated_at 为空的行，重复调用不会重复入队。
+  Future<void> _backfillIfCloudEnabled() async {
+    if (!_authorized || !cloudSyncEnabled) return;
+    try {
+      await _db.enqueueAllWearableSamples();
+    } catch (e) {
+      debugPrint('补传历史穿戴数据失败：$e');
+    }
   }
 
   /// 发起授权（真机弹窗）
@@ -326,7 +342,7 @@ class WearableProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('撤回授权失败（仍继续清空本地数据）：$e');
     }
-    await _db.clearWearableSamples();
+    await _db.clearWearableSamples(syncEnabled: cloudSyncEnabled);
     _authorized = false;
     _lastSync = null;
     _consent = await _consentStore.withdraw();
@@ -360,7 +376,10 @@ class WearableProvider extends ChangeNotifier {
       final start = today.subtract(Duration(days: days <= 1 ? 0 : days - 1));
       final raws = await _gateway.fetch(start: start, end: now);
       final samples = toSamples(raws, now: now);
-      final saved = await _db.saveWearableSamples(samples);
+      final saved = await _db.saveWearableSamples(samples,
+          syncEnabled: cloudSyncEnabled);
+      // 开启云同步后，把本次之前已存在的历史行一并补入队（幂等）
+      await _backfillIfCloudEnabled();
       _lastSync = DateTime.now();
       return saved;
     } catch (e) {
@@ -404,7 +423,7 @@ class WearableProvider extends ChangeNotifier {
 
   /// 清除已同步健康数据（用户主动删除）
   Future<void> clearSyncedData() async {
-    await _db.clearWearableSamples();
+    await _db.clearWearableSamples(syncEnabled: cloudSyncEnabled);
     _lastSync = null;
     notifyListeners();
   }

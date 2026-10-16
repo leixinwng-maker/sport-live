@@ -45,7 +45,8 @@ class WearableRawPoint {
 /// 本地留存的穿戴数据快照（只读拉取，不回写健康平台）
 ///
 /// 合规要点（P4-C / PIPL §7）：
-/// - 该表**不参与云同步**：`DatabaseHelper` 中不使用 `_upsertSynced`，不写 `sync_queue`；
+/// - 该表默认**不参与云同步**：仅当用户在同意页开启 `cloudSyncEnabled` 后，
+///   写路径才把同步列写入 `sync_queue` 参与上传；未开启时绝不出本机；
 /// - 去重键为「数据类型 + 起始时间」，重复同步只刷新数值、不新增行；
 /// - 仅用于本地摘要与智能体建议，原始记录集不整体外发大模型。
 class WearableSample {

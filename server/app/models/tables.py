@@ -1,4 +1,4 @@
-"""数据模型注册表：19 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
+"""数据模型注册表：20 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
 
 设计要点：
 - 每张业务表统一追加同步字段：
@@ -77,7 +77,7 @@ def _t(name: str, type_: Any, required: bool = False, db_name: str = "") -> Colu
     return ColumnSpec(name=name, type=type_, required=required, db_name=db_name)
 
 
-# ------------------------------------------------------- 16 张业务表规格
+# ------------------------------------------------------- 20 张业务表规格
 
 BUSINESS_TABLES: dict[str, TableSpec] = {
     spec.name: spec
@@ -282,6 +282,23 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
                 _t("report_type", Text),
                 _t("risk_level", Text),
                 _t("actions_json", Text),
+                _t("created_at", Text, True),
+            ),
+        ),
+        TableSpec(
+            "wearable_samples",
+            (
+                _t("data_type", Text, True),
+                _t("label", Text, True),
+                _t("metric_type", Text),
+                _t("value", Float),
+                _t("unit", Text),
+                _t("start_time", Text, True),
+                _t("end_time", Text, True),
+                _t("source_name", Text),
+                _t("source_device_id", Text),
+                _t("recording_method", Text),
+                _t("extra", Text),
                 _t("created_at", Text, True),
             ),
         ),

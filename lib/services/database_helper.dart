@@ -61,7 +61,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 11,
+        version: 12,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -71,7 +71,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 11,
+        version: 12,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -376,11 +376,11 @@ class DatabaseHelper {
       )
     ''');
 
-    // ---- 穿戴数据快照表（本地专用，绝不进云、绝不入 sync_queue）----
+    // ---- 穿戴数据快照表（云同步可选，默认不上云）----
     //
-    // 合规（PIPL 敏感个人信息）：健康数据模块默认不参与云同步，
-    // 因此本表无 sync_version / sync_updated_at，且写入路径不使用 _upsertSynced，
-    // 保证「同步队列」中永远不含穿戴原始记录。
+    // 合规（PIPL 敏感个人信息）：健康数据默认**不参与云同步**——只有用户在同意页
+    // 显式开启 cloudSyncEnabled 后，写路径才把同步列写入 sync_queue 参与上传；
+    // 开启前已存在的历史行由 enqueueAllWearableSamples() 一次性补入队。
     // 去重键 id = 数据类型 + 起始时间（见 WearableSample.dedupId）。
     await db.execute('''
       CREATE TABLE wearable_samples (
@@ -396,7 +396,9 @@ class DatabaseHelper {
         source_device_id TEXT,
         recording_method TEXT,
         extra TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        sync_version INTEGER NOT NULL DEFAULT 0,
+        sync_updated_at TEXT
       )
     ''');
 
@@ -462,6 +464,20 @@ class DatabaseHelper {
         }
       }
     }
+    // v11 → v12：穿戴快照表补同步列（用户在同意页开启云同步后才真正上传）。
+    if (oldVersion < 12) {
+      const alters = [
+        'ALTER TABLE wearable_samples ADD COLUMN sync_version INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE wearable_samples ADD COLUMN sync_updated_at TEXT',
+      ];
+      for (final sql in alters) {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
+    }
   }
 
   Future<void> _dropAllTables(Database db) async {
@@ -512,6 +528,31 @@ class DatabaseHelper {
       [for (final c in cols) row[c]],
     );
     await _enqueue(txn, table, rowId, 'upsert', _businessFields(row));
+  }
+
+  /// 事务内 upsert 但**不入队**（用于穿戴数据未开启云同步时的本地留存）。
+  ///
+  /// 与 [_upsertWithin] 的关键差异：不写 sync_updated_at、不动 sync_version——
+  /// 已同步过的行在本地编辑时保留其 base_version，避免下次开启同步时
+  /// 以 0 版本上传被服务端判冲突而丢失本地编辑。
+  Future<void> _upsertNoSyncWithin(Transaction txn, String table, String rowId,
+      Map<String, dynamic> data) async {
+    final row = Map<String, dynamic>.from(data)
+      ..remove('id')
+      ..remove('sync_version')
+      ..remove('sync_updated_at')
+      ..['id'] = rowId;
+    final cols = row.keys.toList();
+    final placeholders = List.filled(cols.length, '?').join(', ');
+    final updateSet = cols
+        .where((c) => c != 'id')
+        .map((c) => '$c = excluded.$c')
+        .join(', ');
+    await txn.rawInsert(
+      'INSERT INTO $table (${cols.join(', ')}) VALUES ($placeholders) '
+      'ON CONFLICT(id) DO UPDATE SET $updateSet',
+      [for (final c in cols) row[c]],
+    );
   }
 
   /// 用户数据统一删除：本地物理删 + 队列记录 delete（服务端置 deleted_at）。
@@ -993,6 +1034,43 @@ class DatabaseHelper {
     return maps.map((m) => Book.fromMap(m)).toList();
   }
 
+  /// 仅取书籍元数据（不含正文）。内置书籍正文合计约 20 MB，
+  /// 列表/书架场景无需正文，避免每次刷新都从加密库读出全部文本。
+  Future<List<Book>> getBooksMeta({String? domain}) async {
+    final db = await database;
+    final maps = await db.query(
+      'books',
+      columns: ['id', 'title', 'author', 'domain', 'added_at'],
+      where: domain == null ? null : 'domain = ?',
+      whereArgs: domain == null ? null : [domain],
+      orderBy: 'added_at DESC',
+    );
+    return maps
+        .map((m) => Book(
+              id: m['id'] as String?,
+              title: (m['title'] as String?) ?? '',
+              author: (m['author'] as String?) ?? '',
+              domain: (m['domain'] as String?) ?? 'fitness',
+              content: '',
+              addedAt: DateTime.parse(m['added_at'] as String),
+            ))
+        .toList();
+  }
+
+  /// 按需读取单本书正文（打开阅读器时才调用）。
+  Future<String> getBookContent(String id) async {
+    final db = await database;
+    final maps = await db.query(
+      'books',
+      columns: ['content'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return '';
+    return (maps.first['content'] as String?) ?? '';
+  }
+
   Future<void> deleteBook(String id) async {
     final db = await database;
     // book_notes 是同步表，级联删除需要入队
@@ -1187,26 +1265,30 @@ class DatabaseHelper {
     return maps.map((m) => HealthMetric.fromMap(m)).toList();
   }
 
-  // ============ 穿戴数据快照（本地专用，不参与云同步）============
+  // ============ 穿戴数据快照（云同步可选，默认不上云）============
   //
-  // 合规：本组方法**不使用** _upsertSynced / _deleteSynced，
-  // 因此不会写入 sync_queue，穿戴原始记录永不出本机。
+  // 合规：仅当用户显式开启 cloudSyncEnabled 时传入 syncEnabled=true，
+  // 才写入 sync_queue 参与上传；默认（false）保持仅存本机、绝不出机。
 
   /// 批量落库（按 id 去重 Upsert；重复同步只刷数值不新增行）
   ///
+  /// [syncEnabled] 为 true 时走同步写路径（更新同步列并入队待传）；
+  /// false 时仅本地留存，不产生任何同步记录。
   /// 返回本次实际写入的行数。
-  Future<int> saveWearableSamples(List<WearableSample> samples) async {
+  Future<int> saveWearableSamples(List<WearableSample> samples,
+      {bool syncEnabled = false}) async {
     if (samples.isEmpty) return 0;
     final db = await database;
     await db.transaction((txn) async {
       for (final s in samples) {
-        await txn.insert(
-          'wearable_samples',
-          s.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        if (syncEnabled) {
+          await _upsertWithin(txn, 'wearable_samples', s.id, s.toMap());
+        } else {
+          await _upsertNoSyncWithin(txn, 'wearable_samples', s.id, s.toMap());
+        }
       }
     });
+    if (syncEnabled) onLocalWrite?.call();
     return samples.length;
   }
 
@@ -1243,9 +1325,44 @@ class DatabaseHelper {
   }
 
   /// 清除全部穿戴快照（撤回授权 / 用户主动删除时调用）
-  Future<void> clearWearableSamples() async {
+  ///
+  /// [syncEnabled] 为 true 时先逐行入队 delete，使云端副本一并清除；
+  /// false 时仅本地物理删（云端无副本，无需同步）。
+  Future<void> clearWearableSamples({bool syncEnabled = false}) async {
     final db = await database;
+    if (syncEnabled) {
+      final ids = await db.query('wearable_samples', columns: ['id']);
+      await db.transaction((txn) async {
+        for (final row in ids) {
+          await _enqueue(
+              txn, 'wearable_samples', row['id'] as String, 'delete', null);
+        }
+        await txn.delete('wearable_samples');
+      });
+      onLocalWrite?.call();
+      return;
+    }
     await db.delete('wearable_samples');
+  }
+
+  /// 把「从未上传过」的穿戴快照补入待传队列。
+  ///
+  /// 用于用户由「不上云」改为「开启云同步」的切换点：开启前已存在的历史行
+  /// 一并上传，保证云端完整。只挑 sync_updated_at 为空的行，重复调用不会重复入队。
+  /// 返回补入队的行数。
+  Future<int> enqueueAllWearableSamples() async {
+    final db = await database;
+    final rows = await db.query('wearable_samples',
+        where: 'sync_updated_at IS NULL');
+    if (rows.isEmpty) return 0;
+    await db.transaction((txn) async {
+      for (final row in rows) {
+        await _upsertWithin(
+            txn, 'wearable_samples', row['id'] as String, row);
+      }
+    });
+    onLocalWrite?.call();
+    return rows.length;
   }
 
   // ============ 体检报告操作 ============

@@ -35,6 +35,7 @@ import '../services/local_ocr_service.dart';
 import '../services/health/followup_reminder.dart';
 import '../services/health/report_file_store.dart';
 import '../services/health/report_ingestion_service.dart';
+import '../services/model_config.dart';
 import '../services/vision/vision_config.dart';
 import '../services/vision/vision_service.dart';
 import '../data/food_catalog_data.dart';
@@ -141,6 +142,11 @@ class AppProvider extends ChangeNotifier {
   String? periodSummary;
   String? financeAdvice;
 
+  // 多模型管理（元数据在内存/prefs；API Key 加密存储于 ChatModelStore）
+  final ChatModelStore _modelStore = ChatModelStore();
+  List<ChatModelConfig> chatModels = [];
+  String? activeModelId;
+
   Future<void> init() async {
     isLoading = true;
     notifyListeners();
@@ -163,6 +169,8 @@ class AppProvider extends ChangeNotifier {
         SyncEngine.instance.start();
       }
       await _ai.init();
+      // 多模型管理：读取模型列表 + 旧版单配置迁移 + 下发激活模型到引擎
+      await _loadChatModels();
       aiConfigured = _ai.isConfigured;
       // 视觉识别（方案乙）：注入旧通道 + 预热独立配置缓存
       VisionService.instance.setLegacyChannel(_ai);
@@ -231,7 +239,10 @@ class AppProvider extends ChangeNotifier {
     assets = await _db.getAssets();
     debts = await _db.getDebts();
     knowledgeEntries = await _db.getKnowledgeEntries();
-    books = await _db.getBooks();
+    // 只取书籍元数据（不含正文）：正文合计约 20 MB，若在此全量读出会被
+    // loadAllData 的每次调用（增删记录/同步落地/下拉刷新）反复读取而卡死；
+    // 正文改为打开阅读器时按需加载，书籍也不参与内存知识索引（见下）。
+    books = await _db.getBooksMeta();
     // 健康档案数据
     healthProfile = await _db.getHealthProfile();
     healthMetrics = await _db.getHealthMetrics();
@@ -893,6 +904,11 @@ class AppProvider extends ChangeNotifier {
     return await _db.getBookNotes(bookId);
   }
 
+  /// 按需读取书籍正文（打开阅读器时调用，避免启动即载入全部书籍文本）。
+  Future<String> getBookContent(String id) async {
+    return await _db.getBookContent(id);
+  }
+
   Future<void> addBookNote(String bookId, String content) async {
     await _db.saveBookNote(BookNote(
       bookId: bookId,
@@ -1414,19 +1430,15 @@ class AppProvider extends ChangeNotifier {
   }
 
   // ============ AI配置 ============
-  Future<void> saveAIConfig({
-    required String baseUrl,
-    required String apiKey,
-    required String model,
-    String visionModel = '',
-  }) async {
+  /// 保存旧版视觉模型名（主 AI 自带视觉时的兼容通道；新配置见独立视觉配置）
+  Future<void> saveLegacyVisionModel(String visionModel) async {
+    // 只改视觉模型字段，其余沿用当前激活模型配置
     await _ai.saveConfig(
-      baseUrl: baseUrl,
-      apiKey: apiKey,
-      model: model,
+      baseUrl: _ai.savedBaseUrl,
+      apiKey: _ai.savedApiKey,
+      model: _ai.savedModel,
       visionModel: visionModel,
     );
-    aiConfigured = true;
     notifyListeners();
   }
 
@@ -1439,6 +1451,197 @@ class AppProvider extends ChangeNotifier {
       filePath: filePath,
       bytes: bytes,
     );
+  }
+
+  // ============ 多模型管理（模型列表 + 切换激活 + Key 加密存取） ============
+  /// 当前激活模型（不在列表中时返回 null）
+  ChatModelConfig? get activeModel {
+    final id = activeModelId;
+    if (id == null) return null;
+    for (final m in chatModels) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+
+  /// 启用的模型（对话框切换器只展示这些）
+  List<ChatModelConfig> get enabledChatModels =>
+      [for (final m in chatModels) if (m.enabled) m];
+
+  /// 启动时初始化：读取列表 → 旧版单配置迁移 → 选定激活模型 → 下发引擎
+  Future<void> _loadChatModels() async {
+    chatModels = await _modelStore.loadAll();
+    activeModelId = await _modelStore.loadActiveId();
+
+    // 旧版单配置迁移：列表为空但引擎已有配置 → 迁移为首个模型
+    if (chatModels.isEmpty && _ai.isConfigured) {
+      final id = ChatModelStore.newId();
+      final migrated = ChatModelConfig(
+        id: id,
+        name: _defaultModelName(_ai.savedBaseUrl, _ai.savedModel),
+        baseUrl: _ai.savedBaseUrl,
+        model: _ai.savedModel.isEmpty ? 'qwen-turbo' : _ai.savedModel,
+      );
+      await _modelStore.writeKey(id, _ai.savedApiKey);
+      chatModels = [migrated];
+      activeModelId = id;
+      await _modelStore.saveAll(chatModels);
+      await _modelStore.setActiveId(id);
+    }
+
+    // 激活模型失效（被删/未选）→ 回落首个启用模型
+    if (activeModelId == null || !chatModels.any((m) => m.id == activeModelId)) {
+      final pool = enabledChatModels.isEmpty ? chatModels : enabledChatModels;
+      activeModelId = pool.isEmpty ? null : pool.first.id;
+      if (activeModelId != null) {
+        await _modelStore.setActiveId(activeModelId!);
+      }
+    }
+
+    await _applyActiveModel();
+  }
+
+  /// 按服务商预设生成默认显示名
+  String _defaultModelName(String baseUrl, String model) {
+    for (final p in ChatModelPresets.all) {
+      if (p.baseUrl == baseUrl) {
+        return '${p.provider} ${model.isEmpty ? p.model : model}';
+      }
+    }
+    return model.isEmpty ? '自定义模型' : model;
+  }
+
+  /// 把激活模型下发到引擎（含加密 Key 与「是否支持工具调用」开关）
+  Future<void> _applyActiveModel() async {
+    final m = activeModel;
+    if (m == null) {
+      aiConfigured = false;
+      return;
+    }
+    final key = await _modelStore.readKey(m.id);
+    await _ai.saveConfig(
+      baseUrl: m.baseUrl,
+      apiKey: key,
+      model: m.model,
+      visionModel: _ai.savedVisionModel,
+    );
+    _ai.setSupportsTools(m.supportsTools);
+    aiConfigured = _ai.isConfigured;
+  }
+
+  /// 新增模型并设为激活；返回新 id。地址非法抛 [ArgumentError]
+  Future<String> addChatModel({
+    required String name,
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+    bool supportsTools = true,
+  }) async {
+    final normalized = ChatModelStore.normalizeBaseUrl(baseUrl);
+    if (normalized == null) {
+      throw ArgumentError('API 地址格式不正确，需以 http(s):// 开头');
+    }
+    final id = ChatModelStore.newId();
+    final cfg = ChatModelConfig(
+      id: id,
+      name: name.trim().isEmpty ? model.trim() : name.trim(),
+      baseUrl: normalized,
+      model: model.trim(),
+      supportsTools: supportsTools,
+    );
+    await _modelStore.writeKey(id, apiKey);
+    chatModels = [...chatModels, cfg];
+    await _modelStore.saveAll(chatModels);
+    activeModelId = id;
+    await _modelStore.setActiveId(id);
+    await _applyActiveModel();
+    notifyListeners();
+    return id;
+  }
+
+  /// 编辑模型；[apiKey] 传 null 或空串表示沿用旧 Key
+  Future<void> updateChatModel(ChatModelConfig config, {String? apiKey}) async {
+    final normalized = ChatModelStore.normalizeBaseUrl(config.baseUrl);
+    if (normalized == null) {
+      throw ArgumentError('API 地址格式不正确，需以 http(s):// 开头');
+    }
+    final updated = config.copyWith(baseUrl: normalized);
+    chatModels = [
+      for (final m in chatModels) if (m.id == updated.id) updated else m,
+    ];
+    await _modelStore.saveAll(chatModels);
+    if (apiKey != null && apiKey.trim().isNotEmpty) {
+      await _modelStore.writeKey(updated.id, apiKey);
+    }
+    if (activeModelId == updated.id) {
+      await _applyActiveModel();
+    }
+    notifyListeners();
+  }
+
+  /// 删除模型（连带删除加密 Key）；删除激活模型时自动切换到其它启用模型
+  Future<void> deleteChatModel(String id) async {
+    chatModels = [for (final m in chatModels) if (m.id != id) m];
+    await _modelStore.deleteKey(id);
+    await _modelStore.saveAll(chatModels);
+    if (activeModelId == id) {
+      final pool = enabledChatModels.isEmpty ? chatModels : enabledChatModels;
+      activeModelId = pool.isEmpty ? null : pool.first.id;
+      await _modelStore.setActiveId(activeModelId ?? '');
+      await _applyActiveModel();
+    }
+    notifyListeners();
+  }
+
+  /// 启用/停用模型（停用当前激活模型时自动切换）
+  Future<void> setChatModelEnabled(String id, bool enabled) async {
+    chatModels = [
+      for (final m in chatModels)
+        if (m.id == id) m.copyWith(enabled: enabled) else m,
+    ];
+    await _modelStore.saveAll(chatModels);
+    if (!enabled && activeModelId == id) {
+      final pool = enabledChatModels;
+      if (pool.isNotEmpty) {
+        activeModelId = pool.first.id;
+        await _modelStore.setActiveId(activeModelId!);
+        await _applyActiveModel();
+      }
+    }
+    notifyListeners();
+  }
+
+  /// 切换激活模型（下发引擎，智能体随即使用该模型）
+  Future<void> setActiveChatModel(String id) async {
+    if (!chatModels.any((m) => m.id == id)) return;
+    activeModelId = id;
+    await _modelStore.setActiveId(id);
+    await _applyActiveModel();
+    notifyListeners();
+  }
+
+  /// 读取某模型已保存的 Key（管理页「查看 Key」用）
+  Future<String> readChatModelKey(String id) => _modelStore.readKey(id);
+
+  /// 测试模型连通性（不改动激活状态）；[apiKey] 留空且给了 [id] 时用已保存 Key
+  Future<String> testChatModel({
+    required String baseUrl,
+    required String model,
+    String apiKey = '',
+    String id = '',
+  }) async {
+    var key = apiKey.trim();
+    if (key.isEmpty && id.isNotEmpty) {
+      key = await _modelStore.readKey(id);
+    }
+    return _ai.testModel(baseUrl: baseUrl, apiKey: key, model: model);
+  }
+
+  // ============ 食物库（静态表，不进云） ============
+  /// 新增/更新食物库条目。内置种子仅在表为空时灌入，不会覆盖此处新增。
+  Future<void> addFoodCatalogEntry(FoodCatalog food) async {
+    await _db.saveFoodToCatalog(food);
+    notifyListeners();
   }
 
   // ============ 健康档案 ============

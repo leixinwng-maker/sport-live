@@ -16,16 +16,11 @@ const String kVisionOcrPrompt =
     '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，'
     '包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。';
 
-/// 内置连通性测试小图（1×1 像素 JPEG）
+/// 内置连通性测试图（64×64 JPEG，白底蓝块）。
+/// 早期用 1×1 像素图，部分视觉服务会因图片尺寸低于下限直接拒绝（400），
+/// 改用正常小图让测试更接近真实请求。
 const String _kTestImageBase64 =
-    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
-    'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIy'
-    'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIA'
-    'AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA'
-    'AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3'
-    'ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm'
-    'p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBA'
-    'IRAxEAPwD3+iiigD//2Q==';
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KK/JGvXy/L/r3N73Ly26X3v5rseRj8f9R5fd5ua/W21vJ9z9bqK/JGivY/1f8A+nv4f8E8n+3/APp1+P8AwD9bqK/JGij/AFf/AOnv4f8ABD+3/wDp1+P/AAD9bqK/JGv1urx8wy/6jy+9zc1+ltreb7nrYDH/AF7m93l5bdb738l2CvyRr9bq/JGvY4f/AOXvy/U8nP8A/l18/wBAooor64+RCiiigAr9bq/JGv1ur5HiD/l18/0Prsg/5e/L9Qr8ka/W6vyRo4f/AOXvy/UM/wD+XXz/AECiiivrj5EKKKKACv1ur8ka/W6vkeIP+XXz/Q+uyD/l78v1CvyRr9bqK8fL8w+o83u83Nbrba/k+562PwH17l97l5b9L72812PyRor9bqK9j/WD/p1+P/APJ/sD/p7+H/BPyRor9bqKP9YP+nX4/wDAD+wP+nv4f8E/JGv1uoorx8wzD69y+7y8t+t97eS7HrYDAfUeb3ubmt0ttfzfc//Z';
 
 /// 视觉识别统一入口（方案乙核心，单例）。
 ///
@@ -280,7 +275,7 @@ class VisionService {
           utf8.decode(response.bodyBytes, allowMalformed: true);
       throw VisionServiceException(
         response.statusCode,
-        body.length > 200 ? body.substring(0, 200) : body,
+        _friendlyErrorBody(response.statusCode, body),
       );
     } on VisionException {
       rethrow;
@@ -293,5 +288,45 @@ class VisionService {
     } on FormatException {
       throw VisionServiceException(null, '响应格式异常（非 JSON）');
     }
+  }
+
+  /// 把服务端错误响应翻译成用户可读的中文提示。
+  ///
+  /// 中转/网关类服务常用整段英文 JSON 报参数错误（如 400 invalid_request_error），
+  /// 直接透出会让用户误以为是 App 出错；此处提取关键字段并给出常见原因。
+  String _friendlyErrorBody(int statusCode, String body) {
+    var detail = body.trim();
+    try {
+      final data = jsonDecode(body);
+      if (data is Map) {
+        final err = data['error'];
+        if (err is Map) {
+          detail = (err['message'] ?? err['type'] ?? body).toString();
+        } else if (err is String) {
+          detail = err;
+        } else if (data['message'] is String) {
+          detail = data['message'] as String;
+        }
+      }
+    } catch (_) {
+      // 非 JSON 响应，保留原文
+    }
+    detail = detail.trim();
+    if (detail.length > 160) detail = '${detail.substring(0, 160)}…';
+
+    final lower = detail.toLowerCase();
+    final paramError = statusCode == 400 &&
+        (lower.contains('not valid') ||
+            lower.contains('invalid') ||
+            detail.contains('参数'));
+    if (paramError) {
+      final modelHint = lower.contains('model') || detail.contains('模型')
+          ? '模型名称可能不正确，或'
+          : '';
+      return '该识别服务拒绝了图片请求。常见原因：${modelHint}该服务/中转不支持图片输入'
+          '（如 GLM Coding Plan 的图片理解走独立通道，不接受标准视觉参数）。'
+          '建议更换支持视觉模型的服务商（如智谱官方、硅基流动）。服务端信息：$detail';
+    }
+    return detail;
   }
 }

@@ -277,7 +277,14 @@ class AgentService {
         '不要在文字里重复罗列卡片明细\n'
         '5. 未调用写工具或卡片未保存前，严禁声称「已记录/已保存」；'
         '数据只有用户点卡片保存后才写入档案\n'
-        '6. 截图内容与归纳板块无关时（如闲聊图片），不调用整理工具，按普通消息回答';
+        '6. 截图内容与归纳板块无关时（如闲聊图片），不调用整理工具，按普通消息回答\n\n'
+        '档案新增规范（用户要求新增食物库/记录生活状态/新增知识条目/归档体检报告时必须遵守）：\n'
+        '1. 只有用户明确要求「新增/记录/归档」时才调用写工具；仅是咨询或闲聊不要写库\n'
+        '2. 新增食物库用 add_food_item：营养数值（每100g）只能填用户提供或原文出现的，缺失可省略，严禁编造\n'
+        '3. 记录生活状态用 log_life_status：只填写用户表达过的睡眠/精力/标签/备注，不要脑补\n'
+        '4. 新增知识条目用 add_knowledge_entry：必须带 source（出处）——用户没说来源时先问清楚再调用\n'
+        '5. 归档体检报告用 archive_health_report：体检报告只归档、不修改不删除；数值与结论须来自原文\n'
+        '6. 这些工具同样只生成「待确认卡片」，不会直接保存；卡片未保存前严禁声称「已记录/已归档」';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -322,7 +329,9 @@ class AgentService {
                 'description': 'true 时只返回灯色为红或黄的异常报告，默认 false',
               },
             }),
-        _fn('search_knowledge', '在用户知识库（中医养生、道家哲学、运动康复、财务大师智慧、读书笔记）中检索相关片段',
+        _fn('search_knowledge',
+            '检索用户保存的知识条目，以及循证医学库、用药安全、补剂常识条目。'
+                '注意：不包含导入书籍的正文（书籍仅存档，暂不支持全文检索）',
             params: {
               'query': {'type': 'string', 'description': '检索关键词或问题'},
             },
@@ -777,6 +786,121 @@ class AgentService {
               },
             },
             requiredParams: ['records']),
+        _fn('add_food_item',
+            '把用户口述或截图识别出的食物新增到「食物库」，整理为待确认的食物条目卡片。'
+                '营养数值（每100g）只填用户提供或原文出现的值，缺失可省略，严禁编造；'
+                '同名食物会更新已有条目',
+            params: {
+              'items': {
+                'type': 'array',
+                'description': '食物条目列表',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'name': {'type': 'string', 'description': '食物名称'},
+                    'category': {
+                      'type': 'string',
+                      'description': '分类，如：主食 / 蛋白质 / 蔬菜 / 水果 / 饮品',
+                    },
+                    'calories_per_100g': {
+                      'type': 'number',
+                      'description': '每100g热量 kcal',
+                    },
+                    'protein_per_100g': {
+                      'type': 'number',
+                      'description': '每100g蛋白质 g',
+                    },
+                    'fat_per_100g': {
+                      'type': 'number',
+                      'description': '每100g脂肪 g',
+                    },
+                    'carbs_per_100g': {
+                      'type': 'number',
+                      'description': '每100g碳水 g',
+                    },
+                  },
+                  'required': ['name'],
+                },
+              },
+            },
+            requiredParams: ['items']),
+        _fn('log_life_status',
+            '记录用户的生活状态（睡眠/精力/标签/备注），整理为待确认卡片，'
+                '用户确认后才写入；日期省略时视为今天。只填写用户表达过的内容，不要编造',
+            params: {
+              'date': {
+                'type': 'string',
+                'description': '日期 YYYY-MM-DD，省略时视为今天',
+              },
+              'energy_score': {
+                'type': 'integer',
+                'description': '精力评分 1-10，越高越充沛',
+              },
+              'sleep_hours': {'type': 'number', 'description': '睡眠时长（小时）'},
+              'tags': {
+                'type': 'array',
+                'description': '状态标签，如：精神好 / 疲惫 / 压力大 / 睡眠不足',
+                'items': {'type': 'string'},
+              },
+              'note': {'type': 'string', 'description': '备注'},
+            }),
+        _fn('add_knowledge_entry',
+            '把用户提供的知识/经验新增到「知识库」，整理为待确认的知识条目卡片。'
+                '必须填写 source（出处/来源），否则会被拒绝，避免检索污染；'
+                '只整理用户表达过的内容，不要自行补充',
+            params: {
+              'domain': {
+                'type': 'string',
+                'description': '领域，如：健身 / 养生 / 中医 / 财务',
+              },
+              'master': {'type': 'string', 'description': '所属体系/门派，可省略'},
+              'category': {'type': 'string', 'description': '分类'},
+              'title': {'type': 'string', 'description': '标题'},
+              'content': {'type': 'string', 'description': '正文内容'},
+              'keywords': {'type': 'string', 'description': '关键词，逗号分隔'},
+              'source': {'type': 'string', 'description': '出处/来源（必填）'},
+            },
+            requiredParams: ['title', 'content', 'source']),
+        _fn('archive_health_report',
+            '把用户上传或口述的体检/化验/影像/门诊报告整理为待确认的「体检报告归档」卡片。'
+                '只归档、不修改不删除；数值与结论须来自原文，严禁编造。'
+                '仅当用户明确要求把这份报告存入健康档案时才调用',
+            params: {
+              'date': {'type': 'string', 'description': '报告日期 YYYY-MM-DD'},
+              'title': {'type': 'string', 'description': '报告标题，如：2026年体检报告'},
+              'report_type': {
+                'type': 'string',
+                'description': '报告类型',
+                'enum': ['体检', '化验', '影像', '门诊', '其他'],
+              },
+              'risk_level': {
+                'type': 'string',
+                'description': '整体风险灯色',
+                'enum': ['red', 'yellow', 'blue', 'green'],
+              },
+              'ocr_text': {'type': 'string', 'description': '报告原文/识别文字'},
+              'ai_summary': {'type': 'string', 'description': 'AI 摘要与建议'},
+              'metrics': {
+                'type': 'array',
+                'description': '可选的指标列表',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'type': {'type': 'string', 'description': '指标名称'},
+                    'value': {'type': 'string', 'description': '数值'},
+                    'unit': {'type': 'string', 'description': '单位'},
+                    'reference_range': {'type': 'string', 'description': '参考范围'},
+                    'risk_level': {
+                      'type': 'string',
+                      'enum': ['red', 'yellow', 'blue', 'green'],
+                    },
+                    'interpretation': {'type': 'string', 'description': '解读'},
+                  },
+                  'required': ['type', 'value'],
+                },
+              },
+            },
+            requiredParams: ['title']),
       ];
 
   Map<String, dynamic> _fn(
@@ -832,6 +956,11 @@ class AgentService {
     'propose_health_metrics': '整理健康指标',
     'propose_finance_records': '整理收支记录',
     'propose_workout_records': '整理训练记录',
+    // 档案新增写工具
+    'add_food_item': '新增食物',
+    'log_life_status': '记录生活状态',
+    'add_knowledge_entry': '新增知识条目',
+    'archive_health_report': '归档体检报告',
   };
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
@@ -857,6 +986,14 @@ class AgentService {
         return _buildFinanceRecordsProposal(args);
       case 'propose_workout_records':
         return _buildWorkoutRecordsProposal(args);
+      case 'add_food_item':
+        return _buildFoodCatalogProposal(args);
+      case 'log_life_status':
+        return _buildLifeStatusProposal(args);
+      case 'add_knowledge_entry':
+        return _buildKnowledgeEntryProposal(args);
+      case 'archive_health_report':
+        return _buildHealthReportProposal(args);
       default:
         return ToolResult(await _runReadTool(name, args));
     }
@@ -968,7 +1105,7 @@ class AgentService {
       if (m is! Map) continue;
       final mm = Map<String, dynamic>.from(m);
       final type = (mm['type'] ?? '').toString().trim();
-      final value = (mm['value'] as num?)?.toDouble();
+      final value = _numArg(mm['value']);
       if (type.isEmpty || value == null) continue;
       metrics.add({
         'type': type,
@@ -1007,7 +1144,7 @@ class AgentService {
       if (r is! Map) continue;
       final rm = Map<String, dynamic>.from(r);
       final category = (rm['category'] ?? '').toString().trim();
-      final amount = (rm['amount'] as num?)?.toDouble();
+      final amount = _numArg(rm['amount']);
       if (category.isEmpty || amount == null || amount <= 0) continue;
       final type = rm['type'].toString() == 'income' ? 'income' : 'expense';
       records.add({
@@ -1079,6 +1216,158 @@ class AgentService {
       '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
       action: PendingAction(
           type: 'workout_records', data: {'records': records}),
+    );
+  }
+
+  /// 生成「食物库条目」的待确认载荷（新增到食物库）
+  ToolResult _buildFoodCatalogProposal(Map<String, dynamic> args) {
+    final raw = args['items'];
+    if (raw is! List || raw.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 items（至少一条食物）');
+    }
+    final items = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final im = Map<String, dynamic>.from(item);
+      final name = (im['name'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+      items.add({
+        'name': name,
+        if ((im['category'] ?? '').toString().trim().isNotEmpty)
+          'category': im['category'].toString().trim(),
+        'caloriesPer100g': _numArg(im['calories_per_100g']) ?? 0,
+        'proteinPer100g': _numArg(im['protein_per_100g']) ?? 0,
+        'fatPer100g': _numArg(im['fat_per_100g']) ?? 0,
+        'carbsPer100g': _numArg(im['carbs_per_100g']) ?? 0,
+      });
+    }
+    if (items.isEmpty) {
+      return const ToolResult('参数校验失败：items 中每条都需要 name');
+    }
+    return ToolResult(
+      '已生成待确认的食物库条目卡片（共 ${items.length} 条）。'
+      '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入食物库。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: 'food_catalog', data: {'items': items}),
+    );
+  }
+
+  /// 生成「生活状态」的待确认载荷
+  ToolResult _buildLifeStatusProposal(Map<String, dynamic> args) {
+    final date = (args['date'] ?? '').toString().trim();
+    final energy = _intArg(args, 'energy_score');
+    final sleep = _numArg(args['sleep_hours']);
+    final note = (args['note'] ?? '').toString().trim();
+    final rawTags = args['tags'];
+    final tags = <String>[];
+    if (rawTags is List) {
+      for (final t in rawTags) {
+        final s = t.toString().trim();
+        if (s.isNotEmpty) tags.add(s);
+      }
+    } else if (rawTags is String && rawTags.trim().isNotEmpty) {
+      tags.addAll(rawTags
+          .split(RegExp(r'[,，、]'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty));
+    }
+    if (energy == null && sleep == null && tags.isEmpty && note.isEmpty) {
+      return const ToolResult(
+          '参数校验失败：至少提供 energy_score / sleep_hours / tags / note 之一');
+    }
+    return ToolResult(
+      '已生成待确认的生活状态卡片。该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: 'life_status', data: {
+        if (date.isNotEmpty) 'date': date,
+        if (energy != null) 'energyScore': energy.clamp(1, 10),
+        if (sleep != null) 'sleepHours': sleep,
+        if (tags.isNotEmpty) 'tags': tags,
+        if (note.isNotEmpty) 'note': note,
+      }),
+    );
+  }
+
+  /// 生成「知识条目」的待确认载荷（出处 source 必填）
+  ToolResult _buildKnowledgeEntryProposal(Map<String, dynamic> args) {
+    final title = (args['title'] ?? '').toString().trim();
+    final content = (args['content'] ?? '').toString().trim();
+    final source = (args['source'] ?? '').toString().trim();
+    if (title.isEmpty || content.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 title 或 content');
+    }
+    if (source.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 source（出处/来源），为避免检索污染必须提供');
+    }
+    return ToolResult(
+      '已生成待确认的知识条目卡片。该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入知识库。'
+      '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: 'knowledge_entry', data: {
+        if ((args['domain'] ?? '').toString().trim().isNotEmpty)
+          'domain': args['domain'].toString().trim(),
+        if ((args['master'] ?? '').toString().trim().isNotEmpty)
+          'master': args['master'].toString().trim(),
+        if ((args['category'] ?? '').toString().trim().isNotEmpty)
+          'category': args['category'].toString().trim(),
+        'title': title,
+        'content': content,
+        'keywords': (args['keywords'] ?? '').toString().trim(),
+        'source': source,
+      }),
+    );
+  }
+
+  /// 生成「体检报告归档」的待确认载荷（只增不改）
+  ToolResult _buildHealthReportProposal(Map<String, dynamic> args) {
+    final title = (args['title'] ?? '').toString().trim();
+    if (title.isEmpty) {
+      return const ToolResult('参数校验失败：缺少 title（报告标题）');
+    }
+    const allowedTypes = ['体检', '化验', '影像', '门诊', '其他'];
+    const allowedRisks = ['red', 'yellow', 'blue', 'green'];
+    var reportType = (args['report_type'] ?? '').toString().trim();
+    if (!allowedTypes.contains(reportType)) reportType = '体检';
+    final rawRisk = (args['risk_level'] ?? '').toString().trim();
+    final risk = allowedRisks.contains(rawRisk) ? rawRisk : '';
+
+    final rawMetrics = args['metrics'];
+    final metrics = <Map<String, dynamic>>[];
+    if (rawMetrics is List) {
+      for (final m in rawMetrics) {
+        if (m is! Map) continue;
+        final mm = Map<String, dynamic>.from(m);
+        final mt = (mm['type'] ?? '').toString().trim();
+        final mv = (mm['value'] ?? '').toString().trim();
+        if (mt.isEmpty || mv.isEmpty) continue;
+        final mRisk = (mm['risk_level'] ?? '').toString().trim();
+        metrics.add({
+          'type': mt,
+          'value': mv,
+          if ((mm['unit'] ?? '').toString().trim().isNotEmpty)
+            'unit': mm['unit'].toString().trim(),
+          if ((mm['reference_range'] ?? '').toString().trim().isNotEmpty)
+            'referenceRange': mm['reference_range'].toString().trim(),
+          if (allowedRisks.contains(mRisk)) 'riskLevel': mRisk,
+          if ((mm['interpretation'] ?? '').toString().trim().isNotEmpty)
+            'interpretation': mm['interpretation'].toString().trim(),
+        });
+      }
+    }
+
+    return ToolResult(
+      '已生成待确认的体检报告归档卡片。体检报告仅支持归档，不支持修改或删除。'
+      '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入健康档案。'
+      '请提示用户「可在下方卡片核对后归档」，不要在文字里重复罗列明细。',
+      action: PendingAction(type: 'health_report', data: {
+        if ((args['date'] ?? '').toString().trim().isNotEmpty)
+          'date': args['date'].toString().trim(),
+        'title': title,
+        'reportType': reportType,
+        'riskLevel': risk,
+        'ocrText': (args['ocr_text'] ?? '').toString(),
+        'aiSummary': (args['ai_summary'] ?? '').toString(),
+        if (metrics.isNotEmpty) 'metrics': metrics,
+      }),
     );
   }
 
@@ -1223,6 +1512,16 @@ class AgentService {
     if (raw is int) return raw;
     if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw.trim());
+    return null;
+  }
+
+  /// 宽松解析数值：接受 num 与纯数字字符串（如 "8"、"12.5"、"1,234.56"），失败返回 null。
+  /// 模型传参偶尔会把数字包成字符串，严格 cast 会静默丢弃整条数据
+  double? _numArg(dynamic raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is String) {
+      return double.tryParse(raw.trim().replaceAll(',', ''));
+    }
     return null;
   }
 

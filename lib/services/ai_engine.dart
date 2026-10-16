@@ -1,5 +1,7 @@
 import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
@@ -43,6 +45,13 @@ class AIEngine {
   String _apiKey = '';
   String _model = 'qwen-turbo';
   String _visionModel = ''; // 视觉模型（可选），DeepSeek 无视觉，可配 qwen-vl-plus 等
+
+  /// 当前激活模型是否支持 function calling（由多模型配置下发）。
+  /// false 时 [chatWithTools] 直接抛 [ToolsUnsupportedException]，上层自动降级为
+  /// 「简化模式」（数据注入），避免对着不支持 tools 的模型反复失败。
+  bool _supportsTools = true;
+  bool get activeSupportsTools => _supportsTools;
+  void setSupportsTools(bool value) => _supportsTools = value;
 
   /// 初始化，从本地读取配置
   Future<void> init() async {
@@ -95,6 +104,49 @@ class AIEngine {
     return base;
   }
 
+  /// 单次请求超时；超过则按网络错误处理并触发重试。
+  static const Duration _requestTimeout = Duration(seconds: 90);
+
+  /// 网络类瞬时错误的最大重试次数（首次失败后再试 1 次）。
+  static const int _maxRetries = 1;
+
+  /// 统一的 chat/completions POST：带超时与一次自动重试。
+  ///
+  /// 代理/弱网场景下常出现「Software caused connection abort」
+  /// （POSIX ECONNABORTED，连接被本地或对端中止），属瞬时错误；
+  /// 此处换新连接重试一次即可大概率恢复，避免直接报错给用户。
+  /// 重试仍失败则抛出原始异常，交由上层展示。
+  Future<http.Response> _postJson(
+    String url,
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse(url);
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_apiKey',
+    };
+    final encoded = jsonEncode(body);
+
+    Exception? lastError;
+    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        return await http
+            .post(uri, headers: headers, body: encoded)
+            .timeout(_requestTimeout);
+      } on http.ClientException catch (e) {
+        lastError = e;
+      } on SocketException catch (e) {
+        lastError = e;
+      } on TimeoutException catch (e) {
+        lastError = e;
+      }
+      if (attempt < _maxRetries) {
+        await Future.delayed(const Duration(milliseconds: 800));
+      }
+    }
+    throw lastError!;
+  }
+
   /// 调用大模型
   /// [messages] 对话消息列表
   Future<String> chat(List<Map<String, String>> messages) async {
@@ -103,18 +155,11 @@ class AIEngine {
     }
 
     final url = '$_apiBase/v1/chat/completions';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': messages,
-        'temperature': 0.7,
-      }),
-    );
+    final response = await _postJson(url, {
+      'model': _model,
+      'messages': messages,
+      'temperature': 0.7,
+    });
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -133,22 +178,19 @@ class AIEngine {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
     }
+    if (!_supportsTools) {
+      // 配置层已标记该模型不支持工具调用：直接降级，不浪费一次失败请求
+      throw ToolsUnsupportedException('当前模型未开启工具调用');
+    }
 
     final url = '$_apiBase/v1/chat/completions';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': messages,
-        'tools': tools,
-        'tool_choice': 'auto',
-        'temperature': 0.7,
-      }),
-    );
+    final response = await _postJson(url, {
+      'model': _model,
+      'messages': messages,
+      'tools': tools,
+      'tool_choice': 'auto',
+      'temperature': 0.7,
+    });
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -191,6 +233,58 @@ class AIEngine {
     }
   }
 
+  /// 归一化任意接口根地址（与 [_apiBase] 同规则）：去末尾斜杠与 /v1
+  static String _normalizeBase(String raw) {
+    var base = raw.trim();
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    if (base.endsWith('/v1')) {
+      base = base.substring(0, base.length - 3);
+    }
+    return base;
+  }
+
+  /// 测试指定模型配置的连通性（不改变当前激活模型）。
+  /// 对给定 baseUrl/apiKey/model 发一次最小 chat 请求，成功返回模型回复；
+  /// 失败抛异常（鉴权失败单独给中文提示）。
+  Future<String> testModel({
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+  }) async {
+    final base = _normalizeBase(baseUrl);
+    final key = apiKey.trim();
+    final mdl = model.trim();
+    if (base.isEmpty || key.isEmpty || mdl.isEmpty) {
+      throw Exception('接口地址、API Key、模型名称都需要填写');
+    }
+    final response = await http.post(
+      Uri.parse('$base/v1/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $key',
+      },
+      body: jsonEncode({
+        'model': mdl,
+        'messages': [
+          {'role': 'user', 'content': '你好，请只回复「连接正常」四个字。'},
+        ],
+        'temperature': 0,
+      }),
+    ).timeout(_requestTimeout);
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final text = data['choices'][0]['message']['content'];
+      return text is String ? text : '';
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw Exception('鉴权失败（${response.statusCode}）：API Key 无效或已过期');
+    }
+    throw Exception('请求失败：${response.statusCode} '
+        '${utf8.decode(response.bodyBytes, allowMalformed: true)}');
+  }
+
   /// 降级请求：不带 tools（消息里可能含注入的数据上下文）
   Future<String> chatFallback(List<Map<String, dynamic>> messages) async {
     if (!isConfigured) {
@@ -198,18 +292,11 @@ class AIEngine {
     }
 
     final url = '$_apiBase/v1/chat/completions';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': messages,
-        'temperature': 0.7,
-      }),
-    );
+    final response = await _postJson(url, {
+      'model': _model,
+      'messages': messages,
+      'temperature': 0.7,
+    });
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -251,20 +338,13 @@ class AIEngine {
     ];
 
     final url = '$_apiBase/v1/chat/completions';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _visionModel,
-        'messages': [
-          {'role': 'user', 'content': content},
-        ],
-        'temperature': 0.1,
-      }),
-    );
+    final response = await _postJson(url, {
+      'model': _visionModel,
+      'messages': [
+        {'role': 'user', 'content': content},
+      ],
+      'temperature': 0.1,
+    });
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -332,18 +412,11 @@ class AIEngine {
       throw Exception('请先在设置中配置AI服务');
     }
     final url = '$_apiBase/v1/chat/completions';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': messages,
-        'temperature': 0,
-      }),
-    );
+    final response = await _postJson(url, {
+      'model': _model,
+      'messages': messages,
+      'temperature': 0,
+    });
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       return data['choices'][0]['message']['content'] as String;

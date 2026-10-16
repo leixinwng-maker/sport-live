@@ -190,7 +190,9 @@ class AgentProvider extends ChangeNotifier {
       }
     }
 
-    if (ocrParts.isEmpty) {
+    // 仅当确实带了图片、却一张都没识别出文字时才报错；
+    // 纯文本消息（images 为空）必须继续走后面的 agent 循环。
+    if (images.isNotEmpty && ocrParts.isEmpty) {
       _messages.add(ChatMessage(
         role: 'assistant',
         content: visionError == null
@@ -208,11 +210,14 @@ class AgentProvider extends ChangeNotifier {
       return;
     }
 
-    final effectiveText = userText.isEmpty
-        ? '[用户发送了 ${images.length} 张截图，以下为识别出的文字内容，'
-            '是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}'
-        : '$userText\n\n[以下是用户随消息上传的 ${images.length} 张截图'
-            '识别出的文字内容，是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}';
+    // 带图时把 OCR 文本作为唯一事实来源拼进消息；纯文本消息原样发送。
+    final effectiveText = images.isEmpty
+        ? userText
+        : userText.isEmpty
+            ? '[用户发送了 ${images.length} 张截图，以下为识别出的文字内容，'
+                '是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}'
+            : '$userText\n\n[以下是用户随消息上传的 ${images.length} 张截图'
+                '识别出的文字内容，是本条消息的唯一事实来源]\n\n${ocrParts.join('\n\n---\n\n')}';
 
     // 历史消息（排除刚发送的这条与失败气泡）
     final history = <Map<String, dynamic>>[

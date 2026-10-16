@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/agent_provider.dart';
 import '../../providers/app_provider.dart';
+import '../../services/model_config.dart';
 import '../../services/search_service.dart';
 import '../../services/vision/vision_config.dart';
 import '../../services/vision/vision_exceptions.dart';
@@ -12,7 +14,11 @@ import '../../services/vision/vision_service.dart';
 import '../../theme/taoist_theme.dart';
 import 'cards/diet_plan_card.dart';
 import 'cards/finance_records_card.dart';
+import 'cards/food_catalog_card.dart';
 import 'cards/health_metrics_card.dart';
+import 'cards/health_report_card.dart';
+import 'cards/knowledge_entry_card.dart';
+import 'cards/life_status_card.dart';
 import 'cards/workout_plan_card.dart';
 import 'cards/workout_records_card.dart';
 
@@ -563,6 +569,35 @@ class _AIScreenState extends State<AIScreen> {
         onSaved: onSaved,
       );
     }
+    // 档案新增类卡片（FIT-2 两段确认）
+    if (type == 'food_catalog') {
+      return FoodCatalogCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'life_status') {
+      return LifeStatusCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'knowledge_entry') {
+      return KnowledgeEntryCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'health_report') {
+      return HealthReportCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
     return WorkoutPlanCard(
       payload: payload,
       saved: m.payloadSaved,
@@ -618,6 +653,127 @@ class _AIScreenState extends State<AIScreen> {
     );
   }
 
+  /// 对话框上方的「当前模型 ⌄」选择器（点击弹出底部弹层切换/管理）
+  Widget _buildModelSelector(BuildContext context) {
+    final app = context.watch<AppProvider>();
+    final models = app.enabledChatModels;
+    if (models.isEmpty) return const SizedBox.shrink();
+    final active = app.activeModel;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showModelPicker(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.smart_toy_outlined,
+                    size: 14, color: TaoistTheme.cloudGray),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    active?.name ?? '选择模型',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: TaoistTheme.teaBrown,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.keyboard_arrow_down,
+                    size: 16, color: TaoistTheme.cloudGray),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 底部弹层：切换当前模型 / 跳转模型管理
+  Future<void> _showModelPicker(BuildContext context) async {
+    final app = context.read<AppProvider>();
+    final models = app.enabledChatModels;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: TaoistTheme.paperWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 4),
+              child: Row(
+                children: [
+                  const Text(
+                    '切换模型',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: TaoistTheme.inkBlack,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AIConfigScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text('管理模型'),
+                  ),
+                ],
+              ),
+            ),
+            for (final m in models)
+              ListTile(
+                dense: true,
+                leading: Icon(
+                  app.activeModelId == m.id
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  size: 20,
+                  color: app.activeModelId == m.id
+                      ? TaoistTheme.jadeGreen
+                      : TaoistTheme.mistGray,
+                ),
+                title: Text(
+                  m.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                subtitle: Text(
+                  '${m.model}${m.supportsTools ? '' : ' · 简化模式'}',
+                  style: const TextStyle(
+                      fontSize: 11, color: TaoistTheme.cloudGray),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  await app.setActiveChatModel(m.id);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInput(BuildContext context, AgentProvider agent) {
     return SafeArea(
       top: false,
@@ -631,6 +787,7 @@ class _AIScreenState extends State<AIScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _buildModelSelector(context),
             _buildImagePreview(),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -1500,10 +1657,9 @@ class AIConfigScreen extends StatefulWidget {
 }
 
 class _AIConfigScreenState extends State<AIConfigScreen> {
-  final _baseUrlController = TextEditingController();
-  final _apiKeyController = TextEditingController();
-  final _modelController = TextEditingController();
+  // 旧版兼容：主 AI 自带的视觉模型名（新配置见下方「图片与 PDF 识别」）
   final _visionModelController = TextEditingController();
+  bool _savingLegacyVision = false;
 
   // 独立视觉配置（图片与 PDF 识别）
   final _vBaseUrlController = TextEditingController();
@@ -1513,60 +1669,20 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
   bool _visionKeyVisible = false;
   bool _testingVision = false;
   bool _savingVision = false;
-  bool _apiKeySaved = false; // 主 AI Key 是否已保存过（留空沿用）
   String _selectedVisionPreset = '自定义';
-
-  String _selectedProvider = '通义千问';
-
-  static const Map<String, Map<String, String>> _providers = {
-    '通义千问': {
-      'baseUrl': 'https://dashscope.aliyuncs.com/compatible-mode',
-      'model': 'qwen-turbo',
-      'visionModel': 'qwen-vl-plus',
-    },
-    'DeepSeek': {
-      'baseUrl': 'https://api.deepseek.com',
-      'model': 'deepseek-chat',
-      'visionModel': '',
-    },
-    '文心一言': {
-      'baseUrl': 'https://qianfan.baidubce.com/v2',
-      'model': 'ernie-3.5-8k',
-      'visionModel': '',
-    },
-    '自定义': {
-      'baseUrl': '',
-      'model': '',
-      'visionModel': '',
-    },
-  };
 
   @override
   void initState() {
     super.initState();
-    _loadMainConfig();
+    _loadLegacyVisionModel();
     _loadVisionConfig();
   }
 
-  /// 回显已保存的主 AI 配置（Key 不回显明文；已保存时输入框留空、保存可沿用）
-  Future<void> _loadMainConfig() async {
+  /// 回显旧版视觉模型名（Key 不回显）
+  Future<void> _loadLegacyVisionModel() async {
     final ai = context.read<AppProvider>().aiEngine;
     if (!mounted) return;
-    setState(() {
-      _baseUrlController.text = ai.savedBaseUrl;
-      _modelController.text =
-          ai.savedModel.isEmpty ? 'qwen-turbo' : ai.savedModel;
-      _visionModelController.text = ai.savedVisionModel;
-      _apiKeySaved = ai.isConfigured;
-      // 地址与预设一致时点亮对应服务商标签，否则归为自定义
-      _selectedProvider = '自定义';
-      for (final entry in _providers.entries) {
-        if (entry.key != '自定义' && entry.value['baseUrl'] == ai.savedBaseUrl) {
-          _selectedProvider = entry.key;
-          break;
-        }
-      }
-    });
+    setState(() => _visionModelController.text = ai.savedVisionModel);
   }
 
   Future<void> _loadVisionConfig() async {
@@ -1583,24 +1699,11 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
 
   @override
   void dispose() {
-    _baseUrlController.dispose();
-    _apiKeyController.dispose();
-    _modelController.dispose();
     _visionModelController.dispose();
     _vBaseUrlController.dispose();
     _vApiKeyController.dispose();
     _vModelController.dispose();
     super.dispose();
-  }
-
-  void _selectProvider(String provider) {
-    setState(() {
-      _selectedProvider = provider;
-      final config = _providers[provider]!;
-      _baseUrlController.text = config['baseUrl'] ?? '';
-      _modelController.text = config['model'] ?? '';
-      _visionModelController.text = config['visionModel'] ?? '';
-    });
   }
 
   void _selectVisionPreset(String preset) {
@@ -1616,41 +1719,16 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
     });
   }
 
-  Future<void> _save() async {
+  /// 保存旧版视觉模型名（主 AI 自带视觉时才需要；新配置见下方识别卡片）
+  Future<void> _saveLegacyVisionModel() async {
     final provider = Provider.of<AppProvider>(context, listen: false);
-    final baseUrl = _baseUrlController.text.trim();
-    if (baseUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写接口地址')),
-      );
-      return;
-    }
-    // Key 已保存过时允许留空沿用（界面不回显明文 Key）
-    var apiKey = _apiKeyController.text.trim();
-    if (apiKey.isEmpty) {
-      if (!provider.aiConfigured) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请填写 API Key')),
-        );
-        return;
-      }
-      apiKey = provider.aiEngine.savedApiKey;
-    }
-
-    // 先取 messenger 再 pop：pop 后原 context 失效，取不到 ScaffoldMessenger
     final messenger = ScaffoldMessenger.of(context);
-    await provider.saveAIConfig(
-      baseUrl: baseUrl,
-      apiKey: apiKey,
-      model: _modelController.text.trim().isEmpty
-          ? 'qwen-turbo'
-          : _modelController.text.trim(),
-      visionModel: _visionModelController.text.trim(),
-    );
-
-    if (mounted) {
-      Navigator.pop(context);
-      messenger.showSnackBar(const SnackBar(content: Text('AI配置已保存')));
+    setState(() => _savingLegacyVision = true);
+    try {
+      await provider.saveLegacyVisionModel(_visionModelController.text.trim());
+      messenger.showSnackBar(const SnackBar(content: Text('旧版视觉模型已保存')));
+    } finally {
+      if (mounted) setState(() => _savingLegacyVision = false);
     }
   }
 
@@ -1723,96 +1801,16 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI服务配置'),
+        title: const Text('AI 服务配置'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            '选择服务商',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: TaoistTheme.inkBlack,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _providers.keys.map((provider) {
-              final selected = _selectedProvider == provider;
-              return ChoiceChip(
-                label: Text(provider),
-                selected: selected,
-                onSelected: (_) => _selectProvider(provider),
-                selectedColor: TaoistTheme.jadeGreen,
-                labelStyle: TextStyle(
-                  color: selected ? Colors.white : TaoistTheme.inkBlack,
-                ),
-                side: BorderSide(
-                  color: selected
-                      ? TaoistTheme.jadeGreen
-                      : TaoistTheme.mistGray,
-                ),
-              );
-            }).toList(),
-          ),
+          _buildModelList(app),
           const SizedBox(height: 20),
-          const Text(
-            '接口地址',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: TaoistTheme.teaBrown,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _baseUrlController,
-            decoration: const InputDecoration(
-              hintText: 'https://dashscope.aliyuncs.com/compatible-mode',
-              prefixIcon: Icon(Icons.link),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'API Key',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: TaoistTheme.teaBrown,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _apiKeyController,
-            obscureText: true,
-            decoration: InputDecoration(
-              hintText: _apiKeySaved ? '已保存，留空沿用原 Key' : 'sk-...',
-              prefixIcon: const Icon(Icons.key),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '模型名称',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: TaoistTheme.teaBrown,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _modelController,
-            decoration: const InputDecoration(
-              hintText: 'qwen-turbo',
-              prefixIcon: Icon(Icons.memory),
-            ),
-          ),
-          const SizedBox(height: 16),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
@@ -1839,31 +1837,15 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed:
+                        _savingLegacyVision ? null : _saveLegacyVisionModel,
+                    child: const Text('保存旧版视觉模型'),
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _save,
-              child: const Text('保存配置'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: TaoistTheme.mistGray.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              '提示：\n1. 通义千问/DeepSeek/文心一言均支持OpenAI兼容接口\n2. 数据会发送到对应AI服务商，请勿包含敏感信息\n3. API Key仅保存在本地设备\n4. 体检报告图片/PDF识别请在下方「图片与 PDF 识别」单独配置，与主AI相互独立',
-              style: TextStyle(
-                fontSize: 12,
-                color: TaoistTheme.cloudGray,
-                height: 1.6,
-              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -1871,6 +1853,310 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
         ],
       ),
     );
+  }
+
+  // ============ 多模型管理 UI ============
+
+  /// 服务商名（按地址匹配预设，未命中为「自定义」）
+  String _providerNameOf(String baseUrl) {
+    for (final p in ChatModelPresets.all) {
+      if (p.baseUrl == baseUrl) return p.provider;
+    }
+    return '自定义';
+  }
+
+  /// 模型列表卡片（新增 / 编辑 / 启停 / 设为当前 / 查看 Key / 删除）
+  Widget _buildModelList(AppProvider app) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: TaoistTheme.mistGray.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.smart_toy_outlined,
+                    size: 18, color: TaoistTheme.jadeGreen),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '模型列表',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: TaoistTheme.inkBlack,
+                    ),
+                  ),
+                ),
+                Text(
+                  '共 ${app.chatModels.length} 个',
+                  style: const TextStyle(
+                      fontSize: 12, color: TaoistTheme.cloudGray),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '每个模型独立保存 API Key（本地加密）；点击卡片即切换为当前模型，'
+              '智能体将使用它。不支持工具调用的模型会自动走「简化模式」。',
+              style: TextStyle(
+                fontSize: 12,
+                color: TaoistTheme.cloudGray,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (app.chatModels.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: TaoistTheme.mistGray.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  '还没有配置模型，点击下方「新增模型」添加。',
+                  style: TextStyle(fontSize: 12, color: TaoistTheme.cloudGray),
+                ),
+              )
+            else
+              for (final m in app.chatModels) _buildModelRow(app, m),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _openModelSheet(app),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新增模型'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: TaoistTheme.jadeGreen,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModelRow(AppProvider app, ChatModelConfig m) {
+    final isActive = app.activeModelId == m.id;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: isActive
+            ? TaoistTheme.jadeGreen.withValues(alpha: 0.08)
+            : TaoistTheme.paperWhite,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isActive ? TaoistTheme.jadeGreen : TaoistTheme.mistGray,
+          width: isActive ? 1.2 : 0.6,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => app.setActiveChatModel(m.id),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: m.enabled
+                          ? TaoistTheme.jadeGreen
+                          : TaoistTheme.mistGray,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: TaoistTheme.inkBlack,
+                      ),
+                    ),
+                  ),
+                  if (isActive)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: TaoistTheme.jadeGreen,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        '当前',
+                        style: TextStyle(fontSize: 10, color: Colors.white),
+                      ),
+                    ),
+                  Switch(
+                    value: m.enabled,
+                    onChanged: (v) => app.setChatModelEnabled(m.id, v),
+                  ),
+                ],
+              ),
+              Text(
+                '${_providerNameOf(m.baseUrl)} · ${m.model}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 12, color: TaoistTheme.cloudGray),
+              ),
+              if (!m.supportsTools)
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Text(
+                    '未开启工具调用（简化模式）',
+                    style: TextStyle(fontSize: 11, color: Color(0xFFB8860B)),
+                  ),
+                ),
+              Row(
+                children: [
+                  if (!isActive)
+                    TextButton(
+                      onPressed: () => app.setActiveChatModel(m.id),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 30),
+                      ),
+                      child: const Text('设为当前', style: TextStyle(fontSize: 12)),
+                    ),
+                  TextButton(
+                    onPressed: () => _showKey(app, m),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 30),
+                    ),
+                    child: const Text('查看 Key', style: TextStyle(fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: () => _openModelSheet(app, existing: m),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 30),
+                    ),
+                    child: const Text('编辑', style: TextStyle(fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: () => _confirmDelete(app, m),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 30),
+                    ),
+                    child: const Text(
+                      '删除',
+                      style: TextStyle(fontSize: 12, color: Color(0xFFD9534F)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 打开新增 / 编辑模型表单
+  Future<void> _openModelSheet(AppProvider app, {ChatModelConfig? existing}) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TaoistTheme.paperWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _ModelEditSheet(app: app, existing: existing),
+    );
+  }
+
+  /// 查看某模型已保存的 Key（打码显示，可复制）
+  Future<void> _showKey(AppProvider app, ChatModelConfig m) async {
+    final key = await app.readChatModelKey(m.id);
+    if (!mounted) return;
+    final masked = key.isEmpty
+        ? '（未保存 Key）'
+        : (key.length <= 8
+            ? key
+            : '${key.substring(0, 4)}****${key.substring(key.length - 4)}');
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(m.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'API Key（本地加密存储）',
+              style: TextStyle(fontSize: 12, color: TaoistTheme.cloudGray),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              masked,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: TaoistTheme.inkBlack,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('关闭'),
+          ),
+          if (key.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: key));
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              },
+              child: const Text('复制完整 Key'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 删除模型前二次确认
+  Future<void> _confirmDelete(AppProvider app, ChatModelConfig m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('删除模型'),
+        content: Text('确定删除「${m.name}」吗？其本地保存的 API Key 会一并删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('删除',
+                style: TextStyle(color: Color(0xFFD9534F))),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await app.deleteChatModel(m.id);
   }
 
   /// 独立视觉配置卡片：图片与 PDF 识别
@@ -2098,6 +2384,331 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 新增 / 编辑模型的底部表单
+// ============================================================================
+class _ModelEditSheet extends StatefulWidget {
+  final AppProvider app;
+  final ChatModelConfig? existing;
+
+  const _ModelEditSheet({required this.app, this.existing});
+
+  @override
+  State<_ModelEditSheet> createState() => _ModelEditSheetState();
+}
+
+class _ModelEditSheetState extends State<_ModelEditSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _baseUrl;
+  late final TextEditingController _apiKey;
+  late final TextEditingController _model;
+  late bool _supportsTools;
+  bool _keyVisible = false;
+  String _preset = '自定义';
+  bool _saving = false;
+  bool _testing = false;
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _name = TextEditingController(text: e?.name ?? '');
+    _baseUrl = TextEditingController(text: e?.baseUrl ?? '');
+    _apiKey = TextEditingController();
+    _model = TextEditingController(text: e?.model ?? '');
+    _supportsTools = e?.supportsTools ?? true;
+    for (final p in ChatModelPresets.all) {
+      if (p.baseUrl == (e?.baseUrl ?? '')) {
+        _preset = p.provider;
+        break;
+      }
+    }
+    // 新增时默认带出通义千问预设，减少手工输入
+    if (e == null) {
+      _preset = ChatModelPresets.tongyi.provider;
+      _baseUrl.text = ChatModelPresets.tongyi.baseUrl;
+      _model.text = ChatModelPresets.tongyi.model;
+      _name.text = '${ChatModelPresets.tongyi.provider} '
+          '${ChatModelPresets.tongyi.model}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _baseUrl.dispose();
+    _apiKey.dispose();
+    _model.dispose();
+    super.dispose();
+  }
+
+  void _applyPreset(String provider) {
+    setState(() {
+      _preset = provider;
+      for (final p in ChatModelPresets.all) {
+        if (p.provider == provider) {
+          _baseUrl.text = p.baseUrl;
+          _model.text = p.model;
+          if (_name.text.trim().isEmpty) {
+            _name.text = '${p.provider} ${p.model}';
+          }
+          return;
+        }
+      }
+      // 「自定义」不清空已填内容，交由用户自行修改
+    });
+  }
+
+  Widget _fieldLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: TaoistTheme.teaBrown,
+          ),
+        ),
+      );
+
+  Future<void> _save() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final name = _name.text.trim();
+    final baseUrl = _baseUrl.text.trim();
+    final model = _model.text.trim();
+    final key = _apiKey.text.trim();
+    if (baseUrl.isEmpty || model.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('请填写接口地址与模型名称')),
+      );
+      return;
+    }
+    if (!_isEdit && key.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('请填写 API Key')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      if (_isEdit) {
+        await widget.app.updateChatModel(
+          widget.existing!.copyWith(
+            name: name.isEmpty ? model : name,
+            baseUrl: baseUrl,
+            model: model,
+            supportsTools: _supportsTools,
+          ),
+          apiKey: key,
+        );
+      } else {
+        await widget.app.addChatModel(
+          name: name,
+          baseUrl: baseUrl,
+          apiKey: key,
+          model: model,
+          supportsTools: _supportsTools,
+        );
+      }
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(content: Text(_isEdit ? '模型已更新' : '模型已新增并启用')),
+      );
+    } on ArgumentError catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message?.toString() ?? '保存失败：地址格式不正确')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('保存失败：$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _test() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final baseUrl = _baseUrl.text.trim();
+    final model = _model.text.trim();
+    final key = _apiKey.text.trim();
+    if (baseUrl.isEmpty || model.isEmpty || (key.isEmpty && !_isEdit)) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('请先填写接口地址、模型名称与 API Key')),
+      );
+      return;
+    }
+    setState(() => _testing = true);
+    try {
+      final reply = await widget.app.testChatModel(
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: key,
+        id: widget.existing?.id ?? '',
+      );
+      final brief = reply.trim().isEmpty
+          ? '（空回复）'
+          : reply.trim().replaceAll('\n', ' ');
+      messenger.showSnackBar(
+        SnackBar(content: Text('连接正常，模型回复：$brief')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('测试失败：$e')));
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  _isEdit ? '编辑模型' : '新增模型',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: TaoistTheme.inkBlack,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close,
+                      size: 20, color: TaoistTheme.cloudGray),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in ChatModelPresets.all)
+                  _presetChip(p.provider),
+                _presetChip('自定义'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _fieldLabel('显示名称'),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(
+                hintText: '通义千问 qwen-turbo',
+                prefixIcon: Icon(Icons.label_outline),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _fieldLabel('接口地址'),
+            TextField(
+              controller: _baseUrl,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: 'https://dashscope.aliyuncs.com/compatible-mode',
+                prefixIcon: Icon(Icons.link),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _fieldLabel('API Key'),
+            TextField(
+              controller: _apiKey,
+              obscureText: !_keyVisible,
+              decoration: InputDecoration(
+                hintText: _isEdit ? '已保存，留空沿用原 Key' : 'sk-...',
+                prefixIcon: const Icon(Icons.key),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _keyVisible ? Icons.visibility_off : Icons.visibility,
+                    size: 20,
+                    color: TaoistTheme.cloudGray,
+                  ),
+                  onPressed: () => setState(() => _keyVisible = !_keyVisible),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _fieldLabel('模型名称'),
+            TextField(
+              controller: _model,
+              decoration: const InputDecoration(
+                hintText: 'qwen-turbo',
+                prefixIcon: Icon(Icons.memory),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _supportsTools,
+              onChanged: (v) => setState(() => _supportsTools = v),
+              title: const Text(
+                '支持工具调用（函数调用）',
+                style: TextStyle(fontSize: 13, color: TaoistTheme.inkBlack),
+              ),
+              subtitle: const Text(
+                '关闭后智能体走「简化模式」，仅能做带上下文的问答',
+                style: TextStyle(fontSize: 11, color: TaoistTheme.cloudGray),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _testing ? null : _test,
+                    icon: _testing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.wifi_tethering, size: 18),
+                    label: const Text('测试连通'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _saving ? null : _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: TaoistTheme.jadeGreen,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(_isEdit ? '保存修改' : '新增并启用'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _presetChip(String provider) {
+    final selected = _preset == provider;
+    return ChoiceChip(
+      label: Text(provider),
+      selected: selected,
+      onSelected: (_) => _applyPreset(provider),
+      selectedColor: TaoistTheme.jadeGreen,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : TaoistTheme.inkBlack,
+        fontSize: 12,
+      ),
+      side: BorderSide(
+        color: selected ? TaoistTheme.jadeGreen : TaoistTheme.mistGray,
       ),
     );
   }

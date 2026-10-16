@@ -228,6 +228,10 @@ class VisionService {
 
   /// 视觉请求统一实现（OpenAI 视觉消息格式，支持多图）。
   /// [b64Images] 为不带 data: 前缀的 JPEG base64 列表。
+  ///
+  /// 大体积 base64 图片上传正是「Software caused connection abort」
+  /// 类瞬时中断的高发场景：网络类错误自动重试一次（800ms 退避），
+  /// 业务类 VisionException（鉴权/参数/格式）不重试直接抛出。
   Future<String> _postVision({
     required String baseUrl,
     required String apiKey,
@@ -245,49 +249,65 @@ class VisionService {
         },
     ];
 
-    try {
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/v1/chat/completions'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $apiKey',
-            },
-            body: jsonEncode({
-              'model': model,
-              'messages': [
-                {'role': 'user', 'content': content},
-              ],
-              'temperature': temperature,
-            }),
-          )
-          .timeout(const Duration(seconds: 90));
+    const maxAttempts = 2;
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/v1/chat/completions'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $apiKey',
+              },
+              body: jsonEncode({
+                'model': model,
+                'messages': [
+                  {'role': 'user', 'content': content},
+                ],
+                'temperature': temperature,
+              }),
+            )
+            .timeout(const Duration(seconds: 90));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        final text = data['choices'][0]['message']['content'];
-        return text is String ? text : '';
+        if (response.statusCode == 200) {
+          final data = jsonDecode(utf8.decode(response.bodyBytes));
+          final text = data['choices'][0]['message']['content'];
+          return text is String ? text : '';
+        }
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw VisionAuthException(response.statusCode);
+        }
+        final body =
+            utf8.decode(response.bodyBytes, allowMalformed: true);
+        throw VisionServiceException(
+          response.statusCode,
+          _friendlyErrorBody(response.statusCode, body),
+        );
+      } on VisionException {
+        rethrow;
+      } on SocketException catch (e) {
+        lastError = e;
+      } on http.ClientException {
+        lastError = 'client';
+      } on TimeoutException {
+        lastError = 'timeout';
+      } on FormatException {
+        throw VisionServiceException(null, '响应格式异常（非 JSON）');
       }
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        throw VisionAuthException(response.statusCode);
+      if (attempt < maxAttempts) {
+        await Future.delayed(const Duration(milliseconds: 800));
       }
-      final body =
-          utf8.decode(response.bodyBytes, allowMalformed: true);
-      throw VisionServiceException(
-        response.statusCode,
-        _friendlyErrorBody(response.statusCode, body),
-      );
-    } on VisionException {
-      rethrow;
-    } on SocketException catch (e) {
-      throw VisionNetworkException('网络连接失败：${e.message}，请检查网络或识别服务地址');
-    } on http.ClientException {
-      throw const VisionNetworkException();
-    } on TimeoutException {
-      throw const VisionNetworkException('识别请求超时，请检查网络后重试');
-    } on FormatException {
-      throw VisionServiceException(null, '响应格式异常（非 JSON）');
     }
+    // 重试耗尽仍失败：按错误类型给出中文提示
+    final err = lastError;
+    if (err is SocketException) {
+      throw VisionNetworkException('网络连接失败：${err.message}，请检查网络或识别服务地址');
+    }
+    if (err == 'timeout') {
+      throw const VisionNetworkException('识别请求超时，请检查网络后重试');
+    }
+    throw const VisionNetworkException('网络连接中断，已自动重试仍未恢复，请检查网络后重试');
   }
 
   /// 把服务端错误响应翻译成用户可读的中文提示。

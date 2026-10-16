@@ -107,8 +107,8 @@ class AIEngine {
   /// 单次请求超时；超过则按网络错误处理并触发重试。
   static const Duration _requestTimeout = Duration(seconds: 90);
 
-  /// 网络类瞬时错误的最大重试次数（首次失败后再试 1 次）。
-  static const int _maxRetries = 1;
+  /// 网络类瞬时错误的最大重试次数（首次失败后再试 2 次，共 3 次连接尝试）
+  static const int _maxRetries = 2;
 
   /// 流式读取的空闲超时：相邻 SSE 分片间隔超过该值视为连接挂起
   static const Duration _streamIdleTimeout = Duration(seconds: 60);
@@ -152,7 +152,19 @@ class AIEngine {
         await Future.delayed(const Duration(milliseconds: 800));
       }
     }
-    throw lastError!;
+    throw networkError(lastError!);
+  }
+
+  /// 把网络类原始异常翻译成用户可读的中文提示。
+  ///
+  /// 裸抛 ClientException/SocketException 会把技术细节（如
+  /// 「Software caused connection abort, uri=...」）直接怼到用户脸上，
+  /// 这里统一包装：保留原始细节便于排查，同时给出人话说明。
+  static Exception networkError(Object e) {
+    var detail = e.toString();
+    if (detail.length > 160) detail = '${detail.substring(0, 160)}…';
+    return Exception('网络连接中断：$detail\n'
+        '已自动重试仍未恢复，多为网络瞬断或中转网关不稳定，请稍后再发一次');
   }
 
   /// 把 HTTP 错误状态翻译成用户可理解的中文提示，不直接抛原始 JSON/HTML
@@ -225,7 +237,7 @@ class AIEngine {
         await Future.delayed(const Duration(milliseconds: 800));
       }
     }
-    if (resp == null) throw lastError!;
+    if (resp == null) throw networkError(lastError!);
 
     final contentType = resp.headers['content-type'] ?? '';
     if (!contentType.contains('text/event-stream')) {
@@ -374,15 +386,15 @@ class AIEngine {
         text: r.text.isEmpty ? null : r.text,
         toolCalls: r.toolCalls,
       );
-    } on TimeoutException {
+    } on TimeoutException catch (e) {
       if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      rethrow;
-    } on SocketException {
+      throw networkError(e);
+    } on SocketException catch (e) {
       if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      rethrow;
-    } on http.ClientException {
+      throw networkError(e);
+    } on http.ClientException catch (e) {
       if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      rethrow;
+      throw networkError(e);
     }
   }
 
@@ -404,15 +416,15 @@ class AIEngine {
         },
       );
       return r.text;
-    } on TimeoutException {
+    } on TimeoutException catch (e) {
       if (!forwarded) return chatFallback(messages);
-      rethrow;
-    } on SocketException {
+      throw networkError(e);
+    } on SocketException catch (e) {
       if (!forwarded) return chatFallback(messages);
-      rethrow;
-    } on http.ClientException {
+      throw networkError(e);
+    } on http.ClientException catch (e) {
       if (!forwarded) return chatFallback(messages);
-      rethrow;
+      throw networkError(e);
     }
   }
 

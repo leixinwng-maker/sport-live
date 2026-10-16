@@ -71,7 +71,15 @@ class AgentService {
   static const int _maxHistoryMessages = 24;
   static const int _maxToolContentLength = 2000;
 
+  /// 读工具结果短期缓存：key 为「工具名|参数JSON」，value 为 (结果, 写入时间)。
+  /// 同一轮对话或相邻消息中重复查询相同参数时直接命中，省去重复查库。
+  final Map<String, (String, DateTime)> _readCache = {};
+  static const Duration _readCacheTtl = Duration(minutes: 5);
+
   AgentService(this.engine);
+
+  /// 卡片保存成功后使读缓存失效，避免下一条消息读到写入前的旧数据
+  void invalidateReadCache() => _readCache.clear();
 
   // ---------------------------------------------------------------------------
   // 对话入口
@@ -265,7 +273,11 @@ class AgentService {
         '这些工具只生成「待用户确认的卡片」，不会直接保存；用户点卡片上的保存按钮后才写入数据\n'
         '4. 一次只输出一个方案；生成后用一两句话说明思路，并提示用户'
         '「可在下方卡片确认或修改后保存」，不要在文字里重复罗列卡片中的全部明细\n'
-        '5. 用户明确表示「这只是建议、先别记」时，不要调用写工具，直接给文字建议即可\n\n'
+        '5. 用户明确表示「这只是建议、先别记」时，不要调用写工具，直接给文字建议即可\n'
+        '6. 效率规则（必须遵守）：用户要求记录饮食/训练时，不要先调用 get_today_summary、'
+        'get_recent_diets、get_recent_workouts 等查询工具做预查，直接整理并调用写工具；'
+        '用户一次描述多餐（如早餐/午餐/晚餐一起说）时，把所有餐次放进同一个 meals 数组，'
+        '只调用一次 log_diet，严禁一餐调用一次\n\n'
         '截图归纳规范（用户随消息上传截图/照片，要求归档到对应板块时必须遵守）：\n'
         '1. 消息中附带的截图识别文字是唯一事实来源：只能整理其中明确出现的数值与日期，'
         '严禁编造、估算、换算单位或补充原文没有的数据；识别不完整时先如实说明\n'
@@ -586,9 +598,10 @@ class AgentService {
             requiredParams: ['name', 'days']),
         _fn(
             'log_diet',
-            '把一餐/一天的饮食整理成待确认记录，并在前端挂出可编辑卡片。'
+            '把一餐或多餐饮食整理成待确认记录，并在前端挂出可编辑卡片。'
                 '**仅生成待用户确认的记录，不会直接保存**；用户点击卡片上的「保存到今日饮食」后才会写入数据。'
-                '食物克数与热量须来自 lookup_food，不得凭空估算',
+                '食物克数与热量须来自 lookup_food，不得凭空估算。'
+                '用户一次描述多餐时，把所有餐次放进同一个 meals 数组一次性调用，严禁一餐调用一次',
             params: {
               'date': {
                 'type': 'string',
@@ -995,8 +1008,21 @@ class AgentService {
       case 'archive_health_report':
         return _buildHealthReportProposal(args);
       default:
-        return ToolResult(await _runReadTool(name, args));
+        return ToolResult(await _runReadToolCached(name, args));
     }
+  }
+
+  /// 读工具带缓存入口：5 分钟内同名同参直接返回缓存结果
+  Future<String> _runReadToolCached(
+      String name, Map<String, dynamic> args) async {
+    final key = '$name|${jsonEncode(args)}';
+    final hit = _readCache[key];
+    if (hit != null && DateTime.now().difference(hit.$2) < _readCacheTtl) {
+      return hit.$1;
+    }
+    final result = await _runReadTool(name, args);
+    _readCache[key] = (result, DateTime.now());
+    return result;
   }
 
   // ---------------------------------------------------------------------------

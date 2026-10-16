@@ -312,6 +312,7 @@ class AgentProvider extends ChangeNotifier {
     final m = _messages[index];
     final payload = m.payload;
     if (payload == null || payload['saved'] == true) return;
+    _agentService?.invalidateReadCache();
     _messages[index] = m.copyWith(payload: {...payload, 'saved': true});
     notifyListeners();
     await _persist();

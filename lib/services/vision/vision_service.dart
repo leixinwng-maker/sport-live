@@ -323,7 +323,7 @@ class VisionService {
       final modelHint = lower.contains('model') || detail.contains('模型')
           ? '模型名称可能不正确，或'
           : '';
-      return '该识别服务拒绝了图片请求。常见原因：${modelHint}该服务/中转不支持图片输入'
+      return '该识别服务拒绝了图片请求。常见原因：$modelHint该服务/中转不支持图片输入'
           '（如 GLM Coding Plan 的图片理解走独立通道，不接受标准视觉参数）。'
           '建议更换支持视觉模型的服务商（如智谱官方、硅基流动）。服务端信息：$detail';
     }

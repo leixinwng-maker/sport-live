@@ -89,13 +89,16 @@ class AgentService {
   ///
   /// [history] 先前对话（role: user/assistant，content: 文本），窗口自动裁剪
   /// [onStatus] 工具调用状态回调（UI 展示"正在查询：…"）
+  /// [onDelta] 最终回答流式增量回调（参数为累计文本；传空串表示工具轮次复位）
   Future<AgentReply> sendMessage({
     required List<Map<String, dynamic>> history,
     required String userText,
     void Function(String status)? onStatus,
+    void Function(String cumulativeText)? onDelta,
   }) async {
     if (_toolsUnsupported) {
-      final text = await _sendWithInjection(history, userText, onStatus);
+      final text =
+          await _sendWithInjection(history, userText, onStatus, onDelta);
       return AgentReply(text);
     }
 
@@ -119,11 +122,16 @@ class AgentService {
 
       final ChatResponse resp;
       try {
-        resp = await engine.chatWithTools(messages: messages, tools: toolSchemas);
+        resp = await engine.chatWithToolsStream(
+          messages: messages,
+          tools: toolSchemas,
+          onDelta: onDelta,
+        );
       } on ToolsUnsupportedException {
         // 首次发现模型不支持 tools → 降级为数据注入模式重答
         _toolsUnsupported = true;
-        final text = await _sendWithInjection(history, userText, onStatus);
+        final text =
+            await _sendWithInjection(history, userText, onStatus, onDelta);
         return AgentReply(text);
       }
 
@@ -132,6 +140,9 @@ class AgentService {
         return AgentReply(resp.text ?? '',
             action: action, toolCount: toolCount);
       }
+
+      // 本轮是工具调用轮：复位流式占位（清掉已转发的少量前置文本）
+      onDelta?.call('');
 
       // assistant 消息（含 tool_calls 原始格式）入列
       messages.add({
@@ -149,20 +160,38 @@ class AgentService {
             .toList(),
       });
 
-      // 逐个执行工具并以 role:'tool' 回传（载荷另行挂出，不进模型上下文）
-      for (final tc in calls) {
+      // 执行工具并以 role:'tool' 回传（载荷另行挂出，不进模型上下文）。
+      // 多工具并行执行（互不依赖的查询并发跑，省去串行等待）；
+      // 单工具沿用原路径，状态提示精确到工具名。
+      final results = <ToolResult>[];
+      if (calls.length == 1) {
+        final tc = calls.first;
         onStatus?.call('正在查询：${toolLabel(tc.name)}');
         toolCount++;
-        ToolResult result;
         try {
-          result = await executeTool(tc.name, tc.arguments);
+          results.add(await executeTool(tc.name, tc.arguments));
         } catch (e) {
-          result = ToolResult('工具执行失败：$e');
+          results.add(ToolResult('工具执行失败：$e'));
         }
+      } else {
+        onStatus?.call(
+            '并行查询 ${calls.length} 项：${calls.map((c) => toolLabel(c.name)).join('、')}');
+        toolCount += calls.length;
+        final rs = await Future.wait(calls.map((tc) async {
+          try {
+            return await executeTool(tc.name, tc.arguments);
+          } catch (e) {
+            return ToolResult('工具执行失败：$e');
+          }
+        }));
+        results.addAll(rs);
+      }
+      for (var i = 0; i < calls.length; i++) {
+        final result = results[i];
         if (result.action != null) action = result.action;
         messages.add({
           'role': 'tool',
-          'tool_call_id': tc.id,
+          'tool_call_id': calls[i].id,
           'content': result.text,
         });
       }
@@ -176,6 +205,7 @@ class AgentService {
     List<Map<String, dynamic>> history,
     String userText,
     void Function(String status)? onStatus,
+    void Function(String cumulativeText)? onDelta,
   ) async {
     onStatus?.call('简化模式生成中…');
     final p = provider;
@@ -192,7 +222,7 @@ class AgentService {
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
-    return engine.chatFallback(messages);
+    return engine.chatFallbackStream(messages, onDelta: onDelta);
   }
 
   // ---------------------------------------------------------------------------

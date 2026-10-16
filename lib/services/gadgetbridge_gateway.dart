@@ -161,7 +161,7 @@ class GadgetbridgeGateway implements WearableGateway {
       final tsMs = (row[tsCol] as num?)?.toInt();
       if (tsMs == null || tsMs <= 0) continue;
       final day = DateTime.fromMillisecondsSinceEpoch(tsMs);
-      final sourceName = kGbSourceName;
+      const sourceName = kGbSourceName;
 
       if (stepsCol != null) {
         final v = (row[stepsCol] as num?)?.toDouble();

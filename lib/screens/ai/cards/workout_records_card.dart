@@ -389,10 +389,9 @@ class _WorkoutRecordsCardState extends State<WorkoutRecordsCard> {
               controller: e.name,
               enabled: !_locked,
               style: const TextStyle(fontSize: 13, color: TaoistTheme.inkBlack),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 9),
                 hintText: '动作名称',
               ),
             ),

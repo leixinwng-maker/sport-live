@@ -342,7 +342,7 @@ class _HealthMetricsCardState extends State<HealthMetricsCard> {
 
   Widget _typeDropdown(_MetricDraft d) {
     return DropdownButtonFormField<String>(
-      value: d.type.isEmpty ? null : d.type,
+      initialValue: d.type.isEmpty ? null : d.type,
       isDense: true,
       decoration: const InputDecoration(
         isDense: true,

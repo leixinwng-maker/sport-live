@@ -298,7 +298,7 @@ class _FinanceRecordsCardState extends State<FinanceRecordsCard> {
                         ? TaoistTheme.jadeGreen
                         : const Color(0xFFC77B58),
                     foregroundColor: TaoistTheme.cloudGray,
-                    side: BorderSide(color: TaoistTheme.mistGray),
+                    side: const BorderSide(color: TaoistTheme.mistGray),
                   ),
                   onSelectionChanged: _locked
                       ? null

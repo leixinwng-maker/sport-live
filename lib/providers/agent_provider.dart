@@ -225,6 +225,40 @@ class AgentProvider extends ChangeNotifier {
         if (!m.error) {'role': m.role, 'content': m.content},
     ];
 
+    // 流式接收：尾部挂占位气泡，随增量刷新（120ms 节流，避免高频 rebuild）
+    int? streamIdx;
+    var lastStreamNotify = DateTime.now();
+    void handleDelta(String cumulative) {
+      if (cumulative.isEmpty) {
+        // 检测到工具调用 → 撤掉流式占位，回到工具状态条
+        if (streamIdx != null) {
+          _messages.removeAt(streamIdx!);
+          streamIdx = null;
+          notifyListeners();
+        }
+        return;
+      }
+      if (streamIdx == null) {
+        _messages.add(ChatMessage(
+          role: 'assistant',
+          content: cumulative,
+          time: DateTime.now(),
+        ));
+        streamIdx = _messages.length - 1;
+        lastStreamNotify = DateTime.now();
+        _toolStatus = null;
+        notifyListeners();
+        return;
+      }
+      _messages[streamIdx!] =
+          _messages[streamIdx!].copyWith(content: cumulative);
+      final now = DateTime.now();
+      if (now.difference(lastStreamNotify).inMilliseconds >= 120) {
+        lastStreamNotify = now;
+        notifyListeners();
+      }
+    }
+
     final AgentReply reply;
     try {
       reply = await service.sendMessage(
@@ -234,11 +268,13 @@ class AgentProvider extends ChangeNotifier {
           _toolStatus = s;
           notifyListeners();
         },
+        onDelta: handleDelta,
       );
     } catch (e) {
+      if (streamIdx != null) _messages.removeAt(streamIdx!);
       _messages.add(ChatMessage(
         role: 'assistant',
-        content: '请求失败：$e\n请检查网络与 AI 配置后重试。',
+        content: '发送失败：$e\n请检查网络与 AI 配置后重试。',
         time: DateTime.now(),
         error: true,
       ));
@@ -249,13 +285,22 @@ class AgentProvider extends ChangeNotifier {
       return;
     }
 
-    _messages.add(ChatMessage(
-      role: 'assistant',
-      content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
-      time: DateTime.now(),
-      toolCount: reply.toolCount,
-      payload: reply.action?.toJson(),
-    ));
+    if (streamIdx != null) {
+      // 流式气泡定稿（补上工具次数与卡片负载）
+      _messages[streamIdx!] = _messages[streamIdx!].copyWith(
+        content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
+        toolCount: reply.toolCount,
+        payload: reply.action?.toJson(),
+      );
+    } else {
+      _messages.add(ChatMessage(
+        role: 'assistant',
+        content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
+        time: DateTime.now(),
+        toolCount: reply.toolCount,
+        payload: reply.action?.toJson(),
+      ));
+    }
     _sending = false;
     _toolStatus = null;
     notifyListeners();

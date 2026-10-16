@@ -110,12 +110,16 @@ class AIEngine {
   /// 网络类瞬时错误的最大重试次数（首次失败后再试 1 次）。
   static const int _maxRetries = 1;
 
-  /// 统一的 chat/completions POST：带超时与一次自动重试。
+  /// 流式读取的空闲超时：相邻 SSE 分片间隔超过该值视为连接挂起
+  static const Duration _streamIdleTimeout = Duration(seconds: 60);
+
+  /// 统一的 chat/completions POST：带超时与自动重试。
   ///
   /// 代理/弱网场景下常出现「Software caused connection abort」
   /// （POSIX ECONNABORTED，连接被本地或对端中止），属瞬时错误；
+  /// 中转网关的 5xx（502/503/504 网关超时、529 上游过载）同样是临时抖动，
   /// 此处换新连接重试一次即可大概率恢复，避免直接报错给用户。
-  /// 重试仍失败则抛出原始异常，交由上层展示。
+  /// 重试仍失败则抛出原始异常或返回最后一次响应，交由上层展示。
   Future<http.Response> _postJson(
     String url,
     Map<String, dynamic> body,
@@ -130,9 +134,13 @@ class AIEngine {
     Exception? lastError;
     for (var attempt = 0; attempt <= _maxRetries; attempt++) {
       try {
-        return await http
+        final resp = await http
             .post(uri, headers: headers, body: encoded)
             .timeout(_requestTimeout);
+        // 5xx 为网关/上游临时错误：稍候重试；最后一次尝试直接返回交给上层处理
+        if (resp.statusCode < 500 || attempt == _maxRetries) return resp;
+        await Future.delayed(const Duration(seconds: 2));
+        continue;
       } on http.ClientException catch (e) {
         lastError = e;
       } on SocketException catch (e) {
@@ -145,6 +153,267 @@ class AIEngine {
       }
     }
     throw lastError!;
+  }
+
+  /// 把 HTTP 错误状态翻译成用户可理解的中文提示，不直接抛原始 JSON/HTML
+  static Exception httpError(int statusCode, String body) {
+    switch (statusCode) {
+      case 401:
+      case 403:
+        return Exception('鉴权失败（$statusCode）：API Key 无效、过期或无权限，请检查模型配置');
+      case 429:
+        return Exception('请求受限（429）：触发频率限制或额度不足，请稍候重试或检查账户余额');
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+      case 529:
+        return Exception('服务暂时不可用（$statusCode）：中转网关等不到上游模型响应，'
+            '属临时抖动，已自动重试仍未恢复；请稍后再发一次，或切换其他模型');
+      default:
+        final trimmed = body.length > 300 ? '${body.substring(0, 300)}…' : body;
+        return Exception('AI请求失败（$statusCode）：$trimmed');
+    }
+  }
+
+  /// 流式会话补全核心：SSE 增量解析，返回完整文本与工具调用。
+  ///
+  /// - 文本增量通过 [onDelta]（累计文本）实时回调，仅当尚未出现 tool_calls 时转发；
+  ///   出现 tool_calls 后停止转发（工具轮次通常无正文）
+  /// - 网关不支持流式（响应非 event-stream）时自动退回整包 JSON 解析
+  /// - 建连/响应头阶段复用 5xx 重试与网络错误重试语义；
+  ///   流式中途断开直接抛出（增量已转发，无法安全重启）
+  Future<({String text, List<ToolCall>? toolCalls})> _streamChatCompletion(
+    Map<String, dynamic> body, {
+    void Function(String cumulativeText)? onDelta,
+  }) async {
+    final uri = Uri.parse('$_apiBase/v1/chat/completions');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_apiKey',
+    };
+    final encoded = jsonEncode({...body, 'stream': true});
+
+    http.StreamedResponse? resp;
+    Exception? lastError;
+    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        final req = http.Request('POST', uri)
+          ..headers.addAll(headers)
+          ..body = encoded;
+        final r = await req.send().timeout(_requestTimeout);
+        if (r.statusCode >= 500 && attempt < _maxRetries) {
+          // 5xx：网关/上游临时错误，drain 后稍候重试
+          await r.stream.drain<void>().catchError((_) {});
+          await Future.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        if (r.statusCode != 200) {
+          final errBody = await r.stream.bytesToString();
+          throw httpError(r.statusCode, errBody);
+        }
+        resp = r;
+        break;
+      } on http.ClientException catch (e) {
+        lastError = e;
+      } on SocketException catch (e) {
+        lastError = e;
+      } on TimeoutException catch (e) {
+        lastError = e;
+      }
+      if (attempt < _maxRetries) {
+        await Future.delayed(const Duration(milliseconds: 800));
+      }
+    }
+    if (resp == null) throw lastError!;
+
+    final contentType = resp.headers['content-type'] ?? '';
+    if (!contentType.contains('text/event-stream')) {
+      // 网关不支持流式：按整包 JSON 解析（结构与非流式一致）
+      final full = await resp.stream.bytesToString();
+      final data = jsonDecode(full);
+      final message =
+          ((data['choices'] as List)[0] as Map)['message'] as Map<String, dynamic>? ?? {};
+      return (
+        text: (message['content'] ?? '') as String,
+        toolCalls: _parseToolCalls(message['tool_calls']),
+      );
+    }
+
+    final textBuf = StringBuffer();
+    final toolAcc = <int, _ToolCallAcc>{};
+    final lines = resp.stream
+        .timeout(_streamIdleTimeout)
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines) {
+      if (line.isEmpty || !line.startsWith('data:')) continue;
+      final payload = line.substring(5).trim();
+      if (payload == '[DONE]') break;
+      Object? obj;
+      try {
+        obj = jsonDecode(payload);
+      } catch (_) {
+        continue;
+      }
+      if (obj is! Map) continue;
+      final err = obj['error'];
+      if (err != null) {
+        final msg =
+            err is Map ? (err['message'] ?? err).toString() : err.toString();
+        throw Exception('模型返回错误：$msg');
+      }
+      final choices = obj['choices'];
+      if (choices is! List || choices.isEmpty) continue;
+      final choice = choices[0];
+      final delta = (choice is Map ? choice['delta'] : null);
+      if (delta is! Map) continue;
+      final content = delta['content'];
+      if (content is String && content.isNotEmpty) {
+        textBuf.write(content);
+        if (toolAcc.isEmpty) onDelta?.call(textBuf.toString());
+      }
+      final tcs = delta['tool_calls'];
+      if (tcs is List) {
+        for (final tc in tcs) {
+          if (tc is! Map) continue;
+          final idx = (tc['index'] as num?)?.toInt() ?? 0;
+          final acc = toolAcc.putIfAbsent(idx, _ToolCallAcc.new);
+          final id = tc['id'];
+          if (id is String && id.isNotEmpty) acc.id = id;
+          final fn = tc['function'];
+          if (fn is Map) {
+            final n = fn['name'];
+            if (n is String && n.isNotEmpty) acc.name = n;
+            final a = fn['arguments'];
+            if (a is String) acc.args.write(a);
+          }
+        }
+      }
+    }
+
+    final calls = <ToolCall>[];
+    final idxs = toolAcc.keys.toList()..sort();
+    for (final idx in idxs) {
+      final acc = toolAcc[idx]!;
+      Map<String, dynamic> args = {};
+      final raw = acc.args.toString();
+      if (raw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) args = decoded;
+        } catch (_) {}
+      }
+      calls.add(ToolCall(
+        id: acc.id.isEmpty ? 'call_$idx' : acc.id,
+        name: acc.name,
+        arguments: args,
+      ));
+    }
+    return (text: textBuf.toString(), toolCalls: calls.isEmpty ? null : calls);
+  }
+
+  /// 非流式 message.tool_calls 解析（兼容字符串/对象两种 arguments 形态）
+  List<ToolCall>? _parseToolCalls(dynamic toolCallsRaw) {
+    if (toolCallsRaw is! List || toolCallsRaw.isEmpty) return null;
+    final calls = <ToolCall>[];
+    for (final tc in toolCallsRaw) {
+      if (tc is! Map) continue;
+      final fn = (tc['function'] ?? {}) as Map<String, dynamic>;
+      Map<String, dynamic> args = {};
+      final rawArgs = fn['arguments'];
+      if (rawArgs is String && rawArgs.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(rawArgs);
+          if (decoded is Map<String, dynamic>) args = decoded;
+        } catch (_) {}
+      } else if (rawArgs is Map<String, dynamic>) {
+        args = rawArgs;
+      }
+      calls.add(ToolCall(
+        id: (tc['id'] ?? '') as String,
+        name: (fn['name'] ?? '') as String,
+        arguments: args,
+      ));
+    }
+    return calls.isEmpty ? null : calls;
+  }
+
+  /// 流式智能体调用：与 [chatWithTools] 相同语义，文本增量实时回调 [onDelta]。
+  ///
+  /// 流式尝试在未产出任何增量前失败（网络抖动，且 5xx 重试仍未恢复）→
+  /// 自动回退非流式 [chatWithTools]；已开始转发增量后失败则直接抛出。
+  Future<ChatResponse> chatWithToolsStream({
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>> tools,
+    void Function(String cumulativeText)? onDelta,
+  }) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+    if (!_supportsTools) {
+      // 配置层已标记该模型不支持工具调用：直接降级，不浪费一次失败请求
+      throw ToolsUnsupportedException('当前模型未开启工具调用');
+    }
+    var forwarded = false;
+    try {
+      final r = await _streamChatCompletion(
+        {
+          'model': _model,
+          'messages': messages,
+          'tools': tools,
+          'tool_choice': 'auto',
+          'temperature': 0.7,
+        },
+        onDelta: (t) {
+          forwarded = true;
+          onDelta?.call(t);
+        },
+      );
+      return ChatResponse(
+        text: r.text.isEmpty ? null : r.text,
+        toolCalls: r.toolCalls,
+      );
+    } on TimeoutException {
+      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
+      rethrow;
+    } on SocketException {
+      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
+      rethrow;
+    } on http.ClientException {
+      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
+      rethrow;
+    }
+  }
+
+  /// 流式降级请求：与 [chatFallback] 相同语义，文本增量实时回调 [onDelta]
+  Future<String> chatFallbackStream(
+    List<Map<String, dynamic>> messages, {
+    void Function(String cumulativeText)? onDelta,
+  }) async {
+    if (!isConfigured) {
+      throw Exception('请先在设置中配置AI服务');
+    }
+    var forwarded = false;
+    try {
+      final r = await _streamChatCompletion(
+        {'model': _model, 'messages': messages, 'temperature': 0.7},
+        onDelta: (t) {
+          forwarded = true;
+          onDelta?.call(t);
+        },
+      );
+      return r.text;
+    } on TimeoutException {
+      if (!forwarded) return chatFallback(messages);
+      rethrow;
+    } on SocketException {
+      if (!forwarded) return chatFallback(messages);
+      rethrow;
+    } on http.ClientException {
+      if (!forwarded) return chatFallback(messages);
+      rethrow;
+    }
   }
 
   /// 调用大模型
@@ -165,7 +434,7 @@ class AIEngine {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       return data['choices'][0]['message']['content'] as String;
     } else {
-      throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+      throw httpError(response.statusCode, response.body);
     }
   }
 
@@ -229,7 +498,7 @@ class AIEngine {
       }
       throw Exception('AI请求失败: ${response.statusCode} $body');
     } else {
-      throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+      throw httpError(response.statusCode, response.body);
     }
   }
 
@@ -302,7 +571,7 @@ class AIEngine {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       return data['choices'][0]['message']['content'] as String;
     } else {
-      throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+      throw httpError(response.statusCode, response.body);
     }
   }
 
@@ -421,7 +690,7 @@ class AIEngine {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       return data['choices'][0]['message']['content'] as String;
     }
-    throw Exception('AI请求失败: ${response.statusCode} ${response.body}');
+    throw httpError(response.statusCode, response.body);
   }
 
   /// 体检报告结构化提取（P7-T4）：走主 AI、temperature 0，输出 JSON 字符串。
@@ -699,4 +968,11 @@ class AIEngine {
     ];
     return await chat(messages);
   }
+}
+
+/// SSE 工具调用增量累加器（按 index 聚合 id/name/arguments 分片）
+class _ToolCallAcc {
+  String id = '';
+  String name = '';
+  final StringBuffer args = StringBuffer();
 }

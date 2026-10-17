@@ -67,7 +67,21 @@ class AgentService {
   bool _toolsUnsupported = false;
   bool get toolsUnsupported => _toolsUnsupported;
 
-  static const int _maxToolRounds = 6;
+  /// 工具轮次上限。收窄到 4：常见问答 1~2 轮即可收敛，上限越低弱网关下
+  /// 「多轮 LLM 往返叠加」的最坏耗时越短，避免用户长时间干等。
+  static const int _maxToolRounds = 4;
+
+  /// 单次回答的总时长预算。工具轮次累计耗时达到该值即强制收敛（追加"直接作答"
+  /// 提示并放弃后续工具调用），把最坏耗时从「重试预算叠加的分钟级」压到可控范围。
+  static const Duration _totalBudget = Duration(seconds: 90);
+
+  /// 达到轮次/时长上限时注入的强制收敛提示。
+  static const String _convergeHint =
+      '已达到工具调用次数上限，请基于已获取的信息直接给出最终回答，不要再调用工具。';
+
+  /// 兜底文案：模型在被要求收敛后仍返回工具调用时使用。
+  static const String _limitText = '（已达工具调用上限，请换个问法或开新会话）';
+
   /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 30 个工具 schema
   /// 已是固定开销，长历史会让 TTFT（首字延迟）线性变长，弱网关下更容易读断。
   static const int _maxHistoryMessages = 16;
@@ -77,6 +91,11 @@ class AgentService {
   /// 同一轮对话或相邻消息中重复查询相同参数时直接命中，省去重复查库。
   final Map<String, (String, DateTime)> _readCache = {};
   static const Duration _readCacheTtl = Duration(minutes: 5);
+
+  /// 合规例外：受单独门禁约束的读工具不参与缓存。
+  /// get_wearable_summary 依赖穿戴授权门禁，撤回授权必须立即生效，
+  /// 缓存会导致撤回后 5 分钟内仍返回旧摘要（合规漏洞）。
+  static const Set<String> _noCacheTools = {'get_wearable_summary'};
 
   AgentService(this.engine);
 
@@ -114,14 +133,17 @@ class AgentService {
 
     PendingAction? action;
     int toolCount = 0;
+    bool converging = false;
+    final startedAt = DateTime.now();
 
     for (int round = 0; round < _maxToolRounds; round++) {
-      // 最后一轮强制收敛
-      if (round == _maxToolRounds - 1) {
-        messages.add({
-          'role': 'system',
-          'content': '已达到工具调用次数上限，请基于已获取的信息直接给出最终回答，不要再调用工具。',
-        });
+      // 收敛触发条件：到达轮次上限，或累计耗时已超总时长预算。
+      // 只注入一次（converging 置位后不再重复），避免多条收敛 system 污染上下文。
+      final lastRound = round == _maxToolRounds - 1;
+      final overBudget = DateTime.now().difference(startedAt) >= _totalBudget;
+      if ((lastRound || overBudget) && !converging) {
+        converging = true;
+        messages.add({'role': 'system', 'content': _convergeHint});
       }
 
       final ChatResponse resp;
@@ -143,6 +165,14 @@ class AgentService {
       final calls = resp.toolCalls;
       if (calls == null || calls.isEmpty) {
         return AgentReply(resp.text ?? '',
+            action: action, toolCount: toolCount);
+      }
+
+      // 已要求收敛但模型仍发起工具调用：放弃本轮工具，直接返回已有文本或兜底提示，
+      // 避免「收敛提示 → 又调工具」的死循环把响应时间继续拉长。
+      if (converging) {
+        final t = resp.text?.trim() ?? '';
+        return AgentReply(t.isEmpty ? _limitText : t,
             action: action, toolCount: toolCount);
       }
 
@@ -204,8 +234,7 @@ class AgentService {
         });
       }
     }
-    return AgentReply('（已达工具调用上限，请换个问法或开新会话）',
-        action: action, toolCount: toolCount);
+    return AgentReply(_limitText, action: action, toolCount: toolCount);
   }
 
   /// 降级模式：不带 tools，把用户上下文直接注入 system
@@ -242,8 +271,7 @@ class AgentService {
     final week = ['一', '二', '三', '四', '五', '六', '日'][now.weekday - 1];
     final today = '${now.year}-${_p2(now.month)}-${_p2(now.day)}';
     return '你是"问道"App 的私人 AI 智能体——一位融合道家修炼、中医经络食疗、'
-        '运动康复（苗振体系）与现代训练科学、营养学、财务规划的私人顾问。'
-        '今天是 $today（周$week）。\n\n'
+        '运动康复（苗振体系）与现代训练科学、营养学、财务规划的私人顾问。\n\n'
         '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/体检报告/穿戴数据/知识库/生活状态）。原则：\n'
         '1. 回答涉及用户数据的问题时，先调用相关工具获取事实，基于事实回答，绝不编造数据\n'
         '2. 可在一次回答中连续调用多个工具；已获取的信息不要重复查询\n'
@@ -315,7 +343,11 @@ class AgentService {
         '6. 效率规则（必须遵守）：用户要求记录饮食/训练时，不要先调用 get_today_summary、'
         'get_recent_diets、get_recent_workouts 等查询工具做预查，直接整理并调用写工具；'
         '用户一次描述多餐（如早餐/午餐/晚餐一起说）时，把所有餐次放进同一个 meals 数组，'
-        '只调用一次 log_diet，严禁一餐调用一次\n\n'
+        '只调用一次 log_diet，严禁一餐调用一次\n'
+        '7. 删除/修改规则：用户要求删除或纠正已保存的饮食时，先调用 get_recent_diets '
+        '拿到记录 id（只取返回中的 [id:xxx]），再调用 delete_diet_records 生成删除确认卡；'
+        'id 只能来自该查询，不得编造。修改记录 = 删除旧记录 + 重新生成待确认卡片，'
+        '不要声称「已直接修改」\n\n'
         '截图归纳规范（用户随消息上传截图/照片，要求归档到对应板块时必须遵守）：\n'
         '1. 消息中附带的截图识别文字是唯一事实来源：只能整理其中明确出现的数值与日期，'
         '严禁编造、估算、换算单位或补充原文没有的数据；识别不完整时先如实说明\n'
@@ -334,7 +366,10 @@ class AgentService {
         '3. 记录生活状态用 log_life_status：只填写用户表达过的睡眠/精力/标签/备注，不要脑补\n'
         '4. 新增知识条目用 add_knowledge_entry：必须带 source（出处）——用户没说来源时先问清楚再调用\n'
         '5. 归档体检报告用 archive_health_report：体检报告只归档、不修改不删除；数值与结论须来自原文\n'
-        '6. 这些工具同样只生成「待确认卡片」，不会直接保存；卡片未保存前严禁声称「已记录/已归档」';
+        '6. 这些工具同样只生成「待确认卡片」，不会直接保存；卡片未保存前严禁声称「已记录/已归档」'
+        // 日期置于提示词末尾：前半段为稳定前缀，跨天跨会话可命中网关前缀缓存，
+        // 缩短首字延迟（TTFT）；模型对末尾信息亦有足够注意力。
+        '\n\n今天是 $today（周$week）。';
   }
 
   String _p2(int n) => n.toString().padLeft(2, '0');
@@ -343,7 +378,11 @@ class AgentService {
   // 工具定义（OpenAI function calling 格式）
   // ---------------------------------------------------------------------------
 
-  List<Map<String, dynamic>> get toolSchemas => [
+  /// 工具 schema 惰性构建后缓存：sendMessage 每轮都要把 schema 序列化进请求体，
+  /// 缓存避免 33 个 map 在多轮循环里被反复重建。
+  List<Map<String, dynamic>>? _toolSchemasCache;
+
+  List<Map<String, dynamic>> get toolSchemas => _toolSchemasCache ??= [
         _fn('get_user_profile', '获取用户身体档案：年龄、身高、体重、BMI、健身经验、可用器械、训练目标等',
             params: {}),
         _fn('get_today_summary', '获取用户今日摘要：今日训练、饮食摄入、收支等概况', params: {}),
@@ -676,6 +715,21 @@ class AgentService {
               },
             },
             requiredParams: ['meals']),
+        _fn(
+            'delete_diet_records',
+            '删除已保存的饮食记录（用户要求删除或纠正某一餐时使用）。'
+                'id 只能来自 get_recent_diets 返回的 [id:xxx]，不得凭空编造。'
+                '**仅生成待用户确认的删除卡片，不会直接保存**；'
+                '用户点击卡片上的「确认删除」后才会真正删除。'
+                '用户要修改记录时：先删除旧记录，再重新生成待确认卡片',
+            params: {
+              'ids': {
+                'type': 'array',
+                'description': '要删除的饮食记录 id 列表（来自 get_recent_diets）',
+                'items': {'type': 'string'},
+              },
+            },
+            requiredParams: ['ids']),
         // ===== P6-D 开放数据工具（本体术语 / 开放动作库 / 数据源登记表）=====
         _fn(
             'query_ontology',
@@ -1003,6 +1057,7 @@ class AgentService {
     'propose_diet_plan': '生成饮食方案',
     'log_workout': '记录训练',
     'log_diet': '记录饮食',
+    'delete_diet_records': '删除饮食记录',
     // 截图归纳写工具
     'propose_health_metrics': '整理健康指标',
     'propose_finance_records': '整理收支记录',
@@ -1031,6 +1086,8 @@ class AgentService {
         return _buildDietProposal(args, 'diet_plan');
       case 'log_diet':
         return _buildDietProposal(args, 'diet_log');
+      case 'delete_diet_records':
+        return _buildDietDeleteProposal(args);
       case 'propose_health_metrics':
         return _buildHealthMetricsProposal(args);
       case 'propose_finance_records':
@@ -1050,9 +1107,13 @@ class AgentService {
     }
   }
 
-  /// 读工具带缓存入口：5 分钟内同名同参直接返回缓存结果
+  /// 读工具带缓存入口：5 分钟内同名同参直接返回缓存结果。
+  /// 门禁类工具（见 [_noCacheTools]）绕过缓存，保证状态变化立即生效。
   Future<String> _runReadToolCached(
       String name, Map<String, dynamic> args) async {
+    if (_noCacheTools.contains(name)) {
+      return _runReadTool(name, args);
+    }
     final key = '$name|${jsonEncode(args)}';
     final hit = _readCache[key];
     if (hit != null && DateTime.now().difference(hit.$2) < _readCacheTtl) {
@@ -1112,6 +1173,57 @@ class AgentService {
       '该$label尚未保存，需用户在前端卡片上点击保存按钮后才会写入。'
       '请提示用户「可在下方卡片确认或修改后保存」，不要在文字里重复罗列明细。',
       action: PendingAction(type: type, data: data),
+    );
+  }
+
+  /// 生成「删除饮食记录」的待确认载荷。
+  /// ids 实时比对当前库中记录，过滤不存在的 id，防止模型凭空编造 id 删错数据。
+  ToolResult _buildDietDeleteProposal(Map<String, dynamic> args) {
+    final raw = args['ids'];
+    final ids = <String>{};
+    if (raw is List) {
+      for (final e in raw) {
+        final s = e.toString().trim();
+        if (s.isNotEmpty) ids.add(s);
+      }
+    }
+    if (ids.isEmpty) {
+      return const ToolResult(
+          '参数校验失败：缺少 ids（要删除的饮食记录 id 列表，来自 get_recent_diets）');
+    }
+    final p = provider;
+    if (p == null) return const ToolResult('数据服务未就绪');
+    final byId = <String, dynamic>{
+      for (final r in p.dietRecords)
+        if (r.id != null) r.id!: r,
+    };
+    final records = <Map<String, dynamic>>[];
+    final missing = <String>[];
+    for (final id in ids) {
+      final r = byId[id];
+      if (r == null) {
+        missing.add(id);
+        continue;
+      }
+      records.add({
+        'id': id,
+        'date': _fmtDate(r.date),
+        'mealType': r.mealType,
+        'summary': r.foods.map((f) => '${f.name}${f.grams}g').join('、'),
+        'calories': r.totalCalories.round(),
+      });
+    }
+    if (records.isEmpty) {
+      return ToolResult(
+          '未找到对应的饮食记录（无效 id：${missing.join('、')}）。'
+          '请先调用 get_recent_diets 获取有效的记录 id，不得凭空编造');
+    }
+    return ToolResult(
+      '已生成待确认的删除卡片（共 ${records.length} 条记录）'
+      '${missing.isEmpty ? '' : '；${missing.length} 个 id 无效已忽略：${missing.join('、')}'}。'
+      '该操作不会直接删除，需用户在前端卡片上点击确认按钮后才会删除。'
+      '请提示用户可在下方卡片核对后确认删除。',
+      action: PendingAction(type: 'delete_diet', data: {'records': records}),
     );
   }
 
@@ -1627,7 +1739,7 @@ class AgentService {
 
     final sb = StringBuffer('最近 $days 天共 ${list.length} 条饮食记录：');
     for (final d in list) {
-      sb.write('\n- ${_fmtDate(d.date)} ${d.mealType} 共 ${d.totalCalories.round()} kcal');
+      sb.write('\n- [id:${d.id}] ${_fmtDate(d.date)} ${d.mealType} 共 ${d.totalCalories.round()} kcal');
       for (final f in d.foods) {
         sb.write('\n  · ${f.name} ${f.grams}g（${f.calories.round()}kcal/'
             '蛋白质${f.protein}g/脂肪${f.fat}g/碳水${f.carbs}g）');

@@ -5,6 +5,7 @@ import 'dart:io' show SocketException;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
+import 'genkit_bridge.dart';
 import 'vision/vision_exceptions.dart';
 import 'vision/vision_service.dart';
 
@@ -74,6 +75,20 @@ class AIEngine {
   String _apiKey = '';
   String _model = 'qwen-turbo';
   String _visionModel = ''; // 视觉模型（可选），DeepSeek 无视觉，可配 qwen-vl-plus 等
+
+  /// 复用的 HTTP 客户端（惰性创建）。
+  ///
+  /// 此前每次请求都用顶层 http.post / req.send()，其内部每次都 new 一个 Client，
+  /// 导致**每个请求都重新做一次 TCP+TLS 握手**（移动网下约 150~400ms/次）。
+  /// 一次智能体回答通常含 2 个以上请求（工具轮 + 最终作答 + 可能的兜底），
+  /// 复用同一 Client 可命中 HTTP keep-alive，省去后续请求的握手开销。
+  /// 出现网络类异常时由 [_resetClient] 丢弃陈旧连接，避免复用已被对端关闭的 socket。
+  ///
+  /// 惰性创建：不在构造期 new Client，避免在无请求的测试/启动路径上提前建立
+  /// HttpClient（flutter_test 的 mock HttpOverrides 要求必须在测试 zone 内创建）。
+  http.Client? _client;
+
+  http.Client get _httpClient => _client ??= http.Client();
 
   /// 当前激活模型是否支持 function calling（由多模型配置下发）。
   /// false 时 [chatWithTools] 直接抛 [ToolsUnsupportedException]，上层自动降级为
@@ -149,6 +164,13 @@ class AIEngine {
   /// 给 2 次整轮重开的机会，与建连重试共享同一个总预算。
   static const int _maxStreamRetries = 2;
 
+  /// 流式**整轮重开**的总时长预算。
+  ///
+  /// 弱网关下单次尝试可能吃满 [_requestTimeout]（90s），若无上限地把
+  /// 建连重试 + 中途重开全部跑完，最坏可达数分钟。超过该预算即停止重开，
+  /// 交由上层做非流式兜底或提示用户，避免「卡死」体验。
+  static const Duration _streamTotalBudget = Duration(seconds: 120);
+
   /// 统一的 chat/completions POST：带超时与自动重试。
   ///
   /// 代理/弱网场景下常出现「Software caused connection abort」
@@ -168,27 +190,35 @@ class AIEngine {
     final encoded = jsonEncode(body);
 
     Exception? lastError;
+    final deadline = DateTime.now().add(_streamTotalBudget);
     for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      // 累计耗时已超预算：停止重试，避免多次 90s 超时叠加拖成分钟级干等
+      if (attempt > 0 && DateTime.now().isAfter(deadline)) break;
       try {
-        final resp = await http
+        final resp = await _httpClient
             .post(uri, headers: headers, body: encoded)
             .timeout(_requestTimeout);
         // 5xx 为网关/上游临时错误：稍候重试；最后一次尝试直接返回交给上层处理
         if (resp.statusCode < 500 || attempt == _maxRetries) return resp;
+        lastError = Exception('AI网关临时不可用（${resp.statusCode}）');
+        _resetClient();
         await Future.delayed(const Duration(seconds: 2));
         continue;
       } on http.ClientException catch (e) {
+        _resetClient();
         lastError = e;
       } on SocketException catch (e) {
+        _resetClient();
         lastError = e;
       } on TimeoutException catch (e) {
+        _resetClient();
         lastError = e;
       }
       if (attempt < _maxRetries) {
         await Future.delayed(const Duration(milliseconds: 800));
       }
     }
-    throw networkError(lastError!);
+    throw networkError(lastError ?? Exception('AI 请求超时，请稍后重试'));
   }
 
   /// 把网络类原始异常翻译成用户可读的中文提示，并标记网络类型以便上层兜底。
@@ -244,8 +274,11 @@ class AIEngine {
 
     const maxAttempts = _maxRetries + _maxStreamRetries + 1;
     Object? lastError;
+    final deadline = DateTime.now().add(_streamTotalBudget);
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      // 累计耗时已超预算：不再重开，直接结束重试，交由上层兜底/提示
+      if (attempt > 0 && DateTime.now().isAfter(deadline)) break;
       var forwarded = false;
       ({String text, List<ToolCall>? toolCalls})? roundResult;
 
@@ -336,10 +369,13 @@ class AIEngine {
               }
             }
           } on http.ClientException catch (e) {
+            _resetClient();
             throw _Retryable(e);
           } on SocketException catch (e) {
+            _resetClient();
             throw _Retryable(e);
           } on TimeoutException catch (e) {
+            _resetClient();
             throw _Retryable(e);
           }
 
@@ -388,14 +424,36 @@ class AIEngine {
   /// 发起流式请求：网络类异常统一转成可重试标记
   Future<http.StreamedResponse> _send(http.Request req) async {
     try {
-      return await req.send().timeout(_requestTimeout);
+      return await _httpClient.send(req).timeout(_requestTimeout);
     } on http.ClientException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     } on SocketException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     } on TimeoutException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     }
+  }
+
+  /// 关闭并重建底层 HTTP 客户端。
+  ///
+  /// 网络类异常后底层的 socket 可能已被对端/网关关闭，继续复用会立即再次失败；
+  /// 丢弃并重建可让下一次重试走全新连接。
+  void _resetClient() {
+    final c = _client;
+    _client = null;
+    try {
+      c?.close();
+    } catch (_) {
+      // 关闭失败无需处理：已置空，下次请求会重建
+    }
+  }
+
+  /// 释放资源（App 生命周期内通常无需调用）
+  void dispose() {
+    _resetClient();
   }
 
   /// 读取响应体（错误详情与网关退回的非流式整包共用；读取本身断流也算可重试）
@@ -403,10 +461,13 @@ class AIEngine {
     try {
       return await r.stream.bytesToString();
     } on http.ClientException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     } on SocketException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     } on TimeoutException catch (e) {
+      _resetClient();
       throw _Retryable(e);
     }
   }
@@ -599,6 +660,18 @@ class AIEngine {
     return base;
   }
 
+  // ==== Genkit 桥接示范开关（v1.3.2 Genkit 技术落地）====
+  //
+  // 仅作用于 [testModel] 连通性测试这一条非流式链路：
+  // - true  = 经 [GenkitBridge]（genkit_openai 的 openAI 兼容插件）发起请求；
+  // - false = 走下方原始 http 直连（历史路径，随时可整体回退）。
+  // 其余全部调用路径（chat / chatWithTools / chatFallback / _chatExact / 流式）
+  // 一律不受影响；若 genkit 链路异常，把开关改回 false 即回退。
+  static const bool useGenkitForTestModel = true;
+
+  /// Genkit 桥接单例（仅开关打开且首次调用时才真正创建）
+  static GenkitBridge? _genkitBridge;
+
   /// 测试指定模型配置的连通性（不改变当前激活模型）。
   /// 对给定 baseUrl/apiKey/model 发一次最小 chat 请求，成功返回模型回复；
   /// 失败抛异常（鉴权失败单独给中文提示）。
@@ -613,7 +686,10 @@ class AIEngine {
     if (base.isEmpty || key.isEmpty || mdl.isEmpty) {
       throw Exception('接口地址、API Key、模型名称都需要填写');
     }
-    final response = await http.post(
+    if (useGenkitForTestModel) {
+      return _testModelViaGenkit(base: base, key: key, mdl: mdl);
+    }
+    final response = await _httpClient.post(
       Uri.parse('$base/v1/chat/completions'),
       headers: {
         'Content-Type': 'application/json',
@@ -638,6 +714,40 @@ class AIEngine {
     // 其余状态码统一走中文映射（截断 body，避免长段英文/HTML 直达用户）
     throw httpError(
         response.statusCode, utf8.decode(response.bodyBytes, allowMalformed: true));
+  }
+
+  /// Genkit 链路的连通性测试（示范接入，开关 [useGenkitForTestModel] 控制）。
+  ///
+  /// 请求语义与上方原始 http 路径严格对齐：
+  /// - 同一端点拼接：GenkitBridge 归一化后补 /v1，genkit_openai 对带路径 baseUrl
+  ///   原样发送、底层拼 /chat/completions，上线 URL 仍为 `$base/v1/chat/completions`；
+  /// - 同一模型名、同一提示词、同一 temperature=0；
+  /// - 同一 90 秒超时（[_requestTimeout]）；
+  /// - 同一对外报错：GenkitBridgeException 还原出的 HTTP 状态码喂给 [httpError]，
+  ///   401/403 保持本方法原有的专用文案，其余状态码走统一中文映射。
+  Future<String> _testModelViaGenkit({
+    required String base,
+    required String key,
+    required String mdl,
+  }) async {
+    final bridge = _genkitBridge ??= GenkitBridge();
+    try {
+      return await bridge.generateText(
+        baseUrl: base,
+        apiKey: key,
+        model: mdl,
+        prompt: '你好，请只回复「连接正常」四个字。',
+        temperature: 0,
+        timeout: _requestTimeout,
+      );
+    } on GenkitBridgeException catch (e) {
+      final status = e.httpStatus;
+      if (status == 401 || status == 403) {
+        throw Exception('鉴权失败（$status）：API Key 无效或已过期');
+      }
+      // 状态码缺失时按 internal(500) 兜底，与 GenkitException 缺省语义一致
+      throw httpError(status ?? 500, e.details);
+    }
   }
 
   /// 降级请求：不带 tools（消息里可能含注入的数据上下文）

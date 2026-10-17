@@ -8,7 +8,7 @@ import 'package:ai_planner/services/ai_engine.dart';
 /// P3-T5 AgentService 验收（5 用例，AI 引擎全 fake：无网络、无数据库、无插件通道）：
 /// 1. 纯文本直答：首轮无 toolCalls 直接返回；请求结构（system 首/user 尾）；历史窗口裁剪 24 条
 /// 2. 单轮工具调用：tool_calls → 本地执行 → role:'tool' 回传 → 二轮文本；onStatus 中文状态
-/// 3. 工具循环收敛：持续返回 tool_calls 时恰好 6 轮上限收敛，末轮带强制收敛 system 提示
+/// 3. 工具循环收敛：持续返回 tool_calls 时恰好 4 轮上限收敛，末轮带强制收敛 system 提示
 /// 4. 自动降级：ToolsUnsupportedException → 数据注入模式（chatFallback），标记置位，后续直走降级
 /// 5. executeTool 分发：null provider 守卫 / 未知工具 / 空 query / days 钳制 / 工具表完整性
 
@@ -165,7 +165,7 @@ void main() {
     expect(statuses, ['正在查询：用户档案']);
   });
 
-  test('T5-3 工具循环收敛：持续 tool_calls 恰好 6 轮上限收敛并返回上限提示', () async {
+  test('T5-3 工具循环收敛：持续 tool_calls 恰好 4 轮上限收敛并返回上限提示', () async {
     final engine = _ScriptedEngine(rounds: [
       const ChatResponse(toolCalls: [
         ToolCall(id: 'loop', name: 'get_today_summary', arguments: {}),
@@ -176,10 +176,10 @@ void main() {
     final reply = await service.sendMessage(history: [], userText: '今日概况');
 
     expect(reply.text, contains('已达工具调用上限'));
-    expect(engine.chatWithToolsCount, 6, reason: '循环上限 _maxToolRounds = 6');
+    expect(engine.chatWithToolsCount, 4, reason: '循环上限 _maxToolRounds = 4');
 
     // 末轮请求追加强制收敛 system 提示
-    final last = engine.toolRequests[5];
+    final last = engine.toolRequests[3];
     final systems = last.where((m) => m['role'] == 'system').toList();
     expect(systems.length, 2, reason: '初始 system + 收敛 system');
     expect(systems.last['content'] as String, contains('不要再调用工具'));
@@ -241,11 +241,11 @@ void main() {
     expect((await service.executeTool('get_recent_workouts', {'days': '3'})).text,
         '最近 3 天没有训练记录');
 
-    // 工具表：25 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 +
-    // P6-A 用药安全 1 + P6-C 补剂常识 1 + FIT-2 写工具 4 + P6-D 开放数据 3 + P7 体检报告 1），
+    // 工具表：33 个工具（P3 基础 8 + P4 循证 4 + P4-C 穿戴 1 + P5 文献 1 + P5 疾病运动 1 +
+    // P6-A 用药安全 1 + P6-C 补剂常识 1 + FIT-2 写工具 5 + 档案新增写工具 7 + P6-D 开放数据 3 + P7 体检报告 1），
     // schema 结构与 required 完整
     final schemas = service.toolSchemas;
-    expect(schemas.length, 25);
+    expect(schemas.length, 33);
     final names = schemas.map((s) => (s['function'] as Map)['name']).toSet();
     expect(names, {
       'get_user_profile',
@@ -269,10 +269,19 @@ void main() {
       'propose_diet_plan',
       'log_workout',
       'log_diet',
+      'delete_diet_records',
       'query_ontology',
       'query_exercise_catalog',
       'list_open_datasets',
       'get_health_reports',
+      // 档案新增类写工具（截图归纳 / 档案补充）
+      'propose_health_metrics',
+      'propose_finance_records',
+      'propose_workout_records',
+      'add_food_item',
+      'log_life_status',
+      'add_knowledge_entry',
+      'archive_health_report',
     });
     final search =
         schemas.firstWhere((s) => (s['function'] as Map)['name'] == 'search_knowledge');

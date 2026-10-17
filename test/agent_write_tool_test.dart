@@ -1,3 +1,4 @@
+import 'package:ai_planner/models/diet.dart';
 import 'package:ai_planner/providers/app_provider.dart';
 import 'package:ai_planner/services/agent_service.dart';
 import 'package:ai_planner/services/ai_engine.dart';
@@ -302,6 +303,7 @@ void main() {
       expect(service.toolLabel('propose_diet_plan'), '生成饮食方案');
       expect(service.toolLabel('log_workout'), '记录训练');
       expect(service.toolLabel('log_diet'), '记录饮食');
+      expect(service.toolLabel('delete_diet_records'), '删除饮食记录');
     });
 
     test('required 参数符合约定', () {
@@ -309,6 +311,7 @@ void main() {
       expect(paramsOf('log_workout')['required'], ['name', 'days']);
       expect(paramsOf('propose_diet_plan')['required'], ['meals']);
       expect(paramsOf('log_diet')['required'], ['meals']);
+      expect(paramsOf('delete_diet_records')['required'], ['ids']);
     });
 
     test('描述显式声明「不会直接保存」（安全提示不得缺失）', () {
@@ -317,6 +320,7 @@ void main() {
         'propose_diet_plan',
         'log_workout',
         'log_diet',
+        'delete_diet_records',
       ]) {
         final schema = service.toolSchemas.firstWhere(
           (s) => (s['function'] as Map)['name'] == name,
@@ -324,6 +328,95 @@ void main() {
         final desc = (schema['function'] as Map)['description'] as String;
         expect(desc, contains('不会直接保存'), reason: '$name 描述缺少安全声明');
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // W5 删除饮食记录（delete_diet_records）
+  // ---------------------------------------------------------------------------
+
+  group('W5 delete_diet_records', () {
+    /// 向 Provider 注入一条已有 id 的饮食记录（模拟已保存数据）
+    DietRecord seed(String id, {String mealType = '早餐'}) {
+      final r = DietRecord(
+        id: id,
+        date: DateTime.now(),
+        mealType: mealType,
+        foods: [
+          FoodItem(
+            name: '燕麦',
+            grams: 80,
+            calories: 300,
+            protein: 10,
+            fat: 5,
+            carbs: 50,
+          ),
+        ],
+        totalCalories: 300,
+      );
+      provider.dietRecords.add(r);
+      return r;
+    }
+
+    test('成功：产 delete_diet 载荷，且不真正删除数据', () async {
+      seed('diet-1');
+      seed('diet-2', mealType: '午餐');
+
+      final res =
+          await service.executeTool('delete_diet_records', {'ids': ['diet-1']});
+
+      expect(res.action, isNotNull);
+      expect(res.action!.type, 'delete_diet');
+      final records = res.action!.data['records'] as List;
+      expect(records, hasLength(1));
+      expect(records.first['id'], 'diet-1');
+      expect(records.first['mealType'], '早餐');
+      expect(res.text, contains('已生成待确认的删除卡片'));
+      expect(res.text, contains('不会直接删除'));
+
+      // 核心安全断言：写工具只产卡片，绝不触碰 Provider 数据
+      expect(provider.dietRecords, hasLength(2), reason: '待确认卡片不得直接删除记录');
+    });
+
+    test('全无效 id：不产载荷并给出校验提示', () async {
+      seed('diet-1');
+      final res = await service.executeTool(
+          'delete_diet_records', {'ids': ['ghost-1', 'ghost-2']});
+
+      expect(res.action, isNull);
+      expect(res.text, contains('未找到对应的饮食记录'));
+      expect(res.text, contains('ghost-1'));
+      expect(provider.dietRecords, hasLength(1));
+    });
+
+    test('混合有效/无效 id：仅保留有效项并提示忽略的 id', () async {
+      seed('diet-1');
+      final res = await service
+          .executeTool('delete_diet_records', {'ids': ['diet-1', 'ghost-9']});
+
+      final records = res.action!.data['records'] as List;
+      expect(records, hasLength(1));
+      expect(records.first['id'], 'diet-1');
+      expect(res.text, contains('已忽略'));
+      expect(res.text, contains('ghost-9'));
+    });
+
+    test('缺 ids / 空列表 / 非列表：统一校验失败', () async {
+      const expected = '参数校验失败：缺少 ids（要删除的饮食记录 id 列表，来自 get_recent_diets）';
+      expect((await service.executeTool('delete_diet_records', {})).text, expected);
+      expect(
+          (await service.executeTool('delete_diet_records', {'ids': []})).text,
+          expected);
+      expect(
+          (await service.executeTool('delete_diet_records', {'ids': 'oops'}))
+              .text,
+          expected);
+    });
+
+    test('get_recent_diets 输出带 [id:xxx]，供模型引用删除', () async {
+      seed('diet-abc');
+      final res = await service.executeTool('get_recent_diets', {'days': 7});
+      expect(res.text, contains('[id:diet-abc]'));
     });
   });
 }

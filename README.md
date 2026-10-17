@@ -131,10 +131,44 @@ Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · heal
 - `scripts/` 知识库导入脚本（`import_knowledge.py` v1.5.0）与种子（`scripts/knowledge_sources/`，含疾病—运动两层种子、用药安全种子、补剂种子、本体种子与开放动作库种子）
 - `docs/` 调研报告、设计规格、实施计划（`docs/superpowers/`）、**PIA 评估（`docs/research/`）**
 - `server/` FastAPI 云端服务（账号 auth + 双向同步 sync，Docker 一键部署）
-- `books/` 内置书籍资源
-- `assets/books/` 提取后的书籍文本
+- `books/` 内置书籍资源（原始文件）
+- `assets/books/` 提取后的书籍文本（**打包资产，仅限公有领域来源**，见下方第三方内容声明）
 
 ## 📝 说明
 - 数据本地加密缓存 + 云端同步，离线全功能可用，登录后自动多端同步
 - 云端可自部署：`server/` 提供 Dockerfile 与 deploy.sh（详见 server/DEPLOY.md）
 - AI 需自备 API Key（国内大模型均可），本地保存，不上传云端
+
+## 📄 开源协议
+本项目以 [MIT License](LICENSE) 发布，Copyright (c) 2026 leixinwng-maker。你可以自由使用、修改、分发（含商业用途），只需保留版权与许可声明。
+
+MIT 为「按现状（AS IS）」授权，不对内容准确性与使用后果作担保。本项目提供的健康、营养、用药与财务信息仅供参考，**不构成医疗诊断或投资建议**，请在专业人士指导下使用。
+
+## ⚖️ 第三方内容与数据来源声明
+内置知识库（`assets/data/evidence_kb.json`、`exercise_catalog.json`）与种子数据（`scripts/knowledge_sources/`）中的条目，均为**条目化改写或自撰转述**，不逐字复制原文，也不收录上游的图片、动图、视频等媒体资源。各来源及其许可如下：
+
+| 来源 | 许可 | 使用方式 |
+| --- | --- | --- |
+| 美国身体活动指南第 2 版（2018） | 美国政府作品，公有领域 | 要点改写 |
+| WHO《2020 身体活动与久坐行为指南》 | CC BY-NC-SA 3.0 IGO | 事实要点提取，不照搬表达 |
+| 中国《人群身体活动指南(2021)》 | 官方免费公开；全书版权归人民卫生出版社 | 条目化改写 |
+| ACSM《运动测试与运动处方指南》 | 商业出版物 | 仅引用要点，未逐字复制 |
+| 《中国居民膳食指南(2022)》 | 宝塔/准则免费公开；全书版权归人民卫生出版社 | 条目化改写 |
+| Compendium of Physical Activities 2024 | 免费商用，须署名，禁改 MET 值 | 保留原始 MET 数值并署名 |
+| Free Exercise DB | Unlicense（公共领域） | 仅取动作分类结构；中文名与要点自撰 |
+| hasaneyldrm/exercises-dataset | 数据部分 MIT | 仅取数据，不含图片/动图 |
+| Longhaul Exercises | MIT | 仅取动作数据，不含媒体 |
+| EXMO（Exercise Medicine Ontology） | CC BY 4.0 | 搬运原始 label/definition 并署名 |
+| RehabO（The Rehabilitation Ontology） | CC0 1.0 | 搬运原始 label/definition |
+| DOID（Human Disease Ontology） | CC0 | 仅用于疾病名称规范化对齐 |
+| ISSN Position Stands | CC BY 4.0 | 要点改写 |
+| 《黄帝内经》等中医典籍 | 古籍，公有领域 | 译文为自撰改写 |
+| 国家卫健委《新冠病毒感染者居家治疗常用药参考表》 | 政府公开发布 | 条目化改写 |
+| 国家药监局《第二批国家非处方药化学药品使用说明书目录》 | 官方公开发布 | 条目化改写，未复制整篇说明书 |
+| NIH ODS 膳食补充剂消费者事实清单 | 美国政府作品，公有领域（17 U.S.C. §105） | 条目化改写 |
+| FDA 消费者资讯 | 美国政府作品，公有领域（17 U.S.C. §105） | 条目化改写 |
+| EFSA 咖啡因安全性科学意见（2015） | 开放获取 | 条目化改写，标注出处 |
+
+**内置书籍通道**：`books/`（原始文件）与 `assets/books/`（提取文本）**仅允许公有领域或允许分发的开放许可来源**（如《黄帝内经》等古籍）。`assets/books/` 是打包资产，其中的文本会随 APK 分发，而 `.gitignore` 只保护代码仓库、不保护发布包，因此现代版权书籍不得放入；`scripts/extract_books.py` 已内置来源白名单闸门。
+
+**第三方软件**：Flutter 及所用 pub 包、FastAPI 等依赖均按其自身许可（MIT / BSD / Apache-2.0 等）使用，详见 `pubspec.lock` 与 `server/requirements.txt`。

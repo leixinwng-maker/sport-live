@@ -1,9 +1,20 @@
 # -*- coding: utf-8 -*-
-"""把 books/ 下的 epub/txt/md 提取为纯文本，输出到 assets/books/"""
+"""把 books/ 下的 epub/txt/md 提取为纯文本，输出到 assets/books/
+
+版权闸门：assets/books/ 是 pubspec.yaml 声明的打包资产，其中的文本会随 APK 分发。
+「不上传 GitHub」不构成豁免——.gitignore 只保护仓库，不保护发布包，分发 APK 中的
+书籍全文同样构成版权法意义上的复制与发行。因此只有明确属于公有领域或允许分发的
+开放许可来源，才可加入下方 ALLOWED_SOURCES 白名单；未列入者一律跳过。
+"""
 import os, re, zipfile, shutil, html
 
 SRC = os.path.join(os.path.dirname(__file__), '..', 'books')
 DST = os.path.join(os.path.dirname(__file__), '..', 'assets', 'books')
+
+# 白名单（相对 books/ 的路径，如 'tcm/黄帝内经.txt'）。
+# 默认留空：需逐个确认许可并显式登记后方可打包，避免现代版权书籍被无意分发。
+ALLOWED_SOURCES = {
+}
 
 os.makedirs(DST, exist_ok=True)
 
@@ -63,6 +74,10 @@ for domain in ['fitness', 'finance', 'tcm']:
             continue
         ext = os.path.splitext(name)[1].lower()
         if ext in ('.epub', '.txt', '.md'):
+            rel = f'{domain}/{name}'
+            if rel not in ALLOWED_SOURCES:
+                print(f'  SKIP {rel}：未在白名单中，跳过（版权闸门）')
+                continue
             try:
                 index += 1
                 process_file(filepath, domain, index)

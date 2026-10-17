@@ -17,7 +17,9 @@ import '../models/health_metric.dart';
 import '../models/health_report.dart';
 import '../models/health_data_extraction.dart';
 import '../models/evidence.dart';
+import '../models/adjustment_log.dart';
 import '../services/cloud_api.dart';
+import '../services/adaptive_goal_engine.dart';
 import '../services/database_helper.dart';
 import '../services/sync_engine.dart';
 import '../services/ai_engine.dart';
@@ -200,6 +202,13 @@ class AppProvider extends ChangeNotifier {
       // （平台守卫在内部：Windows/桌面 no-op；权限被拒不弹，走应用内卡片）
       await FollowupReminder.instance.init();
       await FollowupReminder.instance.rescheduleAll(healthReports);
+      // 阴阳动态平衡（v1.3.0）：本自然周首次启动时复盘上一周（幂等，内部静默容错）；
+      // 异步执行不阻塞启动，若目标被修正则重载并刷新界面
+      AdaptiveGoalEngine.runWeeklyReviewIfDue().then((changed) async {
+        if (!changed) return;
+        dietTarget = await _dietTargetStore.load();
+        notifyListeners();
+      });
     } catch (e) {
       error = e.toString();
     }
@@ -1046,9 +1055,23 @@ class AppProvider extends ChangeNotifier {
 
   // ============ FIT-7 每日营养目标 ============
   Future<void> saveDietTarget(DietTarget target) async {
+    final old = dietTarget;
     dietTarget = target;
     notifyListeners();
     await _dietTargetStore.save(target);
+    // 阴阳动态平衡（v1.3.0）：手动改热量中心值也留痕（日志只增，失败静默）
+    if (target.calories != old.calories) {
+      try {
+        await _db.saveAdjustmentLog(AdjustmentLog(
+          createdAt: DateTime.now(),
+          field: 'calories',
+          oldValue: old.calories.toStringAsFixed(0),
+          newValue: target.calories.toStringAsFixed(0),
+          reason: '手动调整热量目标',
+          source: 'manual',
+        ));
+      } catch (_) {}
+    }
   }
 
   // ============ FIT-7 断食 ============

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../providers/app_provider.dart';
 import '../../../services/diet_target.dart';
+import 'adjustment_history_sheet.dart';
 import '../../../services/diet_target_service.dart';
 import '../../../theme/taoist_theme.dart';
 
@@ -49,6 +50,15 @@ class DietTargetCard extends StatelessWidget {
                         fontSize: 15, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 TextButton.icon(
+                  onPressed: () => showAdjustmentHistorySheet(context),
+                  icon: const Icon(Icons.history, size: 16),
+                  label: const Text('历史'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: TaoistTheme.teaBrown,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                TextButton.icon(
                   onPressed: () => showDietTargetEditor(context, provider),
                   icon: const Icon(Icons.tune, size: 16),
                   label: const Text('设置'),
@@ -70,6 +80,14 @@ class DietTargetCard extends StatelessWidget {
                     : TaoistTheme.cloudGray,
               ),
             ),
+            if (target.hasCalorieTarget) ...[
+              const SizedBox(height: 4),
+              Text(
+                '动态区间 ${target.calorieLow.toStringAsFixed(0)} ~ ${target.calorieHigh.toStringAsFixed(0)} 千卡，每周复盘自动修正',
+                style: const TextStyle(
+                    fontSize: 11, color: TaoistTheme.cloudGray),
+              ),
+            ],
             const SizedBox(height: 12),
             for (int i = 0; i < progress.length; i++) ...[
               _TargetBar(
@@ -231,8 +249,13 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
               const Text('留空或填 0 表示不追踪该项',
                   style:
                       TextStyle(fontSize: 12, color: TaoistTheme.cloudGray)),
-              const SizedBox(height: 16),
-              _buildField(_caloriesController, '热量', '千卡',
+              const SizedBox(height: 6),
+              const Text(
+                  '热量以「中心值 ±100」动态区间生效：每周复盘按体重趋势与摄入自动修正，手动调整同样留痕',
+                  style:
+                      TextStyle(fontSize: 11, color: TaoistTheme.cloudGray)),
+              const SizedBox(height: 14),
+              _buildField(_caloriesController, '热量中心值', '千卡',
                   max: DietTarget.maxCalories),
               const SizedBox(height: 10),
               Wrap(
@@ -273,7 +296,17 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => showAdjustmentHistorySheet(context),
+                  icon: const Icon(Icons.history, size: 16),
+                  label: const Text('查看调整历史'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: TaoistTheme.teaBrown),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(

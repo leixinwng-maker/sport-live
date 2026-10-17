@@ -21,6 +21,8 @@ import '../models/health_profile.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
 import '../models/wearable.dart';
+import '../models/adjustment_log.dart';
+import '../models/weekly_summary.dart';
 import 'db_platform.dart';
 
 /// P2 云端化数据层（schema v10）。
@@ -61,7 +63,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 13,
+        version: 14,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -71,7 +73,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 13,
+        version: 14,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -327,6 +329,39 @@ class DatabaseHelper {
 
     // ---- FIT-1：训练计划表（走云端同步）----
     // days 为 JSON 文本：[{name, exercises:[{name,equipment,targetSets,targetReps,targetWeight}]}]
+    // 阴阳动态平衡（v1.3.0）：目标调整日志（只增不改不删）
+    await db.execute('''
+      CREATE TABLE adjustment_logs (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        field TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        reason TEXT NOT NULL,
+        observation TEXT,
+        source TEXT NOT NULL,
+        sync_version INTEGER NOT NULL DEFAULT 0,
+        sync_updated_at TEXT
+      )
+    ''');
+
+    // 阴阳动态平衡（v1.3.0）：周聚合快照（id = 周一起始 YYYY-MM-DD，同周幂等覆盖）
+    await db.execute('''
+      CREATE TABLE weekly_summaries (
+        id TEXT PRIMARY KEY,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        weight_slope REAL,
+        weight_delta REAL,
+        avg_intake REAL,
+        train_volume REAL,
+        real_tdee REAL,
+        status TEXT NOT NULL,
+        sync_version INTEGER NOT NULL DEFAULT 0,
+        sync_updated_at TEXT
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE workout_plans (
         id            TEXT PRIMARY KEY,
@@ -500,6 +535,39 @@ class DatabaseHelper {
           if (!e.toString().contains('duplicate column')) rethrow;
         }
       }
+    }
+    // v13 → v14：阴阳动态平衡（v1.3.0）——调整日志 + 周聚合快照两张新表。
+    // 新表用 IF NOT EXISTS，升级中断重试安全；无旧数据需迁移。
+    if (oldVersion < 14) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS adjustment_logs (
+          id TEXT PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          field TEXT NOT NULL,
+          old_value TEXT,
+          new_value TEXT,
+          reason TEXT NOT NULL,
+          observation TEXT,
+          source TEXT NOT NULL,
+          sync_version INTEGER NOT NULL DEFAULT 0,
+          sync_updated_at TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS weekly_summaries (
+          id TEXT PRIMARY KEY,
+          week_start TEXT NOT NULL,
+          week_end TEXT NOT NULL,
+          weight_slope REAL,
+          weight_delta REAL,
+          avg_intake REAL,
+          train_volume REAL,
+          real_tdee REAL,
+          status TEXT NOT NULL,
+          sync_version INTEGER NOT NULL DEFAULT 0,
+          sync_updated_at TEXT
+        )
+      ''');
     }
   }
 
@@ -832,6 +900,35 @@ class DatabaseHelper {
 
   Future<void> deleteDietRecord(String id) async {
     await _deleteSynced('diet_records', id);
+  }
+
+  // ============ 动态目标引擎操作（阴阳动态平衡 v1.3.0）============
+
+  /// 目标调整日志只增不改不删；写入走统一同步通道（云同步表无关，自动接入）
+  Future<String> saveAdjustmentLog(AdjustmentLog log) async {
+    final rowId = log.id ?? _uuid.v4();
+    await _upsertSynced('adjustment_logs', rowId, log.toMap());
+    return rowId;
+  }
+
+  Future<List<AdjustmentLog>> getAdjustmentLogs({int limit = 200}) async {
+    final db = await database;
+    final maps = await db.query('adjustment_logs',
+        orderBy: 'created_at DESC', limit: limit);
+    return maps.map(AdjustmentLog.fromMap).toList();
+  }
+
+  /// 周快照以周一起始日期为 id，同周重算幂等覆盖
+  Future<String> saveWeeklySummary(WeeklySummary summary) async {
+    await _upsertSynced('weekly_summaries', summary.id, summary.toMap());
+    return summary.id;
+  }
+
+  Future<List<WeeklySummary>> getWeeklySummaries({int limit = 52}) async {
+    final db = await database;
+    final maps = await db.query('weekly_summaries',
+        orderBy: 'week_start DESC', limit: limit);
+    return maps.map(WeeklySummary.fromMap).toList();
   }
 
   // ============ 断食记录（FIT-7）============
@@ -1185,7 +1282,8 @@ class DatabaseHelper {
       'finance_records', 'budgets', 'assets', 'debts',
       'knowledge_entries', 'books', 'book_notes',
       'life_status', 'ai_advice',
-      'health_profile', 'health_metrics', 'health_reports'
+      'health_profile', 'health_metrics', 'health_reports',
+      'adjustment_logs', 'weekly_summaries'
     ]) {
       exports[table] = await db.query(table);
     }

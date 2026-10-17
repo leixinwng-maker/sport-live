@@ -17,11 +17,16 @@ class DietTarget {
   /// 每日脂肪目标（克）
   final double fat;
 
+  /// 最近已复盘的自然周（周一起始 YYYY-MM-DD）；null = 从未复盘。
+  /// 阴阳动态平衡（v1.3.0）：周复盘引擎据此幂等触发，每周只复盘「上一周」。
+  final String? lastReviewWeek;
+
   const DietTarget({
     this.calories = 2000,
     this.protein = 120,
     this.carbs = 250,
     this.fat = 60,
+    this.lastReviewWeek,
   });
 
   /// 热量上限（防误输入）
@@ -63,17 +68,32 @@ class DietTarget {
   /// 是否设置了热量目标
   bool get hasCalorieTarget => calories > 0;
 
+  /// 动态波动区间半宽：目标以「中心值 ± 半宽」呈现，随周复盘滚动修正（v1.3.0）
+  static const double calorieBandHalf = 100;
+
+  /// 区间下限（不低于 0；未设目标时为 0）
+  double get calorieLow => calories <= 0
+      ? 0
+      : (calories - calorieBandHalf).clamp(0, maxCalories).toDouble();
+
+  /// 区间上限（未设目标时为 0）
+  double get calorieHigh => calories <= 0
+      ? 0
+      : (calories + calorieBandHalf).clamp(0, maxCalories).toDouble();
+
   DietTarget copyWith({
     double? calories,
     double? protein,
     double? carbs,
     double? fat,
+    String? lastReviewWeek,
   }) {
     return DietTarget(
       calories: calories == null ? this.calories : clampCalories(calories),
       protein: protein == null ? this.protein : clampMacro(protein),
       carbs: carbs == null ? this.carbs : clampMacro(carbs),
       fat: fat == null ? this.fat : clampMacro(fat),
+      lastReviewWeek: lastReviewWeek ?? this.lastReviewWeek,
     );
   }
 
@@ -84,14 +104,15 @@ class DietTarget {
           other.calories == calories &&
           other.protein == protein &&
           other.carbs == carbs &&
-          other.fat == fat;
+          other.fat == fat &&
+          other.lastReviewWeek == lastReviewWeek;
 
   @override
-  int get hashCode => Object.hash(calories, protein, carbs, fat);
+  int get hashCode => Object.hash(calories, protein, carbs, fat, lastReviewWeek);
 
   @override
   String toString() =>
-      'DietTarget(calories: $calories, protein: $protein, carbs: $carbs, fat: $fat)';
+      'DietTarget(calories: $calories, protein: $protein, carbs: $carbs, fat: $fat, lastReviewWeek: $lastReviewWeek)';
 }
 
 /// 每日营养目标的本地持久化（SharedPreferences）
@@ -103,6 +124,7 @@ class DietTargetStore {
   static const String _kProtein = 'diet_target_protein';
   static const String _kCarbs = 'diet_target_carbs';
   static const String _kFat = 'diet_target_fat';
+  static const String _kLastReviewWeek = 'diet_target_last_review_week';
 
   const DietTargetStore();
 
@@ -117,6 +139,7 @@ class DietTargetStore {
             DietTarget.clampMacro(sp.getDouble(_kProtein) ?? fallback.protein),
         carbs: DietTarget.clampMacro(sp.getDouble(_kCarbs) ?? fallback.carbs),
         fat: DietTarget.clampMacro(sp.getDouble(_kFat) ?? fallback.fat),
+        lastReviewWeek: sp.getString(_kLastReviewWeek),
       );
     } catch (_) {
       return fallback;
@@ -130,6 +153,10 @@ class DietTargetStore {
       await sp.setDouble(_kProtein, DietTarget.clampMacro(target.protein));
       await sp.setDouble(_kCarbs, DietTarget.clampMacro(target.carbs));
       await sp.setDouble(_kFat, DietTarget.clampMacro(target.fat));
+      final week = target.lastReviewWeek;
+      if (week != null) {
+        await sp.setString(_kLastReviewWeek, week);
+      }
     } catch (_) {
       // 写入失败不影响本次会话内的即时生效
     }

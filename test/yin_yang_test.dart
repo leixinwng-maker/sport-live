@@ -11,6 +11,8 @@ YinYangDayPoint day(
   double intake = 0,
   double? sleepHours,
   double? weight,
+  double? hrv,
+  double? restingHr,
 }) =>
     YinYangDayPoint(
       date: d,
@@ -19,6 +21,8 @@ YinYangDayPoint day(
       intake: intake,
       sleepHours: sleepHours,
       weight: weight,
+      hrv: hrv,
+      restingHr: restingHr,
     );
 
 void main() {
@@ -196,6 +200,121 @@ void main() {
     });
   });
 
+  // ---------- 个人基线判读（HRV / 静息心率，v1.3.1） ----------
+  group('个人基线判读', () {
+    // 基线窗口起点：判读窗（周一起）之前 35 天（基线 28 天 + 上周 7 天）
+    final bStart = mon.subtract(const Duration(days: 35));
+
+    List<YinYangDayPoint> baseline(
+      int days, {
+      double? hrv,
+      double? restingHr,
+    }) =>
+        List.generate(
+          days,
+          (i) => day(
+            bStart.add(Duration(days: i)),
+            hrv: hrv,
+            restingHr: restingHr,
+          ),
+        );
+
+    test('personalBaseline：样本足取均值，不足 14 天返回 null 静默', () {
+      final enough = baseline(20, hrv: 50);
+      expect(
+        YinYangService.personalBaseline(enough, (d) => d.hrv),
+        closeTo(50, 1e-9),
+      );
+      final sparse = baseline(10, hrv: 50);
+      expect(YinYangService.personalBaseline(sparse, (d) => d.hrv), isNull,
+          reason: '基线未成形应静默');
+      expect(
+        YinYangService.personalBaseline(const [], (d) => d.hrv),
+        isNull,
+      );
+    });
+
+    test('规则 3.5：HRV 低于基线 10% 且当日睡眠不足 → 降强度', () {
+      // 基线 HRV 50；判读窗最近一天 HRV 42（<45）+ 睡 6.5h
+      final days = [
+        day(mon, intake: 2000, sleepHours: 6.5, hrv: 48),
+        day(mon.add(const Duration(days: 1)), intake: 2000, sleepHours: 6.5,
+            hrv: 42),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(days: days, baselineDays: baseline(20, hrv: 50)),
+      );
+      expect(v.rule, 'hrv_drop');
+      expect(v.level, 'warn');
+      expect(v.text, contains('降强度或休整'));
+      expect(v.text, contains('16'), reason: '(1 − 42/50)×100 = 16%');
+    });
+
+    test('规则 3.5 不命中：HRV 低但睡够了（可能是噪声，静默）', () {
+      final days = [
+        day(mon, intake: 2000, sleepHours: 8, hrv: 42),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(days: days, baselineDays: baseline(20, hrv: 50)),
+      );
+      expect(v.rule, isNot('hrv_drop'));
+    });
+
+    test('规则 3.5 静默：基线样本不足 14 天', () {
+      final days = [
+        day(mon, intake: 2000, sleepHours: 6.5, hrv: 42),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(days: days, baselineDays: baseline(10, hrv: 50)),
+      );
+      expect(v.rule, isNot('hrv_drop'));
+    });
+
+    test('规则 3.6：静息心率连续两天高于基线 5 拍 → 预警', () {
+      // 基线静息心率 60；判读窗最近两天 66 / 67（> 65）
+      final days = [
+        day(mon, intake: 2000, sleepHours: 8, restingHr: 66),
+        day(mon.add(const Duration(days: 1)), intake: 2000, sleepHours: 8,
+            restingHr: 67),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(
+          days: days,
+          baselineDays: baseline(20, restingHr: 60),
+        ),
+      );
+      expect(v.rule, 'rhr_elevated');
+      expect(v.level, 'warn');
+      expect(v.text, contains('身体没缓过来'));
+    });
+
+    test('规则 3.6 不命中：仅单日超标', () {
+      final days = [
+        day(mon, intake: 2000, sleepHours: 8, restingHr: 66),
+        day(mon.add(const Duration(days: 1)), intake: 2000, sleepHours: 8),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(
+          days: days,
+          baselineDays: baseline(20, restingHr: 60),
+        ),
+      );
+      expect(v.rule, isNot('rhr_elevated'));
+    });
+
+    test('规则优先级：短睡优先于 HRV 骤降', () {
+      final days = [
+        day(mon, intake: 2000, sleepHours: 5, hrv: 42),
+        day(mon.add(const Duration(days: 1)), intake: 2000, sleepHours: 5,
+            hrv: 42),
+      ];
+      final v = YinYangRuleEngine.judge(
+        YinYangReading(days: days, baselineDays: baseline(20, hrv: 50)),
+      );
+      expect(v.rule, 'short_sleep');
+    });
+  });
+
   // ---------- 数据结构 ----------
   group('YinYangDayPoint', () {
     test('日期格式化与标签', () {
@@ -207,7 +326,7 @@ void main() {
     test('toMap / fromMap 往返', () {
       final p = day(DateTime(2026, 10, 17),
           trainVolume: 1234.5, activeEnergy: 300, intake: 2100,
-          sleepHours: 7.25, weight: 70.5);
+          sleepHours: 7.25, weight: 70.5, hrv: 48.2, restingHr: 58);
       final back = YinYangDayPoint.fromMap(p.toMap());
       expect(back.isoDate, p.isoDate);
       expect(back.trainVolume, closeTo(1234.5, 1e-9));
@@ -215,6 +334,8 @@ void main() {
       expect(back.intake, closeTo(2100, 1e-9));
       expect(back.sleepHours, closeTo(7.25, 1e-9));
       expect(back.weight, closeTo(70.5, 1e-9));
+      expect(back.hrv, closeTo(48.2, 1e-9));
+      expect(back.restingHr, closeTo(58, 1e-9));
     });
 
     test('hasTraining：容量或手表消耗任一非零', () {

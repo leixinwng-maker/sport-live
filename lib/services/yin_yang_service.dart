@@ -35,6 +35,30 @@ class YinYangService {
   /// 体重「平稳」判定：周内体重变化绝对值小于该值视为平稳
   static const double stableWeightKg = 0.4;
 
+  // ---- 个人基线（HRV / 静息心率）----
+  //
+  // 这类指标绝对值因人而异（HRV 30~100ms 都正常），不能定全局阈值，
+  // 只能「跟自己比」：取判读窗口之前 [baselineWindowDays] 天的个人均值
+  // 做基线；样本不足 [baselineMinSamples] 天时静默，不判读也不打扰。
+
+  /// 个人基线窗口长度（天）
+  static const int baselineWindowDays = 28;
+
+  /// 个人基线最少有效样本天数，不足则静默
+  static const int baselineMinSamples = 14;
+
+  /// HRV 低于个人基线的幅度阈值（基线的 10%）
+  static const double hrvDropRatio = 0.90;
+
+  /// HRV 下降规则要求当日睡眠不足该小时数（联合条件，降低误报）
+  static const double hrvLowSleepHours = 7;
+
+  /// 静息心率高于个人基线的幅度（拍）
+  static const double rhrElevatedBpm = 5;
+
+  /// 静息心率需要连续超标的有效样本天数
+  static const int rhrElevatedDays = 2;
+
   /// 一天的零点
   static DateTime _dayOf(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -74,10 +98,15 @@ class YinYangService {
       weightCount[k] = (weightCount[k] ?? 0) + 1;
     }
 
-    // ---- 睡眠 + 活动热量（穿戴） ----
+    // ---- 睡眠 + 活动热量 + HRV / 静息心率（穿戴） ----
     final samples = await db.getWearableSamples(from: start, to: end);
     final sleepByDay = <String, double>{};
     final energyByDay = <String, double>{};
+    // HRV / 静息心率一天可能有多个样本，取日均值
+    final hrvSum = <String, double>{};
+    final hrvCount = <String, int>{};
+    final rhrSum = <String, double>{};
+    final rhrCount = <String, int>{};
     for (final s in samples) {
       if (s.value == null) continue;
       if (_isSleepType(s.dataType)) {
@@ -86,6 +115,14 @@ class YinYangService {
       } else if (s.dataType == 'ACTIVE_ENERGY_BURNED') {
         final k = _iso(_dayOf(s.startTime));
         energyByDay[k] = (energyByDay[k] ?? 0) + s.value!;
+      } else if (s.dataType == 'HEART_RATE_VARIABILITY_SDNN') {
+        final k = _iso(_dayOf(s.startTime));
+        hrvSum[k] = (hrvSum[k] ?? 0) + s.value!;
+        hrvCount[k] = (hrvCount[k] ?? 0) + 1;
+      } else if (s.dataType == 'RESTING_HEART_RATE') {
+        final k = _iso(_dayOf(s.startTime));
+        rhrSum[k] = (rhrSum[k] ?? 0) + s.value!;
+        rhrCount[k] = (rhrCount[k] ?? 0) + 1;
       }
     }
 
@@ -103,6 +140,9 @@ class YinYangService {
             weight: weightCount.containsKey(k)
                 ? weightSum[k]! / weightCount[k]!
                 : null,
+            hrv: hrvCount.containsKey(k) ? hrvSum[k]! / hrvCount[k]! : null,
+            restingHr:
+                rhrCount.containsKey(k) ? rhrSum[k]! / rhrCount[k]! : null,
           );
         }(),
     ];
@@ -143,6 +183,23 @@ class YinYangService {
 
   /// 盈余（阴 − 阳）：为正表示摄入/恢复超过消耗
   static double surplus(YinYangDayPoint p) => yinKcal(p) - yangKcal(p);
+
+  /// 个人基线：基线窗口内 [pick] 指标的日均值再取均值
+  ///
+  /// 有效样本不足 [baselineMinSamples] 天时返回 null——基线未成形，
+  /// 对应规则静默（不判读也不打扰）。
+  static double? personalBaseline(
+    List<YinYangDayPoint> baselineDays,
+    double? Function(YinYangDayPoint) pick,
+  ) {
+    final values = baselineDays
+        .map(pick)
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList(growable: false);
+    if (values.length < baselineMinSamples) return null;
+    return values.fold<double>(0, (a, b) => a + b) / values.length;
+  }
 }
 
 /// 判读结果：一句话 + 严重级别
@@ -197,6 +254,16 @@ class YinYangRuleEngine {
         rule: 'short_sleep',
       );
     }
+
+    // ---- 规则 3.5：HRV 较个人基线骤降 + 当日睡眠不足 ----
+    // HRV 是「阴」（恢复力）最直接的生理信号，比睡眠时长更诚实；
+    // 绝对值因人而异，只跟自己的基线比，基线未成形时静默。
+    final hrvDrop = _judgeHrvDrop(reading);
+    if (hrvDrop != null) return hrvDrop;
+
+    // ---- 规则 3.6：静息心率连续两天高于个人基线 ----
+    final rhrElevated = _judgeRhrElevated(reading);
+    if (rhrElevated != null) return rhrElevated;
 
     // ---- 规则 1：阳周环比 +10% 且睡眠均值 < 7h ----
     final yang = days.fold<double>(
@@ -286,6 +353,67 @@ class YinYangRuleEngine {
       }
     }
     return false;
+  }
+
+  /// 规则 3.5：判读窗内最近一个有 HRV 的日子，HRV 低于个人基线
+  /// [YinYangService.hrvDropRatio] 且当日睡眠不足——恢复力塌了，降强度。
+  /// 任一条件不满足（含基线未成形）返回 null 静默。
+  static YinYangVerdict? _judgeHrvDrop(YinYangReading reading) {
+    final baseline = YinYangService.personalBaseline(
+        reading.baselineDays, (d) => d.hrv);
+    if (baseline == null) return null;
+
+    double? hrv;
+    double? sleep;
+    for (final d in reading.days) {
+      final h = d.hrv;
+      if (h != null && h > 0) {
+        hrv = h;
+        sleep = d.sleepHours;
+      }
+    }
+    if (hrv == null) return null;
+    if (hrv >= baseline * YinYangService.hrvDropRatio) return null;
+    if (sleep == null ||
+        sleep <= 0 ||
+        sleep >= YinYangService.hrvLowSleepHours) {
+      return null; // 睡够了但 HRV 偏低，可能是测量噪声，不判读
+    }
+    final drop = (1 - hrv / baseline) * 100;
+    return YinYangVerdict(
+      text: 'HRV 比你近四周均值低 ${drop.toStringAsFixed(0)}%，'
+          '昨晚睡眠只有 ${sleep.toStringAsFixed(1)} 小时——'
+          '阴分亏空，今天建议降强度或休整',
+      level: 'warn',
+      rule: 'hrv_drop',
+    );
+  }
+
+  /// 规则 3.6：判读窗内最近 [YinYangService.rhrElevatedDays] 个有静息心率
+  /// 的日子全部高于个人基线 [YinYangService.rhrElevatedBpm] 拍——身体在硬撑。
+  static YinYangVerdict? _judgeRhrElevated(YinYangReading reading) {
+    final baseline = YinYangService.personalBaseline(
+        reading.baselineDays, (d) => d.restingHr);
+    if (baseline == null) return null;
+
+    final recent = <double>[];
+    for (final d in reading.days.reversed) {
+      final v = d.restingHr;
+      if (v != null && v > 0) {
+        recent.add(v);
+        if (recent.length >= YinYangService.rhrElevatedDays) break;
+      }
+    }
+    if (recent.length < YinYangService.rhrElevatedDays) return null;
+    final threshold = baseline + YinYangService.rhrElevatedBpm;
+    if (!recent.every((v) => v > threshold)) return null;
+    return YinYangVerdict(
+      text: '静息心率连续两天高于基线 5 拍以上'
+          '（基线 ${baseline.toStringAsFixed(0)} 拍）——'
+          '身体没缓过来，注意睡眠与营养',
+      level: 'warn',
+      rule: 'rhr_elevated',
+    );
   }
 
   /// 是否存在连续 [count] 天盈余为正且逐日递增

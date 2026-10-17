@@ -29,6 +29,12 @@ class YinYangDayPoint {
   /// 当日体重（kg，多次取均值）；无数据为 null
   final double? weight;
 
+  /// 当日心率变异性 HRV SDNN 均值（毫秒）；无数据为 null
+  final double? hrv;
+
+  /// 当日静息心率均值（拍/分钟）；无数据为 null
+  final double? restingHr;
+
   const YinYangDayPoint({
     required this.date,
     this.trainVolume = 0,
@@ -36,6 +42,8 @@ class YinYangDayPoint {
     this.intake = 0,
     this.sleepHours,
     this.weight,
+    this.hrv,
+    this.restingHr,
   });
 
   /// 是否训练过（有容量或有手表锻炼消耗）
@@ -57,6 +65,8 @@ class YinYangDayPoint {
         'intake': intake,
         'sleep_hours': sleepHours,
         'weight': weight,
+        'hrv': hrv,
+        'resting_hr': restingHr,
       };
 
   factory YinYangDayPoint.fromMap(Map<String, dynamic> map) => YinYangDayPoint(
@@ -66,6 +76,8 @@ class YinYangDayPoint {
         intake: (map['intake'] as num?)?.toDouble() ?? 0,
         sleepHours: (map['sleep_hours'] as num?)?.toDouble(),
         weight: (map['weight'] as num?)?.toDouble(),
+        hrv: (map['hrv'] as num?)?.toDouble(),
+        restingHr: (map['resting_hr'] as num?)?.toDouble(),
       );
 }
 
@@ -77,9 +89,14 @@ class YinYangReading {
   /// 上一周的同期数据（用于「阳周环比 +10%」这类判定）；无则空列表
   final List<YinYangDayPoint> previousDays;
 
+  /// 个人基线窗口（判读窗口之前约 28 天），用于 HRV / 静息心率
+  /// 的「个人基线」对照——这类指标因人而异，只能跟自己比。
+  final List<YinYangDayPoint> baselineDays;
+
   const YinYangReading({
     required this.days,
     this.previousDays = const [],
+    this.baselineDays = const [],
   });
 
   bool get isEmpty => days.isEmpty;

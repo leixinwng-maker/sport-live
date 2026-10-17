@@ -104,15 +104,23 @@ class _YinYangCardState extends State<YinYangCard> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     const n = YinYangCard.windowDays;
-    final from = today.subtract(const Duration(days: n - 1));
+    const b = YinYangService.baselineWindowDays;
+    // 一次拉满 基线28天 + 上周7天 + 判读7天，减少 DB 往返
+    const total = b + n * 2;
+    final from = today.subtract(const Duration(days: total - 1));
 
-    final days = await YinYangService.buildDays(db, from, days: n);
-    final prevDays = await YinYangService.buildDays(
-        db, from.subtract(const Duration(days: n)), days: n);
+    final all = await YinYangService.buildDays(db, from, days: total);
+    final baselineDays = all.sublist(0, b); // today-b-n .. today-n-1
+    final prevDays = all.sublist(b, b + n); // 上周
+    final days = all.sublist(b + n); // 判读窗（含未来空日）
 
     final prevYang =
         prevDays.fold<double>(0, (s, d) => s + YinYangService.yangKcal(d));
-    final reading = YinYangReading(days: days, previousDays: prevDays);
+    final reading = YinYangReading(
+      days: days,
+      previousDays: prevDays,
+      baselineDays: baselineDays,
+    );
     final verdict = YinYangRuleEngine.judge(reading, previousYang: prevYang);
 
     return _YinYangView(
@@ -147,6 +155,28 @@ class _YinYangView {
   double? get sleepAvg {
     final s = days
         .map((d) => d.sleepHours)
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList(growable: false);
+    if (s.isEmpty) return null;
+    return s.fold<double>(0, (a, b) => a + b) / s.length;
+  }
+
+  /// 判读窗内日均 HRV（无数据为 null）
+  double? get hrvAvg {
+    final s = days
+        .map((d) => d.hrv)
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList(growable: false);
+    if (s.isEmpty) return null;
+    return s.fold<double>(0, (a, b) => a + b) / s.length;
+  }
+
+  /// 判读窗内日均静息心率（无数据为 null）
+  double? get rhrAvg {
+    final s = days
+        .map((d) => d.restingHr)
         .whereType<double>()
         .where((v) => v > 0)
         .toList(growable: false);
@@ -255,7 +285,7 @@ class _VerdictBar extends StatelessWidget {
   }
 }
 
-/// 脚注：日均睡眠 + 折算口径说明
+/// 脚注：日均睡眠 + HRV / 静息心率 + 折算口径说明
 class _Footnote extends StatelessWidget {
   final _YinYangView view;
 
@@ -263,12 +293,19 @@ class _Footnote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sleep = view.sleepAvg;
     final base = YinYangService.sleepBaselineHours.toStringAsFixed(0);
+    const caliber = '阳按训练容量折算，阴按摄入扣睡眠债';
+    final sleep = view.sleepAvg;
+    final parts = <String>[
+      if (sleep != null) '日均睡眠 ${sleep.toStringAsFixed(1)} 小时',
+      if (view.hrvAvg != null) 'HRV ${view.hrvAvg!.toStringAsFixed(0)} ms',
+      if (view.rhrAvg != null) '静息心率 ${view.rhrAvg!.toStringAsFixed(0)} 拍',
+    ];
+    final text = parts.isEmpty
+        ? '$caliber；未接入睡眠数据时阴债不计'
+        : '${parts.join(' · ')} · $caliber（$base 小时为基线）';
     return Text(
-      sleep == null
-          ? '阳按训练容量折算，阴按摄入扣睡眠债；未接入睡眠数据时阴债不计'
-          : '日均睡眠 ${sleep.toStringAsFixed(1)} 小时 · 阳按训练容量折算，阴按摄入扣睡眠债（$base 小时为基线）',
+      text,
       style: const TextStyle(fontSize: 10, color: TaoistTheme.cloudGray),
     );
   }

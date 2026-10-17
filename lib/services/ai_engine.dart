@@ -508,7 +508,8 @@ class AIEngine {
       if (lower.contains('tool') || lower.contains('function')) {
         throw ToolsUnsupportedException();
       }
-      throw Exception('AI请求失败: ${response.statusCode} $body');
+      // 400 但与 tools 无关：走统一中文映射，避免原始英文 JSON 直达用户
+      throw httpError(response.statusCode, body);
     } else {
       throw httpError(response.statusCode, response.body);
     }
@@ -562,8 +563,9 @@ class AIEngine {
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw Exception('鉴权失败（${response.statusCode}）：API Key 无效或已过期');
     }
-    throw Exception('请求失败：${response.statusCode} '
-        '${utf8.decode(response.bodyBytes, allowMalformed: true)}');
+    // 其余状态码统一走中文映射（截断 body，避免长段英文/HTML 直达用户）
+    throw httpError(
+        response.statusCode, utf8.decode(response.bodyBytes, allowMalformed: true));
   }
 
   /// 降级请求：不带 tools（消息里可能含注入的数据上下文）

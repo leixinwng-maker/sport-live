@@ -70,6 +70,9 @@ class _LoginScreenState extends State<LoginScreen> {
       Provider.of<AppProvider>(context, listen: false).completeLogin();
     } on ApiException catch (e) {
       setState(() => _error = e.message);
+    } catch (e) {
+      // 非服务端异常（本地安全存储等）：统一中文兜底，避免英文技术细节透出
+      setState(() => _error = '登录失败：请检查网络与服务器地址后重试\n$e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

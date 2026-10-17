@@ -41,7 +41,7 @@ class CloudSyncScreen extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败: $e')),
+        SnackBar(content: Text('导出失败：本地备份写入失败，请检查存储空间后重试\n$e')),
       );
     }
   }

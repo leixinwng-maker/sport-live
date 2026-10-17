@@ -1049,11 +1049,11 @@
       "kind": "数据集",
       "domain": "综合健康与健身行为",
       "scale": "约 20,000 行；Final_data.csv（约 10.33 MB）+ meal_metadata.csv",
-      "license": "未确认",
+      "license": "Apache 2.0（依 OpenBayes / Hyper.ai 镜像页标注）",
       "access": "登记题录",
       "url": "",
       "dataUrl": "",
-      "note": "融合健身房训练（BPM、时长、卡路里、体脂、饮水、频率、经验等级、BMI）与饮食（餐次、膳食类型、宏量营养素）；规范数据页与许可未能证实，仅登记线索。"
+      "note": "融合健身房训练（BPM、时长、卡路里、体脂、饮水、频率、经验等级、BMI）与饮食（餐次、膳食类型、宏量营养素）；原始 Kaggle 数据集页已下架，规范入口与许可未能二次证实，仅登记线索。"
     },
     {
       "id": "metabolic-walking-nutrition",
@@ -1067,6 +1067,84 @@
       "url": "https://knowledge.e.southern.edu/datasets/1/",
       "dataUrl": "",
       "note": "南方复临大学机构库收录（配套 IJERPH 论文）；页面标注当前不可获取，许可与规模未披露。"
+    },
+    {
+      "id": "scopesense",
+      "name": "ScopeSense 运动-营养-生活日志数据集",
+      "nameEn": "ScopeSense: An 8.5-Month Sport, Nutrition, and Lifestyle Lifelogging Dataset",
+      "kind": "数据集",
+      "domain": "纵向运动与营养",
+      "scale": "2 名个体 × 8.5 个月；传感器数据流 + 营养、训练与幸福感记录（约 2.3 GB）",
+      "license": "CC BY 4.0",
+      "access": "可接入",
+      "url": "https://osf.io/v5acr/",
+      "dataUrl": "https://osf.io/v5acr/",
+      "note": "纵向 lifelogging 样本：同一批个体多时间点的营养、训练与幸福感数据，官方声明 fully open for researchers；配套论文见 https://osf.io/8z5gc/，Simula 数据集页同步收录（https://datasets.simula.no/）。样本量仅 2 人，宜作方法验证而非人群推断。"
+    },
+    {
+      "id": "pmdata",
+      "name": "PMData 运动日志数据集",
+      "nameEn": "PMData: A Sports Logging Dataset",
+      "kind": "数据集",
+      "domain": "纵向运动与健康",
+      "scale": "16 人 × 5 个月；Fitbit Versa 2 逐分钟心率与活动强度、睡眠评分、PMSys 训练记录、Google Forms 主观报告",
+      "license": "CC BY-NC 4.0（论文标注）/ CC BY 4.0（Simula 数据集页标注，两处不一致）",
+      "access": "可接入",
+      "url": "https://datasets.simula.no/pmdata/",
+      "dataUrl": "https://osf.io/vx4bk/",
+      "note": "官方明确可用于 exercise、sleep 与 body weight 关联分析；逐分钟心率与 sRPE 维度细。许可在论文（CC BY-NC 4.0）与 Simula 数据集页（CC BY 4.0）标注不一致，接入前须以 OSF 项目当前声明为准并核实商用合规性。"
+    },
+    {
+      "id": "mm-fit",
+      "name": "MM-Fit 多模态全身训练数据集",
+      "nameEn": "MM-Fit: Multimodal Deep Learning for Automatic Exercise Logging Across Sensing Devices",
+      "kind": "数据集",
+      "domain": "动作识别与训练量量化",
+      "scale": "800+ 分钟多模态数据；5 台时间同步设备（智能手机/智能手表/耳机惯性传感器 + RGB-D 视频）",
+      "license": "未确认",
+      "access": "可接入",
+      "url": "https://mmfit.github.io/",
+      "dataUrl": "https://s3.eu-west-2.amazonaws.com/vradu.uk/mm-fit.zip",
+      "note": "首个多模态全身训练数据集，涵盖深蹲、俯卧撑、哑铃推举、弓步等 10 类抗阻与自重动作及重复次数标注；RGB-D 另在 Zenodo（https://zenodo.org/records/7672767）。仓库许可未明确声明，接入前须核实。"
+    },
+    {
+      "id": "repcount",
+      "name": "RepCount 重复动作计数数据集",
+      "nameEn": "RepCount: Repetition Action Counting Dataset",
+      "kind": "数据集",
+      "domain": "动作识别与训练量量化",
+      "scale": "1,451 段视频（Part-A 1,041 来自 YouTube；含训练/田径/日常动作），逐帧起止与重复次数标注",
+      "license": "未确认（学术用途发布）",
+      "access": "可接入",
+      "url": "https://svip-lab.github.io/dataset/RepCount_dataset.html",
+      "dataUrl": "",
+      "note": "上海科技大学 SVIP 实验室发布，覆盖开合跳、卧推、深蹲等；官方按训练/验证/测试划分（758/132/151）。下载经 OneDrive / 百度网盘分发且页面未标许可，接入前须核实。"
+    },
+    {
+      "id": "wger-api",
+      "name": "wger 运动数据库开放接口",
+      "nameEn": "wger Workout Manager REST API",
+      "kind": "开源软件",
+      "domain": "健身动作知识库",
+      "scale": "800+ 动作，多语言名称、目标肌群、器械与分类",
+      "license": "AGPL-3.0（服务端）/ 数据依其条款开放读取",
+      "access": "可接入",
+      "url": "https://wger.de/",
+      "dataUrl": "https://wger.de/api/v2/",
+      "note": "读取无需认证，可作为「训练类型/动作属性」的背景字典与本地动作库做关联映射；注意服务端为 AGPL-3.0，若二次分发需遵守其传染性条款。"
+    },
+    {
+      "id": "four-week-fitness-transformation",
+      "name": "四周健身转型计划数据集（合成）",
+      "nameEn": "4-Week Fitness Transformation Program",
+      "kind": "数据集",
+      "domain": "身体成分与减脂",
+      "scale": "合成数据；1,000 名参与者 × 4 周逐周快照（体重、BMI、体脂率、腰围、日热量摄入、蛋白质、训练指标）",
+      "license": "未确认（Kaggle 页面；合成数据）",
+      "access": "登记题录",
+      "url": "",
+      "dataUrl": "",
+      "note": "⚠️ 合成数据（synthetic），生理逻辑经人为设计，仅可用于方法演示、原型验证或教学，不得作为真实世界证据；规范数据集页链接未能证实，仅登记线索，需自行检索核实。"
     }
   ]
 }

@@ -17,7 +17,7 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.2
   provider: ^6.1.1
-  intl: ^0.18.1
+  intl: ^0.19.0
   cupertino_icons: ^1.0.6
   dio: ^5.4.0
   # P2 云端化新增：UUID 主键 / 安全存储 / 生物识别锁 / SQLCipher 加密 / 网络状态感知
@@ -42,6 +42,10 @@ dependencies:
   speech_to_text: ^7.5.0
   flutter_local_notifications: ^22.3.1
   timezone: ^0.11.1
+  # v1.3.2 Genkit 技术落地：官方 Dart SDK（genkit 1.0.0 GA，支持 Flutter 客户端直连）
+  genkit: ^1.0.0
+  # OpenAI 兼容插件：覆盖项目预设的通义 compatible-mode / DeepSeek / 文心端点
+  genkit_openai: ^1.0.0
 
 dev_dependencies:
   flutter_test:

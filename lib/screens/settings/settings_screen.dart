@@ -255,6 +255,7 @@ class SettingsScreen extends StatelessWidget {
                             '蛋白 ${provider.dietTarget.protein.toStringAsFixed(0)}g · '
                             '碳水 ${provider.dietTarget.carbs.toStringAsFixed(0)}g · '
                             '脂肪 ${provider.dietTarget.fat.toStringAsFixed(0)}g'
+                            '${provider.dietTarget.hasCarbCycle ? ' · 碳水循环' : ''}'
                         : '未设置，点击配置热量与三大营养素',
                   ),
                   trailing: const Icon(Icons.chevron_right),

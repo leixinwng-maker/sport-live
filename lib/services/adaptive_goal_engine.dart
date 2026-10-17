@@ -164,7 +164,11 @@ class AdaptiveGoalEngine {
             target.calories * smoothOld + summary.realTdee! * (1 - smoothOld));
         final delta = newCenter - target.calories;
         if (target.hasCalorieTarget && delta.abs() >= minApplyDelta) {
-          updated = updated.copyWith(calories: newCenter);
+          // 碳水循环（v1.3.1）：休息日中心值按同比例跟随，保持训练日 / 休息日落差
+          updated = updated.copyWith(calories: newCenter).scaleRestFrom(
+                target.calories,
+                newCenter,
+              );
           changed = true;
           await db.saveAdjustmentLog(AdjustmentLog(
             createdAt: now,

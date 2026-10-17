@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ai_planner/models/diet.dart';
+import 'package:ai_planner/models/workout.dart';
 import 'package:ai_planner/services/diet_target.dart';
 import 'package:ai_planner/services/diet_target_service.dart';
 
@@ -333,6 +334,215 @@ void main() {
             const DietIntake(calories: 500), const DietTarget(calories: 0)),
         '未设置热量目标',
       );
+    });
+  });
+
+  group('碳水循环（v1.3.1）', () {
+    test('默认关闭：carbCycleEnabled=false / 休息日两栏为 0 / hasCarbCycle=false', () {
+      const t = DietTarget();
+      expect(t.carbCycleEnabled, false);
+      expect(t.restCalories, 0);
+      expect(t.restCarbs, 0);
+      expect(t.hasCarbCycle, false);
+    });
+
+    test('hasCarbCycle：开关开但两栏都留 0 视为未生效', () {
+      const off = DietTarget(restCalories: 1800, restCarbs: 200);
+      expect(off.hasCarbCycle, false, reason: '开关未开，字段有值也不生效');
+      const empty = DietTarget(carbCycleEnabled: true);
+      expect(empty.hasCarbCycle, false, reason: '开关开了但没数据，视为未生效');
+      const withCal = DietTarget(carbCycleEnabled: true, restCalories: 1800);
+      expect(withCal.hasCarbCycle, true);
+      const withCarb = DietTarget(carbCycleEnabled: true, restCarbs: 200);
+      expect(withCarb.hasCarbCycle, true);
+    });
+
+    test('forDay：未开启时原样返回（含 identical）', () {
+      const t = DietTarget(calories: 2200, carbs: 300);
+      final rest = t.forDay(trainingDay: false);
+      expect(identical(rest, t), true, reason: '未开启碳水循环应零开销原样返回');
+    });
+
+    test('forDay：训练日用训练日中心值，休息日用休息日中心值', () {
+      const t = DietTarget(
+        calories: 2400,
+        carbs: 300,
+        carbCycleEnabled: true,
+        restCalories: 2000,
+        restCarbs: 200,
+      );
+      final train = t.forDay(trainingDay: true);
+      expect(train.calories, 2400);
+      expect(train.carbs, 300);
+      final rest = t.forDay(trainingDay: false);
+      expect(rest.calories, 2000);
+      expect(rest.carbs, 200);
+      expect(rest.protein, t.protein, reason: '蛋白质 / 脂肪不参与循环');
+      expect(rest.fat, t.fat);
+    });
+
+    test('forDay：休息日某栏留 0 时沿用训练日中心值', () {
+      const t = DietTarget(
+        calories: 2400,
+        carbs: 300,
+        carbCycleEnabled: true,
+        restCalories: 2000,
+        restCarbs: 0,
+      );
+      final rest = t.forDay(trainingDay: false);
+      expect(rest.calories, 2000);
+      expect(rest.carbs, 300, reason: '休息日碳水留 0 表示沿用训练日');
+    });
+
+    test('forDay：休息日中心值越界时封顶，负值视为未设置', () {
+      const t = DietTarget(
+        calories: 2400,
+        carbs: 300,
+        carbCycleEnabled: true,
+        restCalories: 99999,
+        restCarbs: -5,
+      );
+      final rest = t.forDay(trainingDay: false);
+      expect(rest.calories, DietTarget.maxCalories, reason: '越界正值封顶');
+      expect(rest.carbs, 300, reason: '负值等价未设置（<=0），沿用训练日碳水');
+    });
+
+    test('scaleRestFrom：只同步休息日热量，训练日热量由 copyWith 负责', () {
+      const t = DietTarget(
+        calories: 2000,
+        carbCycleEnabled: true,
+        restCalories: 1600,
+      );
+      // 引擎中的调用顺序：copyWith(calories: 新值) 再 scaleRestFrom(旧值, 新值)
+      final scaled = t.copyWith(calories: 2200).scaleRestFrom(2000, 2200);
+      expect(scaled.calories, 2200);
+      expect(scaled.restCalories, closeTo(1760, 0.01), reason: '1600 × 1.1');
+    });
+
+    test('scaleRestFrom：未设置休息日热量或旧值为 0 时不变', () {
+      const noRest = DietTarget(calories: 2000, carbCycleEnabled: true);
+      expect(identical(noRest.scaleRestFrom(2000, 2200), noRest), true);
+      const t = DietTarget(carbCycleEnabled: true, restCalories: 1600);
+      expect(identical(t.scaleRestFrom(0, 2200), t), true, reason: '旧中心值 0 无法算比例');
+    });
+
+    test('copyWith：碳水循环字段未传保持，传入收敛', () {
+      const t = DietTarget();
+      final u = t.copyWith(
+        carbCycleEnabled: true,
+        restCalories: 99999,
+        restCarbs: 180,
+      );
+      expect(u.carbCycleEnabled, true);
+      expect(u.restCalories, DietTarget.maxCalories, reason: '越界封顶');
+      expect(u.restCarbs, 180);
+      expect(u.calories, t.calories, reason: '未传字段保持');
+      final v = u.copyWith();
+      expect(v, u);
+    });
+
+    test('== / hashCode：碳水循环字段参与比较', () {
+      const a = DietTarget(carbCycleEnabled: true, restCalories: 1800);
+      const b = DietTarget(carbCycleEnabled: true, restCalories: 1800);
+      const c = DietTarget(carbCycleEnabled: true, restCalories: 1600);
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a == c, false);
+      expect(a == const DietTarget(carbCycleEnabled: true), false);
+    });
+
+    test('持久化往返：碳水循环三字段 save → load 一致', () async {
+      const store = DietTargetStore();
+      const t = DietTarget(
+        calories: 2400,
+        carbCycleEnabled: true,
+        restCalories: 2000,
+        restCarbs: 220,
+      );
+      await store.save(t);
+      final loaded = await store.load();
+      expect(loaded.carbCycleEnabled, true);
+      expect(loaded.restCalories, 2000);
+      expect(loaded.restCarbs, 220);
+      expect(loaded, t);
+    });
+
+    test('老版本数据（无碳水循环键）load 回落默认值', () async {
+      // 只写入老版本存在的键，模拟升级前的存储
+      SharedPreferences.setMockInitialValues({
+        'diet_target_calories': 1800.0,
+        'diet_target_protein': 100.0,
+        'diet_target_carbs': 200.0,
+        'diet_target_fat': 50.0,
+      });
+      const store = DietTargetStore();
+      final loaded = await store.load();
+      expect(loaded.calories, 1800);
+      expect(loaded.carbCycleEnabled, false);
+      expect(loaded.restCalories, 0);
+      expect(loaded.restCarbs, 0);
+    });
+
+    test('isTrainingDay：同日有容量训练为训练日', () {
+      final day = DateTime(2026, 10, 17);
+      Workout workout(DateTime date, double weight) => Workout(
+            date: date,
+            type: '力量',
+            exercises: [
+              Exercise(name: '深蹲', sets: 3, reps: 10, weight: weight),
+            ],
+            duration: 30,
+            intensity: 2,
+          );
+      final workouts = [
+        workout(DateTime(2026, 10, 15), 100),
+        workout(DateTime(2026, 10, 17), 80),
+      ];
+      expect(DietTargetService.isTrainingDay(workouts, day), true);
+      expect(
+        DietTargetService.isTrainingDay(workouts, DateTime(2026, 10, 16)),
+        false,
+        reason: '隔天是休息日',
+      );
+      expect(
+        DietTargetService.isTrainingDay([workout(day, 0)], day),
+        false,
+        reason: '容量为 0（空记录 / 自重未计）不算训练日',
+      );
+      expect(
+        DietTargetService.isTrainingDay(const [], day),
+        false,
+      );
+    });
+
+    test('resolveTargetFor：训练日 / 休息日整链解析', () {
+      final day = DateTime(2026, 10, 17);
+      final restDay = DateTime(2026, 10, 18);
+      final workout = Workout(
+        date: day,
+        type: '力量',
+        exercises: [Exercise(name: '卧推', sets: 5, reps: 8, weight: 60)],
+        duration: 40,
+        intensity: 2,
+      );
+      const t = DietTarget(
+        calories: 2400,
+        carbCycleEnabled: true,
+        restCalories: 2000,
+        restCarbs: 200,
+      );
+      final trainTarget =
+          DietTargetService.resolveTargetFor(t, [workout], day);
+      expect(trainTarget.calories, 2400);
+      final restTarget =
+          DietTargetService.resolveTargetFor(t, [workout], restDay);
+      expect(restTarget.calories, 2000);
+      expect(restTarget.carbs, 200);
+      // 未开启碳水循环：休息日原样返回
+      const plain = DietTarget(calories: 2400);
+      final plainRest =
+          DietTargetService.resolveTargetFor(plain, const [], restDay);
+      expect(plainRest.calories, 2400);
     });
   });
 }

@@ -1,4 +1,5 @@
 import '../models/diet.dart';
+import '../models/workout.dart';
 import 'diet_target.dart';
 
 /// 某一日已摄入的营养合计
@@ -114,6 +115,25 @@ class DietTargetService {
   /// 是否为同一天（只比年月日）
   static bool isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// 碳水循环（v1.3.1）：判定 [date] 当天是否为训练日。
+  ///
+  /// 依据：当天存在已产生容量（[Workout.totalVolume] > 0）的训练会话。
+  /// 纯函数、无 IO，便于单测。
+  static bool isTrainingDay(List<Workout> workouts, DateTime date) {
+    for (final w in workouts) {
+      if (isSameDay(w.date, date) && w.totalVolume > 0) return true;
+    }
+    return false;
+  }
+
+  /// 按 [date] 是否训练日，解析出当日实际生效的目标（未开启碳水循环则原样返回）
+  static DietTarget resolveTargetFor(
+    DietTarget target,
+    List<Workout> workouts,
+    DateTime date,
+  ) =>
+      target.forDay(trainingDay: isTrainingDay(workouts, date));
 
   /// 汇总某一日全部餐次的摄入
   static DietIntake summarize(List<DietRecord> records, DateTime date) {

@@ -21,12 +21,24 @@ class DietTarget {
   /// 阴阳动态平衡（v1.3.0）：周复盘引擎据此幂等触发，每周只复盘「上一周」。
   final String? lastReviewWeek;
 
+  /// 碳水循环开关（v1.3.1）：开启后训练日 / 休息日各持一套热量与碳水中心值。
+  final bool carbCycleEnabled;
+
+  /// 休息日热量中心值（千卡）；0 = 沿用训练日中心值。
+  final double restCalories;
+
+  /// 休息日碳水中心值（克）；0 = 沿用训练日中心值。
+  final double restCarbs;
+
   const DietTarget({
     this.calories = 2000,
     this.protein = 120,
     this.carbs = 250,
     this.fat = 60,
     this.lastReviewWeek,
+    this.carbCycleEnabled = false,
+    this.restCalories = 0,
+    this.restCarbs = 0,
   });
 
   /// 热量上限（防误输入）
@@ -81,12 +93,43 @@ class DietTarget {
       ? 0
       : (calories + calorieBandHalf).clamp(0, maxCalories).toDouble();
 
+  /// 碳水循环是否实质生效：开关开启且至少填了一项休息日中心值
+  bool get hasCarbCycle => carbCycleEnabled && (restCalories > 0 || restCarbs > 0);
+
+  /// 按「是否训练日」解析出当日实际生效的目标。
+  ///
+  /// 纯函数、无 IO：未开启碳水循环或休息日该字段留 0 时，原样沿用训练日中心值，
+  /// 保证老版本数据（无碳水循环字段）行为完全不变。
+  DietTarget forDay({required bool trainingDay}) {
+    if (!hasCarbCycle || trainingDay) return this;
+    return DietTarget(
+      calories: restCalories > 0 ? clampCalories(restCalories) : calories,
+      protein: protein,
+      carbs: restCarbs > 0 ? clampMacro(restCarbs) : carbs,
+      fat: fat,
+      lastReviewWeek: lastReviewWeek,
+      carbCycleEnabled: carbCycleEnabled,
+      restCalories: restCalories,
+      restCarbs: restCarbs,
+    );
+  }
+
+  /// 周复盘修正时按比例同步休息日中心值（保持训练日 / 休息日的落差不变）
+  DietTarget scaleRestFrom(double oldCalories, double newCalories) {
+    if (restCalories <= 0 || oldCalories <= 0) return this;
+    final ratio = newCalories / oldCalories;
+    return copyWith(restCalories: clampCalories(restCalories * ratio));
+  }
+
   DietTarget copyWith({
     double? calories,
     double? protein,
     double? carbs,
     double? fat,
     String? lastReviewWeek,
+    bool? carbCycleEnabled,
+    double? restCalories,
+    double? restCarbs,
   }) {
     return DietTarget(
       calories: calories == null ? this.calories : clampCalories(calories),
@@ -94,6 +137,10 @@ class DietTarget {
       carbs: carbs == null ? this.carbs : clampMacro(carbs),
       fat: fat == null ? this.fat : clampMacro(fat),
       lastReviewWeek: lastReviewWeek ?? this.lastReviewWeek,
+      carbCycleEnabled: carbCycleEnabled ?? this.carbCycleEnabled,
+      restCalories:
+          restCalories == null ? this.restCalories : clampCalories(restCalories),
+      restCarbs: restCarbs == null ? this.restCarbs : clampMacro(restCarbs),
     );
   }
 
@@ -105,14 +152,20 @@ class DietTarget {
           other.protein == protein &&
           other.carbs == carbs &&
           other.fat == fat &&
-          other.lastReviewWeek == lastReviewWeek;
+          other.lastReviewWeek == lastReviewWeek &&
+          other.carbCycleEnabled == carbCycleEnabled &&
+          other.restCalories == restCalories &&
+          other.restCarbs == restCarbs;
 
   @override
-  int get hashCode => Object.hash(calories, protein, carbs, fat, lastReviewWeek);
+  int get hashCode => Object.hash(calories, protein, carbs, fat, lastReviewWeek,
+      carbCycleEnabled, restCalories, restCarbs);
 
   @override
   String toString() =>
-      'DietTarget(calories: $calories, protein: $protein, carbs: $carbs, fat: $fat, lastReviewWeek: $lastReviewWeek)';
+      'DietTarget(calories: $calories, protein: $protein, carbs: $carbs, fat: $fat, '
+      'lastReviewWeek: $lastReviewWeek, carbCycle: $carbCycleEnabled, '
+      'restCalories: $restCalories, restCarbs: $restCarbs)';
 }
 
 /// 每日营养目标的本地持久化（SharedPreferences）
@@ -125,6 +178,9 @@ class DietTargetStore {
   static const String _kCarbs = 'diet_target_carbs';
   static const String _kFat = 'diet_target_fat';
   static const String _kLastReviewWeek = 'diet_target_last_review_week';
+  static const String _kCarbCycle = 'diet_target_carb_cycle';
+  static const String _kRestCalories = 'diet_target_rest_calories';
+  static const String _kRestCarbs = 'diet_target_rest_carbs';
 
   const DietTargetStore();
 
@@ -140,6 +196,12 @@ class DietTargetStore {
         carbs: DietTarget.clampMacro(sp.getDouble(_kCarbs) ?? fallback.carbs),
         fat: DietTarget.clampMacro(sp.getDouble(_kFat) ?? fallback.fat),
         lastReviewWeek: sp.getString(_kLastReviewWeek),
+        // 老版本无此三键：读到 null 回落默认（关闭 / 0 / 0），行为不变
+        carbCycleEnabled: sp.getBool(_kCarbCycle) ?? fallback.carbCycleEnabled,
+        restCalories: DietTarget.clampCalories(
+            sp.getDouble(_kRestCalories) ?? fallback.restCalories),
+        restCarbs:
+            DietTarget.clampMacro(sp.getDouble(_kRestCarbs) ?? fallback.restCarbs),
       );
     } catch (_) {
       return fallback;
@@ -157,6 +219,11 @@ class DietTargetStore {
       if (week != null) {
         await sp.setString(_kLastReviewWeek, week);
       }
+      // 碳水循环（v1.3.1）：训练日 / 休息日双 center
+      await sp.setBool(_kCarbCycle, target.carbCycleEnabled);
+      await sp.setDouble(
+          _kRestCalories, DietTarget.clampCalories(target.restCalories));
+      await sp.setDouble(_kRestCarbs, DietTarget.clampMacro(target.restCarbs));
     } catch (_) {
       // 写入失败不影响本次会话内的即时生效
     }

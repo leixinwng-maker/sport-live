@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/lunar_service.dart';
 import '../theme/taoist_theme.dart';
+import 'home/widgets/yin_yang_card.dart';
 import 'workout/workout_list_screen.dart';
 import 'workout/workout_session_screen.dart';
 import 'diet/diet_list_screen.dart';
@@ -139,6 +140,8 @@ class DashboardScreen extends StatelessWidget {
                     _buildLunarCard(context, provider),
                     const SizedBox(height: 16),
                     _buildStatsRow(provider),
+                    const SizedBox(height: 16),
+                    const YinYangCard(),
                     const SizedBox(height: 16),
                     _buildHealthAssessmentCard(context, provider),
                     const SizedBox(height: 16),

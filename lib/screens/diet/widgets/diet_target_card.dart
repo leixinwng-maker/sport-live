@@ -29,7 +29,11 @@ class DietTargetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final day = date ?? DateTime.now();
-    final target = provider.dietTarget;
+    // 碳水循环（v1.3.1）：训练日 / 休息日各持一套中心值，随当日训练记录自动切换
+    final base = provider.dietTarget;
+    final trainingDay =
+        DietTargetService.isTrainingDay(provider.workouts, day);
+    final target = base.forDay(trainingDay: trainingDay);
     final intake = DietTargetService.summarize(provider.dietRecords, day);
     final progress = DietTargetService.progress(intake, target);
 
@@ -48,6 +52,8 @@ class DietTargetCard extends StatelessWidget {
                 const Text('今日营养目标',
                     style: TextStyle(
                         fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                _DayBadge(trainingDay: trainingDay, cycling: base.hasCarbCycle),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => showAdjustmentHistorySheet(context),
@@ -98,6 +104,35 @@ class DietTargetCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 当日身份徽标：训练日 / 休息日（仅在碳水循环开启时着色区分）
+class _DayBadge extends StatelessWidget {
+  const _DayBadge({required this.trainingDay, required this.cycling});
+
+  final bool trainingDay;
+  final bool cycling;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = trainingDay ? '训练日' : '休息日';
+    final color = !cycling
+        ? TaoistTheme.cloudGray
+        : trainingDay
+            ? const Color(0xFFC05746)
+            : TaoistTheme.jadeGreen;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: cycling ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 11, color: color),
       ),
     );
   }
@@ -190,6 +225,9 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
   late final TextEditingController _proteinController;
   late final TextEditingController _carbsController;
   late final TextEditingController _fatController;
+  late final TextEditingController _restCaloriesController;
+  late final TextEditingController _restCarbsController;
+  late bool _carbCycle;
 
   @override
   void initState() {
@@ -201,6 +239,11 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
         TextEditingController(text: t.protein.toStringAsFixed(0));
     _carbsController = TextEditingController(text: t.carbs.toStringAsFixed(0));
     _fatController = TextEditingController(text: t.fat.toStringAsFixed(0));
+    _restCaloriesController =
+        TextEditingController(text: t.restCalories.toStringAsFixed(0));
+    _restCarbsController =
+        TextEditingController(text: t.restCarbs.toStringAsFixed(0));
+    _carbCycle = t.carbCycleEnabled;
   }
 
   @override
@@ -209,7 +252,21 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
     _proteinController.dispose();
     _carbsController.dispose();
     _fatController.dispose();
+    _restCaloriesController.dispose();
+    _restCarbsController.dispose();
     super.dispose();
+  }
+
+  /// 休息日两栏一键按训练日比例下浮（热量 −15% / 碳水 −25%），省去手算
+  void _suggestRest() {
+    final cal = double.tryParse(_caloriesController.text.trim()) ?? 0;
+    final carb = double.tryParse(_carbsController.text.trim()) ?? 0;
+    setState(() {
+      _restCaloriesController.text =
+          DietTarget.clampCalories(cal * 0.85).toStringAsFixed(0);
+      _restCarbsController.text =
+          DietTarget.clampMacro(carb * 0.75).toStringAsFixed(0);
+    });
   }
 
   void _applyCaloriePreset(double value) {
@@ -218,6 +275,12 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
   }
 
   void _submit() {
+    final restCalories = DietTarget.clampCalories(
+        double.tryParse(_restCaloriesController.text.trim()) ?? 0);
+    final restCarbs = DietTarget.clampMacro(
+        double.tryParse(_restCarbsController.text.trim()) ?? 0);
+    // 两栏都留 0 时视为未启用碳水循环，避免「开了开关却没数据」的空转状态
+    final cycle = _carbCycle && (restCalories > 0 || restCarbs > 0);
     final target = DietTarget(
       calories: DietTarget.clampCalories(
           double.tryParse(_caloriesController.text.trim()) ?? 0),
@@ -227,6 +290,10 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
           double.tryParse(_carbsController.text.trim()) ?? 0),
       fat: DietTarget.clampMacro(
           double.tryParse(_fatController.text.trim()) ?? 0),
+      lastReviewWeek: widget.initial.lastReviewWeek,
+      carbCycleEnabled: cycle,
+      restCalories: cycle ? restCalories : 0,
+      restCarbs: cycle ? restCarbs : 0,
     );
     Navigator.pop(context, target);
   }
@@ -296,6 +363,49 @@ class _DietTargetEditorState extends State<_DietTargetEditor> {
                   ),
                 ],
               ),
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('碳水循环',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: const Text(
+                    '训练日补足碳水，休息日下压——有训练记录当天自动用训练日目标，其余用休息日目标',
+                    style: TextStyle(fontSize: 11)),
+                value: _carbCycle,
+                activeThumbColor: TaoistTheme.jadeGreen,
+                onChanged: (v) => setState(() => _carbCycle = v),
+              ),
+              if (_carbCycle) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildField(
+                          _restCaloriesController, '休息日热量', '千卡',
+                          max: DietTarget.maxCalories),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildField(_restCarbsController, '休息日碳水', 'g',
+                          max: DietTarget.maxMacro),
+                    ),
+                  ],
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _suggestRest,
+                    icon: const Icon(Icons.auto_awesome, size: 14),
+                    label: const Text('按训练日推算（−15% 热量 / −25% 碳水）'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: TaoistTheme.teaBrown,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Center(
                 child: TextButton.icon(

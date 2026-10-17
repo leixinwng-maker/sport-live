@@ -7,6 +7,7 @@ import '../../models/workout.dart';
 import 'training_calendar_screen.dart';
 import 'workout_edit_screen.dart';
 import 'workout_plan_list_screen.dart';
+import 'workout_session_screen.dart';
 import 'workout_stats_screen.dart';
 
 /// 训练记录列表页（参考训记APP设计）
@@ -63,15 +64,29 @@ class WorkoutListScreen extends StatelessWidget {
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () {
+              // 对标训记：FAB 直接进入训练会话（无会话则开始新会话）；
+              // 手动补录旧记录入口保留在各记录卡片的编辑里。
+              final session =
+                  context.read<AppProvider>().workoutSession;
+              if (!session.active) session.startSession();
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const WorkoutEditScreen(),
+                  builder: (_) => const WorkoutSessionScreen(),
                 ),
               );
             },
-            icon: const Icon(Icons.add),
-            label: const Text('记录训练'),
+            icon: const Icon(Icons.play_arrow),
+            label: AnimatedBuilder(
+              animation: context.watch<AppProvider>().workoutSession,
+              builder: (context, _) {
+                final active = context
+                    .read<AppProvider>()
+                    .workoutSession
+                    .active;
+                return Text(active ? '继续训练' : '开始训练');
+              },
+            ),
             backgroundColor: TaoistTheme.jadeGreen,
             foregroundColor: Colors.white,
           ),

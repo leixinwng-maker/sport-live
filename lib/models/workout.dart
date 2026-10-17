@@ -96,6 +96,18 @@ class Workout {
   final int duration;
   final int intensity;
 
+  /// 主观难度：0 未评 / 1 简单 / 2 正常 / 3 困难（对标训记训练结束三选）
+  final int difficulty;
+
+  /// 训练心得（对标训记「写心得」）
+  final String? note;
+
+  /// 会话开始时间（秒表计时来源；老数据为 null）
+  final DateTime? startedAt;
+
+  /// 会话结束时间（老数据为 null）
+  final DateTime? endedAt;
+
   Workout({
     this.id,
     required this.date,
@@ -103,6 +115,10 @@ class Workout {
     required this.exercises,
     required this.duration,
     required this.intensity,
+    this.difficulty = 0,
+    this.note,
+    this.startedAt,
+    this.endedAt,
   });
 
   /// 训练总容量（kg）：
@@ -124,6 +140,10 @@ class Workout {
       'type': type,
       'duration': duration,
       'intensity': intensity,
+      if (difficulty != 0) 'difficulty': difficulty,
+      if (note != null && note!.isNotEmpty) 'note': note,
+      if (startedAt != null) 'started_at': startedAt!.toIso8601String(),
+      if (endedAt != null) 'ended_at': endedAt!.toIso8601String(),
       'exercises': jsonEncode(exercises.map((ex) => ex.toMap()).toList()),
     };
   }
@@ -142,8 +162,16 @@ class Workout {
       id: map['id'],
       date: DateTime.parse(map['date']),
       type: map['type'],
-      duration: map['duration'],
-      intensity: map['intensity'],
+      duration: (map['duration'] as num?)?.toInt() ?? 0,
+      intensity: (map['intensity'] as num?)?.toInt() ?? 0,
+      difficulty: (map['difficulty'] as num?)?.toInt() ?? 0,
+      note: map['note'] as String?,
+      startedAt: (map['started_at'] ?? map['startedAt']) is String
+          ? DateTime.tryParse((map['started_at'] ?? map['startedAt']) as String)
+          : null,
+      endedAt: (map['ended_at'] ?? map['endedAt']) is String
+          ? DateTime.tryParse((map['ended_at'] ?? map['endedAt']) as String)
+          : null,
       exercises: exercises,
     );
   }
@@ -155,6 +183,10 @@ class Workout {
     List<Exercise>? exercises,
     int? duration,
     int? intensity,
+    int? difficulty,
+    String? note,
+    DateTime? startedAt,
+    DateTime? endedAt,
   }) {
     return Workout(
       id: id ?? this.id,
@@ -163,6 +195,10 @@ class Workout {
       exercises: exercises ?? this.exercises,
       duration: duration ?? this.duration,
       intensity: intensity ?? this.intensity,
+      difficulty: difficulty ?? this.difficulty,
+      note: note ?? this.note,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
     );
   }
 }

@@ -139,7 +139,8 @@ class VisionService {
   ///
   /// 每批最多 4 页组成一条多图消息，批间顺序调用；
   /// [onProgress] 报告批次进度 (已完成批次, 总批次)；
-  /// 第一批失败即中止（已渲染页随调用释放），整份重试；
+  /// 批次容错：单批失败（内部已重试）跳过并记录失败页码，结束后在结果尾部汇总；
+  /// 全部批次失败时抛 [VisionServiceException]；鉴权/未配置类错误立即中止；
   /// 独立配置与旧通道均不可用时抛 [VisionConfigRequiredException]
   /// （本地 OCR 无法处理 PDF）。
   Future<String> recognizePdf(
@@ -162,6 +163,10 @@ class VisionService {
     const batchSize = 4;
     final totalBatches = (pages.length + batchSize - 1) ~/ batchSize;
     final buffer = StringBuffer();
+    // 批次容错：单批失败（重试耗尽后）跳过并记录失败页码，不整体中断
+    final failedPages = <int>[];
+    String? lastFailure;
+    int? lastFailureStatus;
 
     for (var i = 0; i < totalBatches; i++) {
       final start = i * batchSize;
@@ -174,28 +179,54 @@ class VisionService {
           '每页以「第 n 页」开头分段输出，只输出提取到的文字，不要解释。';
 
       String text;
-      if (useIndependent) {
-        text = await _postVision(
-          baseUrl: cfg.baseUrl,
-          apiKey: cfg.apiKey,
-          model: cfg.model,
-          b64Images: b64List,
-          prompt: prompt,
-        );
-      } else {
-        text = await legacy!.recognizeImageLegacy(
-              imageBase64: b64List.first,
-              extraImageBase64List: b64List.sublist(1),
-              prompt: prompt,
-            ) ??
-            '';
+      try {
+        if (useIndependent) {
+          text = await _postVision(
+            baseUrl: cfg.baseUrl,
+            apiKey: cfg.apiKey,
+            model: cfg.model,
+            b64Images: b64List,
+            prompt: prompt,
+          );
+        } else {
+          text = await legacy!.recognizeImageLegacy(
+                imageBase64: b64List.first,
+                extraImageBase64List: b64List.sublist(1),
+                prompt: prompt,
+              ) ??
+              '';
+        }
+      } on VisionException catch (e) {
+        // 鉴权/未配置：后续批次也会失败，直接中止
+        if (e is VisionAuthException || e is VisionConfigRequiredException) {
+          rethrow;
+        }
+        // 服务/网络错误（_postVision 内部已重试过）：跳过该批继续
+        for (var p = start + 1; p <= end; p++) {
+          failedPages.add(p);
+        }
+        lastFailure = e.message;
+        lastFailureStatus =
+            e is VisionServiceException ? e.statusCode : null;
+        onProgress?.call(i + 1, totalBatches);
+        continue;
       }
       if (text.trim().isNotEmpty) {
         buffer.writeln(text.trim());
       }
       onProgress?.call(i + 1, totalBatches);
     }
-    return buffer.toString();
+    final result = buffer.toString().trim();
+    if (failedPages.isEmpty) return result;
+    if (failedPages.length >= pages.length) {
+      // 全部批次失败：向上抛友好错误，让 UI 走「重试」引导，而不是静默返回空文本
+      throw VisionServiceException(
+        lastFailureStatus,
+        'PDF 共 ${pages.length} 页全部识别失败：${lastFailure ?? '服务无响应'}',
+      );
+    }
+    return '$result\n\n〔注意：第 ${failedPages.join('、')} 页识别失败，'
+        '以上内容不含这些页，可稍后重新识别补齐〕';
   }
 
   /// 连通性测试：用内置 1×1 测试图对「独立视觉配置」发一次最小请求。
@@ -284,6 +315,15 @@ class VisionService {
           response.statusCode,
           _friendlyErrorBody(response.statusCode, body),
         );
+      } on VisionServiceException catch (e) {
+        // 5xx（网关超时/服务不可用）多为瞬时故障：重试一次后再抛
+        final sc = e.statusCode ?? 0;
+        if (sc >= 500 && attempt < maxAttempts) {
+          lastError = e;
+          await Future.delayed(const Duration(milliseconds: 1200));
+          continue;
+        }
+        rethrow;
       } on VisionException {
         rethrow;
       } on SocketException catch (e) {
@@ -301,6 +341,7 @@ class VisionService {
     }
     // 重试耗尽仍失败：按错误类型给出中文提示
     final err = lastError;
+    if (err is VisionServiceException) throw err;
     if (err is SocketException) {
       throw VisionNetworkException('网络连接失败：${err.message}，请检查网络或识别服务地址');
     }
@@ -314,8 +355,31 @@ class VisionService {
   ///
   /// 中转/网关类服务常用整段英文 JSON 报参数错误（如 400 invalid_request_error），
   /// 直接透出会让用户误以为是 App 出错；此处提取关键字段并给出常见原因。
+  /// HTML 错误页（openresty/nginx 502/503/504 等）绝不透出原文，按状态码给中文短文案。
   String _friendlyErrorBody(int statusCode, String body) {
     var detail = body.trim();
+    final lowerAll = detail.toLowerCase();
+    final looksHtml = lowerAll.startsWith('<!doctype') ||
+        lowerAll.startsWith('<html') ||
+        lowerAll.contains('<html') ||
+        lowerAll.contains('<body');
+
+    // HTML/空响应：网关类错误页 → 按状态码映射中文，不透出原始 HTML
+    if (looksHtml || detail.isEmpty) {
+      switch (statusCode) {
+        case 504:
+          return '识别服务网关超时：图片过大或模型响应过慢，请稍后重试';
+        case 502:
+        case 503:
+          return '识别服务暂时不可用（$statusCode），请稍后重试';
+        case 429:
+          return '识别服务限流，请求过于频繁，请稍后再试';
+        default:
+          if (statusCode >= 500) return '识别服务异常（$statusCode），请稍后重试';
+      }
+      return '识别服务返回异常响应（$statusCode），请检查服务地址或稍后重试';
+    }
+
     try {
       final data = jsonDecode(body);
       if (data is Map) {

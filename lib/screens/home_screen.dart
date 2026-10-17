@@ -4,6 +4,7 @@ import '../providers/app_provider.dart';
 import '../services/lunar_service.dart';
 import '../theme/taoist_theme.dart';
 import 'workout/workout_list_screen.dart';
+import 'workout/workout_session_screen.dart';
 import 'diet/diet_list_screen.dart';
 import 'finance/finance_screen.dart';
 import 'life/life_status_screen.dart';
@@ -126,31 +127,120 @@ class DashboardScreen extends StatelessWidget {
               ),
             ],
           ),
-          body: RefreshIndicator(
-            onRefresh: () => provider.loadAllData(),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildGreetingCard(context, provider),
-                const SizedBox(height: 16),
-                _buildLunarCard(context, provider),
-                const SizedBox(height: 16),
-                _buildStatsRow(provider),
-                const SizedBox(height: 16),
-                _buildHealthAssessmentCard(context, provider),
-                const SizedBox(height: 16),
-                _buildHealthArchiveCard(context, provider),
-                const SizedBox(height: 16),
-                _buildTodayOverview(context, provider),
-                const SizedBox(height: 16),
-                _buildQuickActions(context, provider),
-                const SizedBox(height: 16),
-                _buildRecentAdvice(context, provider),
-              ],
-            ),
+          body: Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: () => provider.loadAllData(),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildGreetingCard(context, provider),
+                    const SizedBox(height: 16),
+                    _buildLunarCard(context, provider),
+                    const SizedBox(height: 16),
+                    _buildStatsRow(provider),
+                    const SizedBox(height: 16),
+                    _buildHealthAssessmentCard(context, provider),
+                    const SizedBox(height: 16),
+                    _buildHealthArchiveCard(context, provider),
+                    const SizedBox(height: 16),
+                    _buildTodayOverview(context, provider),
+                    const SizedBox(height: 16),
+                    _buildQuickActions(context, provider),
+                    const SizedBox(height: 16),
+                    _buildRecentAdvice(context, provider),
+                  ],
+                ),
+              ),
+              _buildSessionBanner(context, provider),
+            ],
           ),
         );
       },
+    );
+  }
+
+  /// 训练中悬浮条（对标训记：会话进行中时首页常驻入口，点击回到会话页）
+  Widget _buildSessionBanner(BuildContext context, AppProvider provider) {
+    final session = provider.workoutSession;
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: 16,
+      child: AnimatedBuilder(
+        animation: session,
+        builder: (context, _) {
+          if (!session.active) return const SizedBox.shrink();
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const WorkoutSessionScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E80FF),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x331E80FF),
+                      blurRadius: 12,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timer, size: 20, color: Colors.white),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '训练中',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      session.elapsedLabel,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const Spacer(),
+                    Flexible(
+                      child: Text(
+                        session.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right,
+                        size: 22, color: Colors.white),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

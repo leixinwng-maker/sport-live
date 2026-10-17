@@ -61,7 +61,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 12,
+        version: 13,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -71,7 +71,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 12,
+        version: 13,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -154,6 +154,10 @@ class DatabaseHelper {
         duration INTEGER NOT NULL,
         intensity INTEGER NOT NULL,
         exercises TEXT NOT NULL,
+        difficulty INTEGER NOT NULL DEFAULT 0,
+        note TEXT,
+        started_at TEXT,
+        ended_at TEXT,
         sync_version INTEGER NOT NULL DEFAULT 0,
         sync_updated_at TEXT
       )
@@ -332,6 +336,7 @@ class DatabaseHelper {
         days_per_week INTEGER,
         days          TEXT NOT NULL,
         source        TEXT NOT NULL,
+        folder        TEXT,
         created_at    TEXT NOT NULL,
         sync_version  INTEGER NOT NULL DEFAULT 0,
         sync_updated_at TEXT
@@ -469,6 +474,24 @@ class DatabaseHelper {
       const alters = [
         'ALTER TABLE wearable_samples ADD COLUMN sync_version INTEGER NOT NULL DEFAULT 0',
         'ALTER TABLE wearable_samples ADD COLUMN sync_updated_at TEXT',
+      ];
+      for (final sql in alters) {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
+    }
+    // v12 → v13：训练会话扩展（对标训记）—— workouts 加难度/心得/起止时间，
+    // workout_plans 加文件夹。全部可空或带默认值，老数据无需回填。
+    if (oldVersion < 13) {
+      const alters = [
+        'ALTER TABLE workouts ADD COLUMN difficulty INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE workouts ADD COLUMN note TEXT',
+        'ALTER TABLE workouts ADD COLUMN started_at TEXT',
+        'ALTER TABLE workouts ADD COLUMN ended_at TEXT',
+        'ALTER TABLE workout_plans ADD COLUMN folder TEXT',
       ];
       for (final sql in alters) {
         try {

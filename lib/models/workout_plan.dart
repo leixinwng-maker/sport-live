@@ -119,6 +119,9 @@ class WorkoutPlan {
   /// 'official' | 'user' | 'ai'
   final String source;
 
+  /// 自定义文件夹名（null = 未分组；对标训记「我的模版」文件夹）
+  final String? folder;
+
   final DateTime createdAt;
 
   const WorkoutPlan({
@@ -129,6 +132,7 @@ class WorkoutPlan {
     this.daysPerWeek,
     required this.days,
     this.source = 'user',
+    this.folder,
     required this.createdAt,
   });
 
@@ -160,6 +164,7 @@ class WorkoutPlan {
       'days_per_week': daysPerWeek,
       'days': jsonEncode(days.map((d) => d.toMap()).toList()),
       'source': source,
+      if (folder != null && folder!.isNotEmpty) 'folder': folder,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -190,6 +195,9 @@ class WorkoutPlan {
       daysPerWeek: rawDpw is num ? rawDpw.toInt() : null,
       days: days,
       source: (map['source'] ?? 'user').toString(),
+      folder: (map['folder'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (map['folder'] as String).trim(),
       createdAt: createdRaw is String && createdRaw.isNotEmpty
           ? (DateTime.tryParse(createdRaw) ?? DateTime.now())
           : DateTime.now(),
@@ -226,6 +234,7 @@ class WorkoutPlan {
     int? daysPerWeek,
     List<PlanDay>? days,
     String? source,
+    String? folder,
     DateTime? createdAt,
   }) {
     return WorkoutPlan(
@@ -236,6 +245,7 @@ class WorkoutPlan {
       daysPerWeek: daysPerWeek ?? this.daysPerWeek,
       days: days ?? this.days,
       source: source ?? this.source,
+      folder: folder ?? this.folder,
       createdAt: createdAt ?? this.createdAt,
     );
   }

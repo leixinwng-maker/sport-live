@@ -57,6 +57,9 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
   /// 远程视觉识别失败标记：显示「改用本地识别」入口（图片场景，移动端）
   bool _visionFailed = false;
 
+  /// 错误详情是否展开（默认折叠为 2 行，点击展开全文）
+  bool _errorExpanded = false;
+
   bool get _onMobile => Platform.isAndroid || Platform.isIOS;
 
   @override
@@ -607,9 +610,36 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
           ),
           if (_lastError.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              _lastError,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFD9534F)),
+            // 错误详情默认折叠 2 行，点击展开全文（避免长 HTML/多页失败汇总撑爆页面）
+            GestureDetector(
+              onTap: () => setState(() => _errorExpanded = !_errorExpanded),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _lastError,
+                      maxLines: _errorExpanded ? null : 2,
+                      overflow: _errorExpanded
+                          ? TextOverflow.visible
+                          : TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFFD9534F)),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(
+                      _errorExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      size: 16,
+                      color: const Color(0xFFD9534F),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           // 远程识别失败后的本地兜底入口（仅移动端图片）

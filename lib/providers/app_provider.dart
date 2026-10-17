@@ -26,6 +26,7 @@ import '../services/bill_import_service.dart';
 import '../services/search_service.dart';
 import '../services/food_lookup_service.dart';
 import '../services/diet_target.dart';
+import '../services/workout_session_controller.dart';
 import '../services/fasting_settings.dart';
 import '../services/fasting_service.dart';
 import '../services/literature_lookup_service.dart';
@@ -116,6 +117,9 @@ class AppProvider extends ChangeNotifier {
   FastingSession? get activeFasting =>
       FastingService.activeOf(fastingSessions);
 
+  /// 训练会话全局控制器（对标训记「训练中」；跨页面共享，含秒表）
+  final WorkoutSessionController workoutSession = WorkoutSessionController();
+
   // 健康档案
   HealthProfile? healthProfile;
   List<HealthMetric> healthMetrics = [];
@@ -128,6 +132,9 @@ class AppProvider extends ChangeNotifier {
   // 状态
   bool isLoading = false;
   String? error;
+
+  /// 训练会话是否已尝试从持久化还原（防重复还原）
+  bool _sessionRestored = false;
 
   // 会话状态（T4 登录门）：null=检查中；true=需登录；false=已登录或离线浏览
   bool? needsLogin;
@@ -227,6 +234,11 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> loadAllData() async {
+    // 训练会话还原只在首次加载时执行（后续 loadAllData 由增删数据触发，无需重复）
+    if (!_sessionRestored) {
+      _sessionRestored = true;
+      await workoutSession.restoreIfNeeded();
+    }
     workouts = await _db.getWorkouts();
     workoutPlans = await _db.getWorkoutPlans();
     dietRecords = await _db.getDietRecords();

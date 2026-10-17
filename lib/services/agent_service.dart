@@ -68,7 +68,9 @@ class AgentService {
   bool get toolsUnsupported => _toolsUnsupported;
 
   static const int _maxToolRounds = 6;
-  static const int _maxHistoryMessages = 24;
+  /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 30 个工具 schema
+  /// 已是固定开销，长历史会让 TTFT（首字延迟）线性变长，弱网关下更容易读断。
+  static const int _maxHistoryMessages = 16;
   static const int _maxToolContentLength = 2000;
 
   /// 读工具结果短期缓存：key 为「工具名|参数JSON」，value 为 (结果, 写入时间)。
@@ -88,13 +90,15 @@ class AgentService {
   /// 发送用户消息并获取最终回答
   ///
   /// [history] 先前对话（role: user/assistant，content: 文本），窗口自动裁剪
-  /// [onStatus] 工具调用状态回调（UI 展示"正在查询：…"）
+  /// [onStatus] 工具调用状态回调（UI 展示"正在查询：…"、网络接续提示）
   /// [onDelta] 最终回答流式增量回调（参数为累计文本；传空串表示工具轮次复位）
+  /// [onThought] 中间推理文本回调（工具调用前模型吐出的思路，非空时才回调）
   Future<AgentReply> sendMessage({
     required List<Map<String, dynamic>> history,
     required String userText,
     void Function(String status)? onStatus,
     void Function(String cumulativeText)? onDelta,
+    void Function(String thought)? onThought,
   }) async {
     if (_toolsUnsupported) {
       final text =
@@ -126,6 +130,7 @@ class AgentService {
           messages: messages,
           tools: toolSchemas,
           onDelta: onDelta,
+          onRetry: onStatus,
         );
       } on ToolsUnsupportedException {
         // 首次发现模型不支持 tools → 降级为数据注入模式重答
@@ -141,7 +146,10 @@ class AgentService {
             action: action, toolCount: toolCount);
       }
 
-      // 本轮是工具调用轮：复位流式占位（清掉已转发的少量前置文本）
+      // 本轮是工具调用轮：模型在发起工具前若吐过思路文本，先作为「思考过程」
+      // 转发给 UI（此前被直接丢弃，用户只看到长时间转圈），再复位流式占位
+      final lead = resp.text?.trim() ?? '';
+      if (lead.isNotEmpty) onThought?.call(lead);
       onDelta?.call('');
 
       // assistant 消息（含 tool_calls 原始格式）入列
@@ -222,7 +230,7 @@ class AgentService {
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
-    return engine.chatFallbackStream(messages, onDelta: onDelta);
+    return engine.chatFallbackStream(messages, onDelta: onDelta, onRetry: onStatus);
   }
 
   // ---------------------------------------------------------------------------

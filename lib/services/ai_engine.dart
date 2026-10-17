@@ -33,6 +33,35 @@ class ToolsUnsupportedException implements Exception {
   String toString() => message;
 }
 
+/// 网络/连接类异常（多次重试后仍未恢复）。
+///
+/// 与鉴权失败、模型报错等「确定性」错误区分开：上层捕获到本类型可安全地
+/// 自动兜底（如降级为非流式请求），而其他异常应直接呈现给用户处理。
+class AINetworkException implements Exception {
+  final Object cause;
+  AINetworkException(this.cause);
+
+  @override
+  String toString() => _format(cause);
+
+  static String _format(Object e) {
+    var detail = e.toString();
+    if (detail.length > 160) detail = '${detail.substring(0, 160)}…';
+    return '网络连接不稳定：$detail\n'
+        '已自动重试多次仍未恢复，多为网络瞬断或中转网关波动；'
+        '请稍等几秒再发一次，反复出现时可尝试切换网络或更换接入点';
+  }
+}
+
+/// 内部用于标记「可重试」网络类异常的包装类。
+///
+/// 目的：把 SSE 读取中途断流、5xx、超时等瞬时错误，与
+/// 「鉴权失败/模型报错」这类确定性异常区分开，让重试循环只吞前者。
+class _Retryable implements Exception {
+  final Object cause;
+  _Retryable(this.cause);
+}
+
 /// AI建议引擎 - 调用国内大模型API
 /// 支持：通义千问、文心一言、DeepSeek
 class AIEngine {
@@ -113,6 +142,13 @@ class AIEngine {
   /// 流式读取的空闲超时：相邻 SSE 分片间隔超过该值视为连接挂起
   static const Duration _streamIdleTimeout = Duration(seconds: 60);
 
+  /// 流式**读取中途**断流的额外重连预算。
+  ///
+  /// 中转网关常在 SSE 推流过半时掐断连接（ClientException: Connection closed
+  /// while receiving data），此前流中段无任何重试，用户直接看到失败。这里额外
+  /// 给 2 次整轮重开的机会，与建连重试共享同一个总预算。
+  static const int _maxStreamRetries = 2;
+
   /// 统一的 chat/completions POST：带超时与自动重试。
   ///
   /// 代理/弱网场景下常出现「Software caused connection abort」
@@ -155,17 +191,13 @@ class AIEngine {
     throw networkError(lastError!);
   }
 
-  /// 把网络类原始异常翻译成用户可读的中文提示。
+  /// 把网络类原始异常翻译成用户可读的中文提示，并标记网络类型以便上层兜底。
   ///
   /// 裸抛 ClientException/SocketException 会把技术细节（如
   /// 「Software caused connection abort, uri=...」）直接怼到用户脸上，
-  /// 这里统一包装：保留原始细节便于排查，同时给出人话说明。
-  static Exception networkError(Object e) {
-    var detail = e.toString();
-    if (detail.length > 160) detail = '${detail.substring(0, 160)}…';
-    return Exception('网络连接中断：$detail\n'
-        '已自动重试仍未恢复，多为网络瞬断或中转网关不稳定，请稍后再发一次');
-  }
+  /// 这里统一包装为 [AINetworkException]：保留原始细节便于排查，
+  /// 同时给出人话说明，并让上层能据此触发非流式兜底。
+  static Exception networkError(Object e) => AINetworkException(e);
 
   /// 把 HTTP 错误状态翻译成用户可理解的中文提示，不直接抛原始 JSON/HTML
   static Exception httpError(int statusCode, String body) {
@@ -193,11 +225,15 @@ class AIEngine {
   /// - 文本增量通过 [onDelta]（累计文本）实时回调，仅当尚未出现 tool_calls 时转发；
   ///   出现 tool_calls 后停止转发（工具轮次通常无正文）
   /// - 网关不支持流式（响应非 event-stream）时自动退回整包 JSON 解析
-  /// - 建连/响应头阶段复用 5xx 重试与网络错误重试语义；
-  ///   流式中途断开直接抛出（增量已转发，无法安全重启）
+  /// - **全链路重试**：建连失败、网关 5xx 抖动、以及 SSE **读取中途**被掐断
+  ///   （`Connection closed while receiving data`）共用一份重试预算
+  ///   [_maxRetries] + [_maxStreamRetries]。中途重开前会用 [onRetry] 通知上层，
+  ///   并先回调空串让 UI 撤掉上半段的残缺回答，避免首尾拼出重复文本
+  /// - 鉴权/限流/模型报错等确定性异常照旧直接上抛，不做无谓重试
   Future<({String text, List<ToolCall>? toolCalls})> _streamChatCompletion(
     Map<String, dynamic> body, {
     void Function(String cumulativeText)? onDelta,
+    void Function(String message)? onRetry,
   }) async {
     final uri = Uri.parse('$_apiBase/v1/chat/completions');
     final headers = {
@@ -206,123 +242,173 @@ class AIEngine {
     };
     final encoded = jsonEncode({...body, 'stream': true});
 
-    http.StreamedResponse? resp;
-    Exception? lastError;
-    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+    const maxAttempts = _maxRetries + _maxStreamRetries + 1;
+    Object? lastError;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      var forwarded = false;
+      ({String text, List<ToolCall>? toolCalls})? roundResult;
+
       try {
+        // ---- 阶段一：建连 ----
         final req = http.Request('POST', uri)
           ..headers.addAll(headers)
           ..body = encoded;
-        final r = await req.send().timeout(_requestTimeout);
-        if (r.statusCode >= 500 && attempt < _maxRetries) {
-          // 5xx：网关/上游临时错误，drain 后稍候重试
+        final r = await _send(req);
+        if (r.statusCode >= 500) {
+          // 5xx：网关/上游临时错误，drain 后按可重开处理
           await r.stream.drain<void>().catchError((_) {});
-          await Future.delayed(const Duration(seconds: 2));
-          continue;
+          throw _Retryable(Exception('AI网关临时不可用（${r.statusCode}）'));
         }
         if (r.statusCode != 200) {
-          final errBody = await r.stream.bytesToString();
-          throw httpError(r.statusCode, errBody);
+          final errBody = await _readBody(r);
+          throw httpError(r.statusCode, errBody); // 4xx：确定性错误，不重试
         }
-        resp = r;
-        break;
-      } on http.ClientException catch (e) {
-        lastError = e;
-      } on SocketException catch (e) {
-        lastError = e;
-      } on TimeoutException catch (e) {
-        lastError = e;
-      }
-      if (attempt < _maxRetries) {
-        await Future.delayed(const Duration(milliseconds: 800));
-      }
-    }
-    if (resp == null) throw networkError(lastError!);
+        final resp = r;
 
-    final contentType = resp.headers['content-type'] ?? '';
-    if (!contentType.contains('text/event-stream')) {
-      // 网关不支持流式：按整包 JSON 解析（结构与非流式一致）
-      final full = await resp.stream.bytesToString();
-      final data = jsonDecode(full);
-      final message =
-          ((data['choices'] as List)[0] as Map)['message'] as Map<String, dynamic>? ?? {};
-      return (
-        text: (message['content'] ?? '') as String,
-        toolCalls: _parseToolCalls(message['tool_calls']),
-      );
-    }
-
-    final textBuf = StringBuffer();
-    final toolAcc = <int, _ToolCallAcc>{};
-    final lines = resp.stream
-        .timeout(_streamIdleTimeout)
-        .transform(utf8.decoder)
-        .transform(const LineSplitter());
-    await for (final line in lines) {
-      if (line.isEmpty || !line.startsWith('data:')) continue;
-      final payload = line.substring(5).trim();
-      if (payload == '[DONE]') break;
-      Object? obj;
-      try {
-        obj = jsonDecode(payload);
-      } catch (_) {
-        continue;
-      }
-      if (obj is! Map) continue;
-      final err = obj['error'];
-      if (err != null) {
-        final msg =
-            err is Map ? (err['message'] ?? err).toString() : err.toString();
-        throw Exception('模型返回错误：$msg');
-      }
-      final choices = obj['choices'];
-      if (choices is! List || choices.isEmpty) continue;
-      final choice = choices[0];
-      final delta = (choice is Map ? choice['delta'] : null);
-      if (delta is! Map) continue;
-      final content = delta['content'];
-      if (content is String && content.isNotEmpty) {
-        textBuf.write(content);
-        if (toolAcc.isEmpty) onDelta?.call(textBuf.toString());
-      }
-      final tcs = delta['tool_calls'];
-      if (tcs is List) {
-        for (final tc in tcs) {
-          if (tc is! Map) continue;
-          final idx = (tc['index'] as num?)?.toInt() ?? 0;
-          final acc = toolAcc.putIfAbsent(idx, _ToolCallAcc.new);
-          final id = tc['id'];
-          if (id is String && id.isNotEmpty) acc.id = id;
-          final fn = tc['function'];
-          if (fn is Map) {
-            final n = fn['name'];
-            if (n is String && n.isNotEmpty) acc.name = n;
-            final a = fn['arguments'];
-            if (a is String) acc.args.write(a);
+        final contentType = resp.headers['content-type'] ?? '';
+        if (!contentType.contains('text/event-stream')) {
+          // 网关不支持流式：按整包 JSON 解析（结构与非流式一致）
+          final full = await _readBody(resp);
+          final data = jsonDecode(full);
+          final message =
+              ((data['choices'] as List)[0] as Map)['message'] as Map<String, dynamic>? ??
+                  {};
+          roundResult = (
+            text: (message['content'] ?? '') as String,
+            toolCalls: _parseToolCalls(message['tool_calls']),
+          );
+        } else {
+          // ---- 阶段二：SSE 增量读取（中途断流同样可整轮重开） ----
+          final textBuf = StringBuffer();
+          final toolAcc = <int, _ToolCallAcc>{};
+          try {
+            final lines = resp.stream
+                .timeout(_streamIdleTimeout)
+                .transform(utf8.decoder)
+                .transform(const LineSplitter());
+            await for (final line in lines) {
+              if (line.isEmpty || !line.startsWith('data:')) continue;
+              final payload = line.substring(5).trim();
+              if (payload == '[DONE]') break;
+              Object? obj;
+              try {
+                obj = jsonDecode(payload);
+              } catch (_) {
+                continue;
+              }
+              if (obj is! Map) continue;
+              final err = obj['error'];
+              if (err != null) {
+                final msg =
+                    err is Map ? (err['message'] ?? err).toString() : err.toString();
+                throw Exception('模型返回错误：$msg');
+              }
+              final choices = obj['choices'];
+              if (choices is! List || choices.isEmpty) continue;
+              final choice = choices[0];
+              final delta = (choice is Map ? choice['delta'] : null);
+              if (delta is! Map) continue;
+              final content = delta['content'];
+              if (content is String && content.isNotEmpty) {
+                textBuf.write(content);
+                if (toolAcc.isEmpty) {
+                  forwarded = true;
+                  onDelta?.call(textBuf.toString());
+                }
+              }
+              final tcs = delta['tool_calls'];
+              if (tcs is List) {
+                for (final tc in tcs) {
+                  if (tc is! Map) continue;
+                  final idx = (tc['index'] as num?)?.toInt() ?? 0;
+                  final acc = toolAcc.putIfAbsent(idx, _ToolCallAcc.new);
+                  final id = tc['id'];
+                  if (id is String && id.isNotEmpty) acc.id = id;
+                  final fn = tc['function'];
+                  if (fn is Map) {
+                    final n = fn['name'];
+                    if (n is String && n.isNotEmpty) acc.name = n;
+                    final a = fn['arguments'];
+                    if (a is String) acc.args.write(a);
+                  }
+                }
+              }
+            }
+          } on http.ClientException catch (e) {
+            throw _Retryable(e);
+          } on SocketException catch (e) {
+            throw _Retryable(e);
+          } on TimeoutException catch (e) {
+            throw _Retryable(e);
           }
-        }
-      }
-    }
 
-    final calls = <ToolCall>[];
-    final idxs = toolAcc.keys.toList()..sort();
-    for (final idx in idxs) {
-      final acc = toolAcc[idx]!;
-      Map<String, dynamic> args = {};
-      final raw = acc.args.toString();
-      if (raw.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(raw);
-          if (decoded is Map<String, dynamic>) args = decoded;
-        } catch (_) {}
+          final calls = <ToolCall>[];
+          final idxs = toolAcc.keys.toList()..sort();
+          for (final idx in idxs) {
+            final acc = toolAcc[idx]!;
+            Map<String, dynamic> args = {};
+            final raw = acc.args.toString();
+            if (raw.isNotEmpty) {
+              try {
+                final decoded = jsonDecode(raw);
+                if (decoded is Map<String, dynamic>) args = decoded;
+              } catch (_) {}
+            }
+            calls.add(ToolCall(
+              id: acc.id.isEmpty ? 'call_$idx' : acc.id,
+              name: acc.name,
+              arguments: args,
+            ));
+          }
+          roundResult = (
+            text: textBuf.toString(),
+            toolCalls: calls.isEmpty ? null : calls,
+          );
+        }
+      } on _Retryable catch (e) {
+        lastError = e.cause;
       }
-      calls.add(ToolCall(
-        id: acc.id.isEmpty ? 'call_$idx' : acc.id,
-        name: acc.name,
-        arguments: args,
-      ));
+      // 其余异常（httpError / 模型报错）不重试，原样上抛
+
+      if (roundResult != null) return roundResult;
+
+      if (attempt >= maxAttempts - 1) break;
+
+      // 上一次已吐过字：先让 UI 撤掉那半截，避免重开后拼出重复内容
+      if (forwarded) onDelta?.call('');
+      onRetry?.call('网络波动，正在重新接续（第 ${attempt + 1} 次）…');
+      await Future.delayed(attempt == 0
+          ? const Duration(milliseconds: 800)
+          : const Duration(seconds: 2));
     }
-    return (text: textBuf.toString(), toolCalls: calls.isEmpty ? null : calls);
+    throw networkError(lastError!);
+  }
+
+  /// 发起流式请求：网络类异常统一转成可重试标记
+  Future<http.StreamedResponse> _send(http.Request req) async {
+    try {
+      return await req.send().timeout(_requestTimeout);
+    } on http.ClientException catch (e) {
+      throw _Retryable(e);
+    } on SocketException catch (e) {
+      throw _Retryable(e);
+    } on TimeoutException catch (e) {
+      throw _Retryable(e);
+    }
+  }
+
+  /// 读取响应体（错误详情与网关退回的非流式整包共用；读取本身断流也算可重试）
+  Future<String> _readBody(http.StreamedResponse r) async {
+    try {
+      return await r.stream.bytesToString();
+    } on http.ClientException catch (e) {
+      throw _Retryable(e);
+    } on SocketException catch (e) {
+      throw _Retryable(e);
+    } on TimeoutException catch (e) {
+      throw _Retryable(e);
+    }
   }
 
   /// 非流式 message.tool_calls 解析（兼容字符串/对象两种 arguments 形态）
@@ -353,12 +439,14 @@ class AIEngine {
 
   /// 流式智能体调用：与 [chatWithTools] 相同语义，文本增量实时回调 [onDelta]。
   ///
-  /// 流式尝试在未产出任何增量前失败（网络抖动，且 5xx 重试仍未恢复）→
-  /// 自动回退非流式 [chatWithTools]；已开始转发增量后失败则直接抛出。
+  /// 流式链路不可用时（含 SSE **读取中途**被网关掐断且重试预算耗尽）自动回退
+  /// 非流式 [chatWithTools]：单次「请求–响应」没有长连接可掐，弱网关下明显更稳，
+  /// 代价是失去逐字输出。[onRetry] 用于向 UI 透出"正在重新接续"的提示。
   Future<ChatResponse> chatWithToolsStream({
     required List<Map<String, dynamic>> messages,
     required List<Map<String, dynamic>> tools,
     void Function(String cumulativeText)? onDelta,
+    void Function(String message)? onRetry,
   }) async {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
@@ -367,7 +455,6 @@ class AIEngine {
       // 配置层已标记该模型不支持工具调用：直接降级，不浪费一次失败请求
       throw ToolsUnsupportedException('当前模型未开启工具调用');
     }
-    var forwarded = false;
     try {
       final r = await _streamChatCompletion(
         {
@@ -377,24 +464,17 @@ class AIEngine {
           'tool_choice': 'auto',
           'temperature': 0.7,
         },
-        onDelta: (t) {
-          forwarded = true;
-          onDelta?.call(t);
-        },
+        onDelta: onDelta,
+        onRetry: onRetry,
       );
       return ChatResponse(
         text: r.text.isEmpty ? null : r.text,
         toolCalls: r.toolCalls,
       );
-    } on TimeoutException catch (e) {
-      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      throw networkError(e);
-    } on SocketException catch (e) {
-      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      throw networkError(e);
-    } on http.ClientException catch (e) {
-      if (!forwarded) return chatWithTools(messages: messages, tools: tools);
-      throw networkError(e);
+    } on AINetworkException {
+      // 流式被网关反复掐断：改走非流式重试一次
+      onRetry?.call('流式链路不稳，改用普通模式重试…');
+      return chatWithTools(messages: messages, tools: tools);
     }
   }
 
@@ -402,29 +482,21 @@ class AIEngine {
   Future<String> chatFallbackStream(
     List<Map<String, dynamic>> messages, {
     void Function(String cumulativeText)? onDelta,
+    void Function(String message)? onRetry,
   }) async {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
     }
-    var forwarded = false;
     try {
       final r = await _streamChatCompletion(
         {'model': _model, 'messages': messages, 'temperature': 0.7},
-        onDelta: (t) {
-          forwarded = true;
-          onDelta?.call(t);
-        },
+        onDelta: onDelta,
+        onRetry: onRetry,
       );
       return r.text;
-    } on TimeoutException catch (e) {
-      if (!forwarded) return chatFallback(messages);
-      throw networkError(e);
-    } on SocketException catch (e) {
-      if (!forwarded) return chatFallback(messages);
-      throw networkError(e);
-    } on http.ClientException catch (e) {
-      if (!forwarded) return chatFallback(messages);
-      throw networkError(e);
+    } on AINetworkException {
+      onRetry?.call('流式链路不稳，改用普通模式重试…');
+      return chatFallback(messages);
     }
   }
 

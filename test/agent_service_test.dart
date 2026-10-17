@@ -37,6 +37,46 @@ class _ScriptedEngine extends AIEngine {
   static List<Map<String, dynamic>> _snapshot(List<Map<String, dynamic>> messages) =>
       (jsonDecode(jsonEncode(messages)) as List).cast<Map<String, dynamic>>();
 
+  /// 走本轮的剧本响应，并同步把文本片段喂给流式回调（模拟 SSE 增量）
+  ChatResponse _take(
+    List<Map<String, dynamic>> messages,
+    void Function(String)? onDelta,
+  ) {
+    final i = chatWithToolsCount - 1; // 本轮索引（计数已自增）
+    final idx = i < rounds.length ? i : rounds.length - 1;
+    final resp = rounds[idx];
+    final text = resp.text;
+    if (text != null && text.isNotEmpty) onDelta?.call(text);
+    return resp;
+  }
+
+  // 注：AgentService 主链路走流式；此处覆写两个流式入口转调剧本版本，
+  // 使断言仍集中在「请求编排」而非传输方式。chatWithTools/chatFallback
+  // 两个非流式方法同样保留，供降级兜底路径命中。
+  @override
+  Future<ChatResponse> chatWithToolsStream({
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>> tools,
+    void Function(String cumulativeText)? onDelta,
+    void Function(String message)? onRetry,
+  }) async {
+    chatWithToolsCount++; // 统计尝试次数（含抛 ToolsUnsupportedException 的那次）
+    if (throwToolsUnsupported) throw ToolsUnsupportedException();
+    toolRequests.add(_snapshot(messages));
+    return _take(messages, onDelta);
+  }
+
+  @override
+  Future<String> chatFallbackStream(
+    List<Map<String, dynamic>> messages, {
+    void Function(String cumulativeText)? onDelta,
+    void Function(String message)? onRetry,
+  }) async {
+    chatFallbackCount++;
+    lastFallbackMessages = _snapshot(messages);
+    return fallbackReply;
+  }
+
   @override
   Future<ChatResponse> chatWithTools({
     required List<Map<String, dynamic>> messages,
@@ -69,7 +109,7 @@ class _FixtureProvider extends AppProvider {
 }
 
 void main() {
-  test('T5-1 纯文本直答：首轮无 toolCalls 直接返回，请求结构正确，历史窗口裁剪 24 条', () async {
+  test('T5-1 纯文本直答：首轮无 toolCalls 直接返回，请求结构正确，历史窗口裁剪 16 条', () async {
     final engine = _ScriptedEngine(rounds: [const ChatResponse(text: '你好，我是问道智能体')]);
     final service = AgentService(engine);
 
@@ -82,11 +122,11 @@ void main() {
     expect(engine.chatFallbackCount, 0);
 
     final req = engine.toolRequests.single;
-    // system 首条 + 裁剪后 24 条历史 + user 尾条
+    // system 首条 + 裁剪后 16 条历史 + user 尾条（窗口由 24 收窄到 16 以降低首字延迟）
     expect(req.first['role'], 'system');
     expect(req.first['content'] as String, contains('问道'));
-    expect(req.length, 26);
-    expect(req[1]['content'], '历史消息6', reason: '30 条历史应裁掉最旧 6 条');
+    expect(req.length, 18);
+    expect(req[1]['content'], '历史消息14', reason: '30 条历史应裁掉最旧 14 条');
     expect(req.last['role'], 'user');
     expect(req.last['content'], '你好');
   });

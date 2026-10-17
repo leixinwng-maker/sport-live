@@ -20,6 +20,17 @@ const String kChatImagePrompt =
     '2. 全部文字提取：逐项提取图中出现的所有文字（标题、日期时间、项目名称、'
     '数值、单位、状态标记等），保持原文行序与表格结构；图中无文字时注明「无文字」。';
 
+/// 智能体"思考过程"中的一个步骤
+///
+/// 每次工具查询、每次网络接续都会追加一条，让用户在等待期间
+/// 看到进度而不是干转圈（[at] 用于计算相对耗时秒数）。
+class AgentThinkingStep {
+  final String label;
+  final DateTime at;
+
+  const AgentThinkingStep({required this.label, required this.at});
+}
+
 /// 一条智能体聊天消息
 class ChatMessage {
   final String role; // 'user' | 'assistant'
@@ -126,10 +137,25 @@ class AgentProvider extends ChangeNotifier {
   bool _sending = false;
   String? _toolStatus;
 
+  final _thinkingSteps = <AgentThinkingStep>[];
+  DateTime? _thinkingStartedAt;
+
+  /// 当前是否正在把回答流式吐到尾部气泡（此时不打思考面板，避免重复展示）
+  bool _streamingAnswer = false;
+
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get sending => _sending;
   String? get toolStatus => _toolStatus;
   bool get ready => _agentService != null;
+
+  /// 思考过程步骤（相对 [_thinkingStartedAt] 有序）
+  List<AgentThinkingStep> get thinkingSteps => List.unmodifiable(_thinkingSteps);
+
+  /// 思考起始时间（用于 UI 计算已等待秒数）
+  DateTime? get thinkingStartedAt => _thinkingStartedAt;
+
+  /// 回答是否正在流式输出
+  bool get streamingAnswer => _streamingAnswer;
 
   /// 模型是否不支持工具调用（聊天页顶部"简化模式"提示条用）
   bool get toolsUnsupported => _agentService?.toolsUnsupported ?? false;
@@ -153,6 +179,22 @@ class AgentProvider extends ChangeNotifier {
     _agentService?.wearable = wearable;
   }
 
+  /// 单图识别：返回 (识别文本, 错误信息)，二者至多一个非空。
+  ///
+  /// 包一层是为了让 [Future.wait] 能并发跑而不互相打断——任一图失败
+  /// 只影响自己，其余图片照常出结果。
+  Future<(String?, String?)> _recognizeImage(String path) async {
+    try {
+      final text = await VisionService.instance.recognizeImage(
+        filePath: path,
+        prompt: kChatImagePrompt,
+      );
+      return (text, null);
+    } catch (e) {
+      return (null, e.toString());
+    }
+  }
+
   /// 发送用户消息（编排 agent 循环，UI 通过 toolStatus 观察查询进度）
   ///
   /// [imagePaths] 随消息发送的截图路径：先经 [VisionService] 识别为文字，
@@ -172,28 +214,31 @@ class AgentProvider extends ChangeNotifier {
     ));
     _sending = true;
     _toolStatus = null;
+    _thinkingSteps.clear();
+    _thinkingStartedAt = DateTime.now();
+    _streamingAnswer = false;
     notifyListeners();
 
     // 图片 → 文字（三级降级：独立视觉配置 → 主Key+视觉模型 → 本地 OCR）
+    // 多图并行识别：此前是串行逐张等待，3 张图要等 3 倍时间，此处并发跑。
     final ocrParts = <String>[];
     String? visionError;
-    for (var i = 0; i < images.length; i++) {
+    if (images.isNotEmpty) {
       _toolStatus = images.length > 1
-          ? '正在识别图片（${i + 1}/${images.length}）…'
+          ? '正在并行识别 ${images.length} 张图片…'
           : '正在识别图片…';
       notifyListeners();
-      try {
-        final recognized = await VisionService.instance.recognizeImage(
-          filePath: images[i],
-          prompt: kChatImagePrompt,
-        );
-        if (recognized != null && recognized.trim().isNotEmpty) {
-          ocrParts.add(recognized.trim());
+      final recognized = await Future.wait(images.map(_recognizeImage));
+      final errors = <String>[];
+      for (var i = 0; i < recognized.length; i++) {
+        final (text, err) = recognized[i];
+        if (text != null && text.trim().isNotEmpty) {
+          ocrParts.add(text.trim());
+        } else if (err != null) {
+          errors.add(err);
         }
-      } catch (e) {
-        visionError = e.toString();
-        break;
       }
+      if (errors.isNotEmpty) visionError = errors.join('；');
     }
 
     // 仅当确实带了图片、却一张都没识别出文字时才报错；
@@ -240,8 +285,9 @@ class AgentProvider extends ChangeNotifier {
         if (streamIdx != null) {
           _messages.removeAt(streamIdx!);
           streamIdx = null;
-          notifyListeners();
         }
+        _streamingAnswer = false;
+        notifyListeners();
         return;
       }
       if (streamIdx == null) {
@@ -253,6 +299,7 @@ class AgentProvider extends ChangeNotifier {
         streamIdx = _messages.length - 1;
         lastStreamNotify = DateTime.now();
         _toolStatus = null;
+        _streamingAnswer = true;
         notifyListeners();
         return;
       }
@@ -272,9 +319,11 @@ class AgentProvider extends ChangeNotifier {
         userText: effectiveText,
         onStatus: (s) {
           _toolStatus = s;
+          _addThinkingStep(s);
           notifyListeners();
         },
         onDelta: handleDelta,
+        onThought: (t) => _addThinkingStep('推演：$t'),
       );
     } catch (e) {
       if (streamIdx != null) _messages.removeAt(streamIdx!);
@@ -309,8 +358,15 @@ class AgentProvider extends ChangeNotifier {
     }
     _sending = false;
     _toolStatus = null;
+    _streamingAnswer = false;
     notifyListeners();
     await _persist();
+  }
+
+  /// 记录一个思考步骤（相邻重复状态不重复入列，避免同一提示刷屏）
+  void _addThinkingStep(String label) {
+    if (_thinkingSteps.isNotEmpty && _thinkingSteps.last.label == label) return;
+    _thinkingSteps.add(AgentThinkingStep(label: label, at: DateTime.now()));
   }
 
   /// 重试最后一次失败请求（移除错误气泡并重发其对应的问题）

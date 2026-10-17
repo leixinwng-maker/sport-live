@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,138 @@ import 'cards/knowledge_entry_card.dart';
 import 'cards/life_status_card.dart';
 import 'cards/workout_plan_card.dart';
 import 'cards/workout_records_card.dart';
+
+/// 等待面板：把「看不见的等待」变成可见的进度时间线
+///
+/// AI 智能体在「查数据 → 组织回答」之间往往要等十几秒，此前 UI 只有一个转圈
+/// 加一行状态，用户不知道进展到哪一步。这里把 [AgentProvider.thinkingSteps]
+/// 落成时间线，并实时显示已等待秒数；回答一旦开始流式输出就把自己收起，
+/// 避免和尾部气泡重复。
+class _ThinkingPanel extends StatefulWidget {
+  const _ThinkingPanel({required this.agent});
+
+  final AgentProvider agent;
+
+  @override
+  State<_ThinkingPanel> createState() => _ThinkingPanelState();
+}
+
+class _ThinkingPanelState extends State<_ThinkingPanel> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    // 每秒重绘一次，刷新"已等待 Ns"（步骤本身变化由 provider 通知驱动）
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final agent = widget.agent;
+
+    // 回答已开始流式输出：面板让位给尾部气泡，不再占用视线
+    if (agent.toolStatus == null && agent.streamingAnswer) {
+      return const SizedBox.shrink();
+    }
+
+    final start = agent.thinkingStartedAt;
+    final elapsed = start == null
+        ? 0
+        : DateTime.now().difference(start).inSeconds;
+    final steps = agent.thinkingSteps;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: TaoistTheme.mistGray.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: TaoistTheme.jadeGreen.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                steps.isEmpty ? '正在推演…' : agent.toolStatus ?? '整理回答…',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: TaoistTheme.inkBlack,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '已等待 ${elapsed}s',
+                style: const TextStyle(
+                    fontSize: 11, color: TaoistTheme.cloudGray),
+              ),
+            ],
+          ),
+          if (steps.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (var i = 0; i < steps.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(left: 2, bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      i == steps.length - 1
+                          ? Icons.radio_button_checked
+                          : Icons.check_circle_outline,
+                      size: 12,
+                      color: i == steps.length - 1
+                          ? TaoistTheme.jadeGreen
+                          : TaoistTheme.mistGray,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        steps[i].label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.45,
+                          color: i == steps.length - 1
+                              ? TaoistTheme.inkBlack
+                              : TaoistTheme.cloudGray,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '+${steps[i].at.difference(start ?? steps[i].at).inSeconds}s',
+                      style: const TextStyle(
+                          fontSize: 10, color: TaoistTheme.mistGray),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 /// ============================================================================
 /// AI 智能体对话页（P3 主入口）：数据感知的多轮对话
@@ -290,7 +423,7 @@ class _AIScreenState extends State<AIScreen> {
                   itemCount: agent.messages.length + (agent.sending ? 1 : 0),
                   itemBuilder: (context, i) {
                     if (i >= agent.messages.length) {
-                      return _buildToolStatus(agent.toolStatus);
+                      return _ThinkingPanel(agent: agent);
                     }
                     return _buildBubble(context, agent.messages[i], i);
                   },
@@ -602,27 +735,6 @@ class _AIScreenState extends State<AIScreen> {
       payload: payload,
       saved: m.payloadSaved,
       onSaved: onSaved,
-    );
-  }
-
-  Widget _buildToolStatus(String? status) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            status ?? '思考中…',
-            style:
-                const TextStyle(fontSize: 12, color: TaoistTheme.cloudGray),
-          ),
-        ],
-      ),
     );
   }
 

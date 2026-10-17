@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../models/user_profile.dart';
@@ -156,6 +157,14 @@ class AppProvider extends ChangeNotifier {
   List<ChatModelConfig> chatModels = [];
   String? activeModelId;
 
+  // AI 配置云端备份状态（设置页展示用）
+  /// 云端已有一份备份（本次或更早上传过）
+  bool aiCloudBacked = false;
+  /// 云端备份时间（ISO8601），null 表示尚未备份
+  String? aiCloudUpdatedAt;
+  /// 最近一次云端同步失败原因；成功为 null
+  String? aiCloudError;
+
   Future<void> init() async {
     isLoading = true;
     notifyListeners();
@@ -180,6 +189,8 @@ class AppProvider extends ChangeNotifier {
       await _ai.init();
       // 多模型管理：读取模型列表 + 旧版单配置迁移 + 下发激活模型到引擎
       await _loadChatModels();
+      // 云备份优先：本地无配置时先从云端回填，再把合并结果回传（异步，不阻塞启动）
+      unawaited(_syncAiSettingsOnBoot());
       aiConfigured = _ai.isConfigured;
       // 视觉识别（方案乙）：注入旧通道 + 预热独立配置缓存
       VisionService.instance.setLegacyChannel(_ai);
@@ -223,6 +234,8 @@ class AppProvider extends ChangeNotifier {
     SyncEngine.instance.onRemoteApplied = loadAllData;
     SyncEngine.instance.start();
     notifyListeners();
+    // 登录后立刻对账 AI 配置：换机/重装场景在此回填密钥
+    unawaited(_syncAiSettingsOnBoot());
   }
 
   /// 登出：停同步引擎、清增量游标与待传队列（防止下个账号误传当前账号数据），再清 token 会话；
@@ -233,6 +246,10 @@ class AppProvider extends ChangeNotifier {
     await _db.clearQueue();
     await CloudApi.instance.clearSession();
     needsLogin = true;
+    // 换账号：云端备份状态归位，避免把上一位用户的备份时间显示给下一位
+    aiCloudBacked = false;
+    aiCloudUpdatedAt = null;
+    aiCloudError = null;
     notifyListeners();
   }
 
@@ -1536,6 +1553,26 @@ class AppProvider extends ChangeNotifier {
     await _applyActiveModel();
   }
 
+  /// 启动/登录后的 AI 配置云端对账：先拉取回填（本地为空时），再回传补齐云端。
+  /// 全程异步且吞异常：云配置只是便利功能，绝不能拖慢或打断启动。
+  Future<void> _syncAiSettingsOnBoot() async {
+    try {
+      final restored = await restoreAiSettingsFromCloud();
+      if (restored) {
+        await _applyActiveModel();
+        aiConfigured = _ai.isConfigured;
+        notifyListeners();
+      }
+      // 本地有配置时补一次上传：把本机改动（含新填的 Key）同步上去。
+      // 仅当本地非空才传，避免空配置把云端副本清空。
+      if (chatModels.isNotEmpty) {
+        await backupAiSettingsToCloud();
+      }
+    } catch (_) {
+      // 云端对账失败不影响启动
+    }
+  }
+
   /// 按服务商预设生成默认显示名
   String _defaultModelName(String baseUrl, String model) {
     for (final p in ChatModelPresets.all) {
@@ -1591,6 +1628,7 @@ class AppProvider extends ChangeNotifier {
     await _modelStore.setActiveId(id);
     await _applyActiveModel();
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
     return id;
   }
 
@@ -1612,6 +1650,7 @@ class AppProvider extends ChangeNotifier {
       await _applyActiveModel();
     }
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
   }
 
   /// 删除模型（连带删除加密 Key）；删除激活模型时自动切换到其它启用模型
@@ -1626,6 +1665,7 @@ class AppProvider extends ChangeNotifier {
       await _applyActiveModel();
     }
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
   }
 
   /// 启用/停用模型（停用当前激活模型时自动切换）
@@ -1644,6 +1684,7 @@ class AppProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
   }
 
   /// 切换激活模型（下发引擎，智能体随即使用该模型）
@@ -1657,6 +1698,122 @@ class AppProvider extends ChangeNotifier {
 
   /// 读取某模型已保存的 Key（管理页「查看 Key」用）
   Future<String> readChatModelKey(String id) => _modelStore.readKey(id);
+
+  // ============ AI 配置云端备份 ============
+
+  /// 登录/启动后从云端取回配置。
+  ///
+  /// 策略：**本地为空才用云端覆盖本地**。用户换机或重装后本地没有配置，
+  /// 云端副本直接回填，省去重新填 Key；本地已有配置时绝不反向覆盖，
+  /// 避免一台设备上的误删被云端旧副本"复活"或覆盖掉新改的 Key。
+  Future<bool> restoreAiSettingsFromCloud() async {
+    final cloud = CloudApi.instance;
+    if (!cloud.authenticated) return false;
+    try {
+      final data = await cloud.fetchAiSettings();
+      final remote = data['models'];
+      final ts = data['updatedAt']?.toString();
+      aiCloudBacked = (remote is List) && remote.isNotEmpty;
+      aiCloudUpdatedAt = ts;
+      aiCloudError = null;
+      if (!aiCloudBacked) return false;
+      if (chatModels.isNotEmpty) {
+        // 本地已有配置：只记录云端存在，不覆盖
+        return false;
+      }
+      final restored = <ChatModelConfig>[];
+      for (final raw in remote) {
+        if (raw is! Map) continue;
+        final m = raw.cast<String, dynamic>();
+        final cfg = ChatModelConfig.fromJson(m);
+        if (cfg.id.isEmpty || !cfg.usable) continue;
+        final key = (m['apiKey'] ?? '').toString();
+        if (key.isNotEmpty) await _modelStore.writeKey(cfg.id, key);
+        restored.add(cfg);
+      }
+      if (restored.isEmpty) return false;
+      chatModels = restored;
+      final remoteActive = data['activeId']?.toString();
+      activeModelId = (remoteActive != null &&
+              restored.any((m) => m.id == remoteActive))
+          ? remoteActive
+          : restored.first.id;
+      await _modelStore.saveAll(chatModels);
+      await _modelStore.setActiveId(activeModelId!);
+
+      // 视觉配置一并回填（仅在本地尚未配置时）
+      final vision = data['vision'];
+      if (vision is Map) {
+        final v = vision.cast<String, dynamic>();
+        final cur = await VisionService.instance.config();
+        if (!cur.configured) {
+          final b = (v['baseUrl'] ?? '').toString();
+          final k = (v['apiKey'] ?? '').toString();
+          final mo = (v['model'] ?? '').toString();
+          if (b.isNotEmpty && k.isNotEmpty && mo.isNotEmpty) {
+            await VisionService.instance.saveConfig(
+                VisionConfig(baseUrl: b, apiKey: k, model: mo));
+            visionConfigured = true;
+          }
+        }
+      }
+
+      await _applyActiveModel();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      aiCloudError = '云端配置拉取失败：$e';
+      return false;
+    }
+  }
+
+  /// 把当前本地配置整体覆盖上传到云端。
+  /// 不登录直接跳过；失败只记录状态不抛错（本地已存盘，不该阻断用户操作）。
+  Future<bool> backupAiSettingsToCloud() async {
+    final cloud = CloudApi.instance;
+    if (!cloud.authenticated) return false;
+    try {
+      final payload = <Map<String, dynamic>>[];
+      for (final m in chatModels) {
+        payload.add({
+          ...m.toJson(),
+          'apiKey': await _modelStore.readKey(m.id),
+        });
+      }
+      final vc = await VisionService.instance.config();
+      final ts = await cloud.uploadAiSettings(
+        models: payload,
+        activeId: activeModelId,
+        vision: vc.configured
+            ? {'baseUrl': vc.baseUrl, 'model': vc.model, 'apiKey': vc.apiKey}
+            : null,
+      );
+      aiCloudBacked = true;
+      aiCloudUpdatedAt = ts ?? DateTime.now().toIso8601String();
+      aiCloudError = null;
+      return true;
+    } catch (e) {
+      aiCloudError = '云端配置上传失败：$e';
+      return false;
+    }
+  }
+
+  /// 删除云端备份（本地配置保留）。
+  Future<bool> removeCloudAiSettings() async {
+    final cloud = CloudApi.instance;
+    if (!cloud.authenticated) return false;
+    try {
+      await cloud.deleteAiSettings();
+      aiCloudBacked = false;
+      aiCloudUpdatedAt = null;
+      aiCloudError = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      aiCloudError = '云端配置删除失败：$e';
+      return false;
+    }
+  }
 
   /// 测试模型连通性（不改动激活状态）；[apiKey] 留空且给了 [id] 时用已保存 Key
   Future<String> testChatModel({
@@ -1868,6 +2025,7 @@ class AppProvider extends ChangeNotifier {
     );
     visionConfigured = saved.configured;
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
   }
 
   /// 清空独立视觉配置
@@ -1875,6 +2033,7 @@ class AppProvider extends ChangeNotifier {
     await VisionService.instance.clearConfig();
     visionConfigured = false;
     notifyListeners();
+    unawaited(backupAiSettingsToCloud());
   }
 
   /// 测试识别连通性：对已保存的独立配置发一次内置小图请求，

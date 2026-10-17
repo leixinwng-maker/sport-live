@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/agent_provider.dart';
 import '../../providers/app_provider.dart';
+import '../../services/cloud_api.dart';
 import '../../services/model_config.dart';
 import '../../services/search_service.dart';
 import '../../services/vision/vision_config.dart';
@@ -1923,6 +1924,8 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
         children: [
           _buildModelList(app),
           const SizedBox(height: 20),
+          _buildCloudBackupCard(app),
+          const SizedBox(height: 20),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
@@ -2055,6 +2058,171 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
         ),
       ),
     );
+  }
+
+  /// 云端备份卡片：登录后自动同步密钥，重装/换机免重新填写
+  Widget _buildCloudBackupCard(AppProvider app) {
+    final loggedIn = CloudApi.instance.authenticated;
+    final Color dotColor;
+    final String statusText;
+    if (!loggedIn) {
+      dotColor = TaoistTheme.mistGray;
+      statusText = '未登录，登录后自动备份与恢复';
+    } else if (app.aiCloudError != null) {
+      dotColor = const Color(0xFFD9534F);
+      statusText = app.aiCloudError!;
+    } else if (app.aiCloudBacked) {
+      dotColor = TaoistTheme.jadeGreen;
+      statusText = '已备份至云端${_cloudTimeText(app.aiCloudUpdatedAt)}';
+    } else {
+      dotColor = TaoistTheme.mistGray;
+      statusText = '尚未备份，点击下方按钮上传';
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: TaoistTheme.mistGray.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud_sync_outlined,
+                    size: 18, color: TaoistTheme.jadeGreen),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '云端备份',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: TaoistTheme.inkBlack,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: dotColor),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'API Key 经服务端加密后存于你的账号下，重装或换机登录即可自动取回，'
+              '无需重新填写。密钥不参与业务数据同步，数据库只存密文。',
+              style: TextStyle(
+                fontSize: 12,
+                color: TaoistTheme.cloudGray,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: dotColor),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    statusText,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, color: TaoistTheme.cloudGray),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: loggedIn && app.chatModels.isNotEmpty
+                        ? () => _doCloudBackup(app)
+                        : null,
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: const Text('立即备份'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: loggedIn && app.aiCloudBacked
+                        ? () => _confirmRemoveCloud(app)
+                        : null,
+                    icon: const Icon(Icons.cloud_off_outlined, size: 18),
+                    label: const Text('移除云端'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFD9534F),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _cloudTimeText(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    try {
+      final t = DateTime.parse(iso).toLocal();
+      return '（${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} '
+          '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}）';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _doCloudBackup(AppProvider app) async {
+    final ok = await app.backupAiSettingsToCloud();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? '已备份 ${app.chatModels.length} 个模型配置至云端'
+          : (app.aiCloudError ?? '备份失败')),
+    ));
+  }
+
+  Future<void> _confirmRemoveCloud(AppProvider app) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('移除云端备份'),
+        content: const Text(
+          '将删除云端的 AI 配置副本（含 API Key）。本机配置不受影响，'
+          '下次保存配置时会重新上传。确定继续？',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('移除')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final ok = await app.removeCloudAiSettings();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? '云端备份已移除' : (app.aiCloudError ?? '移除失败')),
+    ));
   }
 
   Widget _buildModelRow(AppProvider app, ChatModelConfig m) {

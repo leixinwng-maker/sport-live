@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection
 
+from app.api import ai_settings as ai_settings_api
 from app.api import auth as auth_api
 from app.api import data as data_api
 from app.api import sync as sync_api
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_api.router)
     app.include_router(sync_api.router)
     app.include_router(data_api.router)
+    app.include_router(ai_settings_api.router)
 
     # 法务静态页（隐私政策 / 用户协议，供上架审核与 App 内引用）：
     # /legal/privacy-policy.html、/legal/user-agreement.html

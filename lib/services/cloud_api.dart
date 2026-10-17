@@ -235,6 +235,48 @@ class CloudApi {
     }
   }
 
+  // ---------- AI 服务配置云端备份 ----------
+
+  /// GET /ai-settings：拉取云端 AI 配置（未备份过时 models 为空数组）。
+  Future<Map<String, dynamic>> fetchAiSettings() async {
+    try {
+      final res = await dio.get<Map<String, dynamic>>('/ai-settings');
+      return _data(res);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// PUT /ai-settings：整体覆盖上传（含明文 API Key，走 HTTPS + Bearer）。
+  Future<String?> uploadAiSettings({
+    required List<Map<String, dynamic>> models,
+    String? activeId,
+    Map<String, dynamic>? vision,
+  }) async {
+    try {
+      final res = await dio.put<Map<String, dynamic>>(
+        '/ai-settings',
+        data: {
+          'models': models,
+          'activeId': activeId,
+          if (vision != null) 'vision': vision,
+        },
+      );
+      return _data(res)['updatedAt'] as String?;
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// DELETE /ai-settings：清空云端备份。
+  Future<void> deleteAiSettings() async {
+    try {
+      await dio.delete<Map<String, dynamic>>('/ai-settings');
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
   // ---------- 内部 ----------
 
   Map<String, dynamic> _data(Response<Map<String, dynamic>?> res) {

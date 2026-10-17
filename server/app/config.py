@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # 登录限流：同一 key 每分钟最大尝试次数
     login_rate_limit: int = 10
 
+    # AI 配置云端加密主密钥（32 字节任意串，建议 openssl rand -hex 32）。
+    # 留空时回退到从 jwt_secret 派生：开箱可用，但生产务必单独配置，
+    # 否则日后轮换 JWT 密钥会导致历史 AI 配置无法解密。
+    ai_settings_key: str = ""
+
     # 启动时自动建表（生产建议关闭，走 alembic）
     auto_create_tables: bool = True
 

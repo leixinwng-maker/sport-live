@@ -377,6 +377,19 @@ sync_applied = Table(
 )
 
 
+# AI 服务配置云端备份：每个用户一行，payload 为 AES-256-GCM 密文。
+# 解决"重装/更新客户端后要重新输入 API Key"的问题：登录即自动拉回本地。
+# 不属于 BUSINESS_TABLES：不参与 /data 与 /sync 的业务同步通道，
+# 也不进客户端 sqflite，避免密钥明文落到本地业务库与同步队列。
+ai_settings = Table(
+    "ai_settings",
+    metadata,
+    Column("user_id", String(64), primary_key=True),
+    Column("payload", Text(), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False, default=utcnow),
+)
+
+
 # ------------------------------------------------------------ payload 映射
 
 

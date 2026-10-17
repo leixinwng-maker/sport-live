@@ -8,9 +8,12 @@ import 'diet_list_screen.dart';
 import 'voice_diet_screen.dart';
 
 /// 饮食记录编辑页
-/// 支持从食物库选择食物、输入克数自动计算热量
+/// 支持从食物库选择食物、输入克数自动计算热量；
+/// 传入已有 [record] 时进入编辑模式：预填原数据、保存走 upsert、AppBar 提供删除入口
 class DietEditScreen extends StatefulWidget {
-  const DietEditScreen({super.key});
+  final DietRecord? record;
+
+  const DietEditScreen({super.key, this.record});
 
   @override
   State<DietEditScreen> createState() => _DietEditScreenState();
@@ -20,14 +23,22 @@ class _DietEditScreenState extends State<DietEditScreen> {
   late DateTime _date;
   late String _mealType;
   final List<FoodItem> _foods = [];
+  bool _busy = false;
 
   static const List<String> _mealTypes = ['早餐', '午餐', '晚餐', '加餐'];
 
   @override
   void initState() {
     super.initState();
-    _date = DateTime.now();
-    _mealType = '早餐';
+    final r = widget.record;
+    if (r != null) {
+      _date = r.date;
+      _mealType = _mealTypes.contains(r.mealType) ? r.mealType : '正餐';
+      _foods.addAll(r.foods);
+    } else {
+      _date = DateTime.now();
+      _mealType = '早餐';
+    }
   }
 
   double get _totalCalories {
@@ -48,9 +59,19 @@ class _DietEditScreenState extends State<DietEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.record != null;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('记录饮食'),
+        title: Text(isEditing ? '编辑饮食' : '记录饮食'),
+        actions: [
+          if (isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '删除本条记录',
+              color: Colors.red.withValues(alpha: 0.8),
+              onPressed: _busy ? null : _delete,
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -84,7 +105,11 @@ class _DietEditScreenState extends State<DietEditScreen> {
                     labelText: '餐次',
                     prefixIcon: Icon(Icons.restaurant, size: 18),
                   ),
-                  items: _mealTypes
+                  // 记录可能带非标准餐次（如智能体 log_diet 的「正餐」），
+                  // 不在固定列表时动态补进 items，避免 Dropdown 断言崩溃
+                  items: (_mealTypes.contains(_mealType)
+                          ? _mealTypes
+                          : [_mealType, ..._mealTypes])
                       .map((t) => DropdownMenuItem(
                             value: t,
                             child: Text(t),
@@ -252,8 +277,8 @@ class _DietEditScreenState extends State<DietEditScreen> {
           SizedBox(
             height: 48,
             child: ElevatedButton(
-              onPressed: _foods.isEmpty ? null : _save,
-              child: const Text('保存饮食记录'),
+              onPressed: _foods.isEmpty || _busy ? null : _save,
+              child: Text(widget.record != null ? '保存修改' : '保存饮食记录'),
             ),
           ),
           const SizedBox(height: 32),
@@ -363,6 +388,7 @@ class _DietEditScreenState extends State<DietEditScreen> {
   }
 
   Future<void> _save() async {
+    if (_busy) return;
     if (_foods.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请至少添加一种食物')),
@@ -370,7 +396,11 @@ class _DietEditScreenState extends State<DietEditScreen> {
       return;
     }
 
+    final isEditing = widget.record != null;
+    // 编辑模式沿用原 id：saveDietRecord 是 upsert，同 id 会覆盖同一条记录，
+    // 传 null 则新增一条新的，避免每次编辑都产生重复记录
     final record = DietRecord(
+      id: widget.record?.id,
       date: _date,
       mealType: _mealType,
       foods: _foods,
@@ -378,15 +408,69 @@ class _DietEditScreenState extends State<DietEditScreen> {
     );
 
     final provider = Provider.of<AppProvider>(context, listen: false);
-    await provider.addDietRecord(record);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('饮食记录已保存')),
-      );
+    setState(() => _busy = true);
+    try {
+      await provider.addDietRecord(record);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+
+    if (!mounted) return;
+    navigator.pop();
+    messenger.showSnackBar(
+      SnackBar(content: Text(isEditing ? '饮食记录已更新' : '饮食记录已保存')),
+    );
   }
+
+  /// 删除当前编辑的记录（仅编辑模式可用；确认后回收站式删除并返回上一页）
+  Future<void> _delete() async {
+    final record = widget.record;
+    final id = record?.id;
+    if (_busy || record == null || id == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除饮食记录'),
+        content: Text(
+          '确定删除 ${_fmtDate(record.date)} 的「${record.mealType}」记录吗？删除后无法恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    setState(() => _busy = true);
+    try {
+      await provider.deleteDietRecord(id);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+
+    if (!mounted) return;
+    navigator.pop();
+    messenger.showSnackBar(const SnackBar(content: Text('饮食记录已删除')));
+  }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
 class _FoodItemTile extends StatefulWidget {

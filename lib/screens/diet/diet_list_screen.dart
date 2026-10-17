@@ -184,38 +184,90 @@ class _DayDietCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 20),
-            // 餐次列表
-            ...records.map((r) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      _MealBadge(type: r.mealType),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          r.foods.map((f) => '${f.name}${f.grams}g').join('、'),
+            // 餐次列表（点击进入编辑，长按删除）
+            ...records.map((r) => InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: r.id == null
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DietEditScreen(record: r),
+                            ),
+                          );
+                        },
+                  onLongPress:
+                      r.id == null ? null : () => _confirmDelete(context, r),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        _MealBadge(type: r.mealType),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            r.foods.map((f) => '${f.name}${f.grams}g').join('、'),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: TaoistTheme.inkBlack,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${r.totalCalories.toStringAsFixed(0)}千卡',
                           style: const TextStyle(
                             fontSize: 12,
-                            color: TaoistTheme.inkBlack,
+                            color: TaoistTheme.cloudGray,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      Text(
-                        '${r.totalCalories.toStringAsFixed(0)}千卡',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: TaoistTheme.cloudGray,
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: TaoistTheme.cloudGray.withValues(alpha: 0.7),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 )),
           ],
         ),
       ),
     );
+  }
+
+  /// 长按删除单条记录：确认后调用 provider 删除并提示
+  static Future<void> _confirmDelete(
+    BuildContext context,
+    DietRecord r,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除饮食记录'),
+        content: Text('确定删除「${r.mealType}」这条记录吗？删除后无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || r.id == null || !context.mounted) return;
+
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    await provider.deleteDietRecord(r.id!);
+    messenger.showSnackBar(const SnackBar(content: Text('饮食记录已删除')));
   }
 
   Widget _buildNutrientBar({

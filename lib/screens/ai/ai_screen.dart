@@ -14,6 +14,7 @@ import '../../services/vision/vision_config.dart';
 import '../../services/vision/vision_exceptions.dart';
 import '../../services/vision/vision_service.dart';
 import '../../theme/taoist_theme.dart';
+import 'cards/diet_delete_card.dart';
 import 'cards/diet_plan_card.dart';
 import 'cards/finance_records_card.dart';
 import 'cards/food_catalog_card.dart';
@@ -677,6 +678,13 @@ class _AIScreenState extends State<AIScreen> {
         context.read<AgentProvider>().markPayloadSaved(index);
     if (type == 'diet_plan' || type == 'diet_log') {
       return DietPlanCard(
+        payload: payload,
+        saved: m.payloadSaved,
+        onSaved: onSaved,
+      );
+    }
+    if (type == 'delete_diet') {
+      return DietDeleteCard(
         payload: payload,
         saved: m.payloadSaved,
         onSaved: onSaved,

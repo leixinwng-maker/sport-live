@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_planner/data/food_catalog_data.dart';
 import 'package:ai_planner/data/knowledge_seed_data.dart';
 import 'package:ai_planner/models/workout.dart';
 import 'package:ai_planner/services/database_helper.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// P2 T2 schema v8 运行验收（Windows 明文 ffi 路径）：
 /// 1. 全新建库：18 张表齐全
@@ -13,6 +15,20 @@ import 'package:ai_planner/services/database_helper.dart';
 /// 4. wipeLocalData：库文件删除 + 重建 + 队列/业务行清空
 void main() {
   final helper = DatabaseHelper.instance;
+
+  // 测试库隔离：改用独立临时目录，避免共享库文件被并行测试/遗留状态污染
+  late Directory dbTmpDir;
+  setUpAll(() async {
+    sqfliteFfiInit();
+    dbTmpDir = await Directory.systemTemp.createTemp('t2_db');
+    await databaseFactoryFfi.setDatabasesPath(dbTmpDir.path);
+  });
+  tearDownAll(() async {
+    await helper.wipeLocalData(); // 关闭连接并删除库文件
+    if (await dbTmpDir.exists()) {
+      await dbTmpDir.delete(recursive: true);
+    }
+  });
 
   test('T2 验收：建库 / 种子确定性 / 写入队 / 清库重播种', () async {
     // ---- 1. 全新建库：17 张表齐全 ----

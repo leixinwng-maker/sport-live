@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// P7-T3：v10 → v11 迁移测试（桌面 ffi 明文库路径，跑真实 DatabaseHelper 升级逻辑）。
+/// P7-T3：v10 → 最新版迁移测试（桌面 ffi 明文库路径，跑真实 DatabaseHelper 升级逻辑）。
 ///
-/// 流程：手工建 v10 旧库（旧列结构）并插入旧数据 → 关库 →
-/// 通过 DatabaseHelper.instance.database 重新打开（触发 onUpgrade 10→11）→
+/// 流程：手工建 v10 旧库（受影响表的旧列结构）并插入旧数据 → 关库 →
+/// 通过 DatabaseHelper.instance.database 重新打开（触发 onUpgrade 10→14）→
 /// 断言旧数据保留、新列带默认值、新列可写可查。
 void main() {
   setUpAll(() {
@@ -21,7 +21,7 @@ void main() {
     await databaseFactoryFfi.setDatabasesPath(tmp.path);
     final dbPath = p.join(tmp.path, 'ai_planner.db');
 
-    // ---- 1) 手工建 v10 旧库（受影响两张表的旧列结构）并插入旧数据 ----
+    // ---- 1) 手工建 v10 旧库（迁移链会 ALTER 到的表的旧列结构，取自真实 v10 schema）并插入旧数据 ----
     final old = await databaseFactoryFfi.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
@@ -53,6 +53,51 @@ void main() {
               sync_updated_at TEXT
             )
           ''');
+          // v12 迁移会 ALTER wearable_samples，v10 时尚无同步列
+          await db.execute('''
+            CREATE TABLE wearable_samples (
+              id TEXT PRIMARY KEY,
+              data_type TEXT NOT NULL,
+              label TEXT NOT NULL,
+              metric_type TEXT,
+              value REAL,
+              unit TEXT,
+              start_time TEXT NOT NULL,
+              end_time TEXT NOT NULL,
+              source_name TEXT,
+              source_device_id TEXT,
+              recording_method TEXT,
+              extra TEXT,
+              created_at TEXT NOT NULL
+            )
+          ''');
+          // v13 迁移会 ALTER workouts / workout_plans，v10 时尚无扩展列
+          await db.execute('''
+            CREATE TABLE workouts (
+              id TEXT PRIMARY KEY,
+              date TEXT NOT NULL,
+              type TEXT NOT NULL,
+              duration INTEGER NOT NULL,
+              intensity INTEGER NOT NULL,
+              exercises TEXT NOT NULL,
+              sync_version INTEGER NOT NULL DEFAULT 0,
+              sync_updated_at TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE workout_plans (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              goal TEXT,
+              split TEXT,
+              days_per_week INTEGER,
+              days TEXT NOT NULL,
+              source TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              sync_version INTEGER NOT NULL DEFAULT 0,
+              sync_updated_at TEXT
+            )
+          ''');
         },
       ),
     );
@@ -80,9 +125,9 @@ void main() {
     });
     await old.close();
 
-    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→v11 真实升级 ----
+    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→v14 真实升级 ----
     final db = await DatabaseHelper.instance.database;
-    expect(await db.getVersion(), 11);
+    expect(await db.getVersion(), 14);
 
     // ---- 3) 旧数据保留且新列带默认值 ----
     final rep = (await db

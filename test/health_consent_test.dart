@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:ai_planner/models/wearable.dart';
 import 'package:ai_planner/providers/wearable_provider.dart';
 import 'package:ai_planner/services/database_helper.dart';
 import 'package:ai_planner/services/health_consent.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// P4-T6 单测：健康数据「单独同意」门禁与撤回闭环（全 fake、无网络、无平台通道）
 ///
@@ -62,6 +65,20 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final helper = DatabaseHelper.instance;
+
+  // 测试库隔离：改用独立临时目录，避免共享库文件被并行测试/遗留状态污染
+  late Directory dbTmpDir;
+  setUpAll(() async {
+    sqfliteFfiInit();
+    dbTmpDir = await Directory.systemTemp.createTemp('health_consent_db');
+    await databaseFactoryFfi.setDatabasesPath(dbTmpDir.path);
+  });
+  tearDownAll(() async {
+    await helper.wipeLocalData(); // 关闭连接并删除库文件
+    if (await dbTmpDir.exists()) {
+      await dbTmpDir.delete(recursive: true);
+    }
+  });
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});

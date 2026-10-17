@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:ai_planner/models/wearable.dart';
 import 'package:ai_planner/providers/wearable_provider.dart';
 import 'package:ai_planner/services/database_helper.dart';
 import 'package:ai_planner/services/wearable_aggregator.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// P4-C T5 单测：全 fake、无网络、无平台通道
 ///
@@ -59,7 +63,23 @@ WearableRawPoint _raw(String type, double? value, DateTime at) =>
     WearableRawPoint(dataType: type, value: value, start: at, end: at);
 
 void main() {
+  // T5-4 的 Provider.init 依赖 SharedPreferences，需先初始化绑定并注入 mock 值
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
   final helper = DatabaseHelper.instance;
+  // 测试库隔离：改用独立临时目录，避免共享库文件被并行测试/遗留状态污染
+  late Directory dbTmpDir;
+  setUpAll(() async {
+    sqfliteFfiInit();
+    dbTmpDir = await Directory.systemTemp.createTemp('wearable_db');
+    await databaseFactoryFfi.setDatabasesPath(dbTmpDir.path);
+  });
+  tearDownAll(() async {
+    await helper.wipeLocalData(); // 关闭连接并删除库文件
+    if (await dbTmpDir.exists()) {
+      await dbTmpDir.delete(recursive: true);
+    }
+  });
   final now = DateTime(2026, 10, 7, 12);
 
   tearDown(() async {
@@ -201,10 +221,16 @@ void main() {
     });
 
     test('授权后同步落库、可出摘要与诊断', () async {
+      // 样本时间相对当前时间取值（秒级精度），避免固定日期随日历推移
+      // 滑出 snapshot(days: 7) 的窗口（时间炸弹）；两步数点须保持先后顺序
+      final base = DateTime.now();
+      final tStepsPrev = DateTime(base.year, base.month, base.day - 2, 10);
+      final tStepsLast = DateTime(base.year, base.month, base.day - 1, 10);
+      final tWeight = DateTime(base.year, base.month, base.day - 1, 7);
       final gw = _FakeGateway(points: [
-        _raw('STEPS', 5000, DateTime(2026, 10, 6, 10)),
-        _raw('STEPS', 7000, DateTime(2026, 10, 7, 10)),
-        _raw('WEIGHT', 68.0, DateTime(2026, 10, 7, 7)),
+        _raw('STEPS', 5000, tStepsPrev),
+        _raw('STEPS', 7000, tStepsLast),
+        _raw('WEIGHT', 68.0, tWeight),
       ]);
       final p = WearableProvider(gateway: gw);
       await p.init();
@@ -223,7 +249,7 @@ void main() {
       final diag = await p.sourceDiagnosis();
       expect(diag.available, isTrue);
       expect(diag.authorized, isTrue);
-      expect(diag.lastDataAt['步数'], DateTime(2026, 10, 7, 10));
+      expect(diag.lastDataAt['步数'], tStepsLast);
       expect(diag.lastDataAt['静息心率'], isNull);
     });
 

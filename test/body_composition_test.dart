@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:ai_planner/models/health_metric.dart';
 import 'package:ai_planner/providers/app_provider.dart';
 import 'package:ai_planner/services/body_composition_parser.dart';
 import 'package:ai_planner/services/database_helper.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// P4-T7 单测：体成分类型扩展 + 体测批量录入的数据落库 + 拍照回填解析
 ///
@@ -15,6 +18,20 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final helper = DatabaseHelper.instance;
+
+  // 测试库隔离：改用独立临时目录，避免共享库文件被并行测试/遗留状态污染
+  late Directory dbTmpDir;
+  setUpAll(() async {
+    sqfliteFfiInit();
+    dbTmpDir = await Directory.systemTemp.createTemp('body_comp_db');
+    await databaseFactoryFfi.setDatabasesPath(dbTmpDir.path);
+  });
+  tearDownAll(() async {
+    await helper.wipeLocalData(); // 关闭连接并删除库文件
+    if (await dbTmpDir.exists()) {
+      await dbTmpDir.delete(recursive: true);
+    }
+  });
 
   group('T7-1 视觉模型 JSON 解析（首选回填路径）', () {
     test('标准 JSON：体成分 9 项全部归一', () {

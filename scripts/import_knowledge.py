@@ -80,7 +80,7 @@ ONTOLOGY_ID_PREFIX = {'EXMO': 'EXM:', 'RehabO': 'REHABO:'}
 
 # 开放数据与本体登记表：仅元数据与获取指引，不含正文
 REGISTRY_REQUIRED = ['id', 'name', 'kind', 'domain', 'license', 'access', 'note']
-REGISTRY_KINDS = ('本体', '知识图谱', '数据集', '食品数据库', '开源软件')
+REGISTRY_KINDS = ('本体', '知识图谱', '数据集', '语料', 'API', '食品数据库', '开源软件')
 REGISTRY_ACCESS = ('已接入', '可接入', '登记题录')
 # 「已接入/可接入」条目必须给出可直达地址；「登记题录」允许 url 留空（尚无可核实入口）
 REGISTRY_URL_REQUIRED_ACCESS = ('已接入', '可接入')
@@ -377,12 +377,27 @@ def main():
         {'name': '欧洲食品安全局（EFSA）关于咖啡因安全性的科学意见（2015）',
          'url': 'https://efsa.onlinelibrary.wiley.com/doi/10.2903/j.efsa.2015.4102',
          'license': '开放获取；仅条目化改写，标注出处'},
+        {'name': 'Europe PMC REST API（循证文献联网检索主源）',
+         'url': 'https://europepmc.org/',
+         'license': 'EMBL-EBI 免费开放（含商业用途）；仅取题录元数据，解析时丢弃正文，不落摘要'},
+        {'name': 'OpenAlex 学术图谱 API（补源，CC0）',
+         'url': 'https://openalex.org/',
+         'license': 'CC0 1.0 公共领域；仅取题录元数据；非商用（CC BY-NC）许可条目直接丢弃'},
+        {'name': 'Crossref REST API（兜底源）',
+         'url': 'https://www.crossref.org/',
+         'license': '官方免费开放；仅取题录元数据与许可声明，不取正文'},
+        {'name': 'Semantic Scholar Graph API（兜底源）',
+         'url': 'https://www.semanticscholar.org/',
+         'license': 'Allen 研究所免费开放（无 Key 限流）；接口不返回许可串，条目一律退化为纯著录题录，不转载正文'},
+        {'name': '肌筋膜链（含螺旋线）系统评价',
+         'url': 'https://pubmed.ncbi.nlm.nih.gov/26755480/',
+         'license': '摘要经 PubMed 免费公开；仅转述结论，未复制原文'},
     ]
 
     out = {
-        'version': '1.5.0',
+        'version': '1.6.0',
         'generatedAt': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目 + 运动医学/康复本体术语 + 开放数据与本体登记表。构建期导入，App 内零网络依赖。',
+        'description': '问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目 + 运动医学/康复本体术语 + 开放数据与本体登记表 + 开放文献检索 API 登记。构建期导入，App 内零网络依赖。',
         'sources': sources,
         'evidence': evidence,
         'otcSafety': otc_safety,

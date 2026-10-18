@@ -247,11 +247,11 @@ class CloudApi {
     }
   }
 
-  /// PUT /ai-settings：整体覆盖上传（含明文 API Key，走 HTTPS + Bearer）。
+  /// PUT /ai-settings：整体覆盖上传。
+  /// 客户端只上传非机密字段（baseUrl/model/name），**不含 API Key**。
   Future<String?> uploadAiSettings({
     required List<Map<String, dynamic>> models,
     String? activeId,
-    Map<String, dynamic>? vision,
   }) async {
     try {
       final res = await dio.put<Map<String, dynamic>>(
@@ -259,7 +259,6 @@ class CloudApi {
         data: {
           'models': models,
           'activeId': activeId,
-          if (vision != null) 'vision': vision,
         },
       );
       return _data(res)['updatedAt'] as String?;

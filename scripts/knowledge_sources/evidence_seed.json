@@ -485,6 +485,17 @@
       "source": "中医经典《黄帝内经》· 子午流注学说（养生实践用）",
       "url": "https://www.chinacdc.cn/",
       "license": "古籍公有领域；本条为现代实践摘要"
+    },
+    {
+      "id": "ev-myofascial-spiral-line",
+      "domain": "康复",
+      "condition": "肌筋膜链",
+      "topic": "螺旋线 肌筋膜链 筋膜连续性 旋转 循证强度",
+      "recommendation": "系统评价对肌筋膜经线（含螺旋线）各连接的解剖连续性逐段评级：螺旋线的 9 个连接中有 5 个获得验证，整体结论为「中等至强」证据。含义是——肌筋膜链作为结构概念已有实证支持，但并非每个节点都同等确证，引用时不应把整条链当成已被完全证实的解剖实体。训练含义：可放心使用「链条整体协同」的思路（对角链、旋转发力、整体动力链），但不宜据此宣称孤立肌群训练「无效」。",
+      "evidenceLevel": "系统评价",
+      "source": "Wilke J 等，What Is Evidence-Based About Myofascial Chains: A Systematic Review（Archives of Physical Medicine and Rehabilitation）· 条目化改写",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26755480/",
+      "license": "摘要经 PubMed 免费公开；仅转述结论，未复制原文"
     }
   ]
 }

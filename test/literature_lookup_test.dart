@@ -113,6 +113,79 @@ const String _openAlexBody = '''
 }
 ''';
 
+const String _crossrefBody = '''
+{
+  "status": "ok",
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1000/cr1",
+        "title": ["Effects of resistance training on strength."],
+        "author": [
+          {"given": "Alpha", "family": "A"},
+          {"given": "Beta", "family": "B"},
+          {"given": "Gamma", "family": "C"},
+          {"given": "Delta", "family": "D"}
+        ],
+        "container-title": ["Journal of Strength and Conditioning Research"],
+        "issued": {"date-parts": [[2021, 3, 1]]},
+        "license": [{"URL": "https://creativecommons.org/licenses/by/4.0/"}],
+        "is-referenced-by-count": 17,
+        "URL": "https://doi.org/10.1000/cr1",
+        "abstract": "must not be used"
+      },
+      {
+        "DOI": "10.1000/cr2",
+        "title": ["A non-commercial licensed study"],
+        "author": [{"given": "Eve", "family": "E"}],
+        "container-title": ["Some Journal"],
+        "issued": {"date-parts": [[2020]]},
+        "license": [{"URL": "https://creativecommons.org/licenses/by-nc/4.0/"}]
+      },
+      {
+        "DOI": "",
+        "title": ["A closed-access review"],
+        "author": [],
+        "container-title": [],
+        "issued": {"date-parts": [[2015]]},
+        "URL": "https://publisher.example.org/closed"
+      }
+    ]
+  }
+}
+''';
+
+const String _s2Body = '''
+{
+  "total": 2,
+  "data": [
+    {
+      "title": "Warm-up strategies and injury risk",
+      "year": 2019,
+      "venue": "Sports Medicine",
+      "authors": [{"name": "Alpha A"}, {"name": "Beta B"}],
+      "externalIds": {"DOI": "10.2000/s2-1", "PubMed": "30000000"},
+      "openAccessPdf": {"url": "https://example.org/s2.pdf"},
+      "citationCount": 33,
+      "abstract": "must not be used"
+    },
+    {
+      "title": "Untitled-by-DOI only study",
+      "year": 2017,
+      "venue": "",
+      "authors": [],
+      "externalIds": {},
+      "openAccessPdf": null
+    },
+    {
+      "title": "",
+      "year": 2010,
+      "externalIds": {"DOI": "10.2000/empty-title"}
+    }
+  ]
+}
+''';
+
 LiteratureRef _ref({
   required String title,
   String journal = '测试期刊',
@@ -194,6 +267,67 @@ void main() {
     test('L4 解析非法 JSON 安全返回空列表（不抛异常）', () {
       expect(LiteratureLookupService.parseEuropePmc('not json', limit: 5), isEmpty);
       expect(LiteratureLookupService.parseOpenAlex('{}', limit: 5), isEmpty);
+      expect(LiteratureLookupService.parseCrossref('not json', limit: 5), isEmpty);
+      expect(LiteratureLookupService.parseSemanticScholar('{}', limit: 5), isEmpty);
+    });
+
+    test('L5 parseCrossref：题名数组取首项、年份取 date-parts、丢弃 NC、缺 DOI 回落 URL', () {
+      final list = LiteratureLookupService.parseCrossref(_crossrefBody, limit: 5);
+
+      expect(list.length, 2, reason: 'cc-by-nc 条目被丢弃');
+
+      final a = list[0];
+      expect(a.title, 'Effects of resistance training on strength',
+          reason: '题名是数组，取首项并去结尾句点');
+      expect(a.journal, 'Journal of Strength and Conditioning Research');
+      expect(a.year, 2021, reason: '年份取自 issued.date-parts[0][0]');
+      expect(a.doi, '10.1000/cr1');
+      expect(a.authors, 'Alpha A, Beta B, Gamma C 等', reason: '超过 3 位截断');
+      expect(a.isOpenAccess, isTrue, reason: '许可串含 creativecommons 即视为开放');
+      expect(a.url, 'https://doi.org/10.1000/cr1');
+      expect(a.source, 'Crossref');
+
+      final b = list[1];
+      expect(b.title, 'A closed-access review');
+      expect(b.doi, isEmpty);
+      expect(b.url, 'https://publisher.example.org/closed',
+          reason: '无 DOI 时回落 Crossref 给的 URL');
+      expect(b.isOpenAccess, isFalse);
+    });
+
+    test('L6 parseSemanticScholar：DOI 取自 externalIds、OA 由 PDF 直链判定、许可留空', () {
+      final list =
+          LiteratureLookupService.parseSemanticScholar(_s2Body, limit: 5);
+
+      expect(list.length, 2, reason: '无标题条目被丢弃');
+
+      final a = list[0];
+      expect(a.title, 'Warm-up strategies and injury risk');
+      expect(a.doi, '10.2000/s2-1');
+      expect(a.journal, 'Sports Medicine');
+      expect(a.year, 2019);
+      expect(a.authors, 'Alpha A, Beta B');
+      expect(a.isOpenAccess, isTrue, reason: '有 openAccessPdf 直链');
+      expect(a.pdfUrl, 'https://example.org/s2.pdf');
+      expect(a.license, isEmpty,
+          reason: '该接口不返回许可串：条目必须退化为纯著录题录，不得假定可商用');
+
+      final b = list[1];
+      expect(b.doi, isEmpty);
+      expect(b.url, isEmpty, reason: '无 DOI 时不给链接，避免指向不可核实地址');
+      expect(b.isOpenAccess, isFalse);
+    });
+
+    test('L7 formatForAi：只输出题录，显式声明不含正文', () {
+      final text = LiteratureLookupService.formatForAi(
+          [_ref(title: 'Exercise for hypertension', doi: '10.1000/xyz')],
+          '高血压 运动');
+
+      expect(text, contains('不含正文'));
+      expect(text, contains('Exercise for hypertension'));
+      expect(text, contains('DOI: 10.1000/xyz'));
+      expect(LiteratureLookupService.formatForAi(const [], 'x'),
+          '未检索到相关文献题录。');
     });
   });
 

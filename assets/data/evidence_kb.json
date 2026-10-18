@@ -1,7 +1,7 @@
 {
-  "version": "1.5.0",
-  "generatedAt": "2026-10-17T13:34:38",
-  "description": "问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目 + 运动医学/康复本体术语 + 开放数据与本体登记表。构建期导入，App 内零网络依赖。",
+  "version": "1.6.0",
+  "generatedAt": "2026-10-18T10:21:40",
+  "description": "问道循证知识底座：指南/系统评价证据条目 + MET 强度表 + 动作库 + 疾病—运动两层关联 + 家庭用药安全条目 + 常见补剂常识条目 + 运动医学/康复本体术语 + 开放数据与本体登记表 + 开放文献检索 API 登记。构建期导入，App 内零网络依赖。",
   "sources": [
     {
       "name": "美国身体活动指南第2版（2018）",
@@ -97,6 +97,31 @@
       "name": "欧洲食品安全局（EFSA）关于咖啡因安全性的科学意见（2015）",
       "url": "https://efsa.onlinelibrary.wiley.com/doi/10.2903/j.efsa.2015.4102",
       "license": "开放获取；仅条目化改写，标注出处"
+    },
+    {
+      "name": "Europe PMC REST API（循证文献联网检索主源）",
+      "url": "https://europepmc.org/",
+      "license": "EMBL-EBI 免费开放（含商业用途）；仅取题录元数据，解析时丢弃正文，不落摘要"
+    },
+    {
+      "name": "OpenAlex 学术图谱 API（补源，CC0）",
+      "url": "https://openalex.org/",
+      "license": "CC0 1.0 公共领域；仅取题录元数据；非商用（CC BY-NC）许可条目直接丢弃"
+    },
+    {
+      "name": "Crossref REST API（兜底源）",
+      "url": "https://www.crossref.org/",
+      "license": "官方免费开放；仅取题录元数据与许可声明，不取正文"
+    },
+    {
+      "name": "Semantic Scholar Graph API（兜底源）",
+      "url": "https://www.semanticscholar.org/",
+      "license": "Allen 研究所免费开放（无 Key 限流）；接口不返回许可串，条目一律退化为纯著录题录，不转载正文"
+    },
+    {
+      "name": "肌筋膜链（含螺旋线）系统评价",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26755480/",
+      "license": "摘要经 PubMed 免费公开；仅转述结论，未复制原文"
     }
   ],
   "evidence": [
@@ -583,6 +608,17 @@
       "source": "中医经典《黄帝内经》· 子午流注学说（养生实践用）",
       "url": "https://www.chinacdc.cn/",
       "license": "古籍公有领域；本条为现代实践摘要"
+    },
+    {
+      "id": "ev-myofascial-spiral-line",
+      "domain": "康复",
+      "condition": "肌筋膜链",
+      "topic": "螺旋线 肌筋膜链 筋膜连续性 旋转 循证强度",
+      "recommendation": "系统评价对肌筋膜经线（含螺旋线）各连接的解剖连续性逐段评级：螺旋线的 9 个连接中有 5 个获得验证，整体结论为「中等至强」证据。含义是——肌筋膜链作为结构概念已有实证支持，但并非每个节点都同等确证，引用时不应把整条链当成已被完全证实的解剖实体。训练含义：可放心使用「链条整体协同」的思路（对角链、旋转发力、整体动力链），但不宜据此宣称孤立肌群训练「无效」。",
+      "evidenceLevel": "系统评价",
+      "source": "Wilke J 等，What Is Evidence-Based About Myofascial Chains: A Systematic Review（Archives of Physical Medicine and Rehabilitation）· 条目化改写",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26755480/",
+      "license": "摘要经 PubMed 免费公开；仅转述结论，未复制原文"
     },
     {
       "id": "ce-hypertension-aerobic",
@@ -9693,6 +9729,123 @@
       "url": "",
       "dataUrl": "",
       "note": "⚠️ 合成数据（synthetic），生理逻辑经人为设计，仅可用于方法演示、原型验证或教学，不得作为真实世界证据；规范数据集页链接未能证实，仅登记线索，需自行检索核实。"
+    },
+    {
+      "id": "api-europepmc",
+      "name": "Europe PMC 文献检索 API",
+      "nameEn": "Europe PMC REST API",
+      "kind": "API",
+      "domain": "循证文献",
+      "scale": "生物医学文献索引，单次检索按用户提问取前若干条",
+      "license": "EMBL-EBI 免费开放（含商业用途）",
+      "access": "已接入",
+      "url": "https://europepmc.org/",
+      "dataUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+      "note": "仅取元数据（标题/作者/期刊/年份/DOI/许可/链接），解析时丢弃 abstractText 等正文；默认关闭，仅用户开启后按单次提问检索。"
+    },
+    {
+      "id": "api-openalex",
+      "name": "OpenAlex 学术图谱 API",
+      "nameEn": "OpenAlex API",
+      "kind": "API",
+      "domain": "循证文献",
+      "scale": "跨学科文献与引用图谱，作补源与去重",
+      "license": "CC0 1.0（公共领域）",
+      "access": "已接入",
+      "url": "https://openalex.org/",
+      "dataUrl": "https://api.openalex.org/works",
+      "note": "仅取元数据；许可为非商用（CC BY-NC 系列）的条目在解析阶段直接丢弃。"
+    },
+    {
+      "id": "api-crossref",
+      "name": "Crossref 元数据 API",
+      "nameEn": "Crossref REST API",
+      "kind": "API",
+      "domain": "循证文献",
+      "scale": "DOI 注册库，DOI 覆盖率最高的文献元数据源",
+      "license": "官方免费开放（REST API，推荐填写 mailto 进入礼貌池）",
+      "access": "已接入",
+      "url": "https://www.crossref.org/",
+      "dataUrl": "https://api.crossref.org/works",
+      "note": "前两源命中不足时兜底；仅取题录元数据与许可声明，不取正文。"
+    },
+    {
+      "id": "api-semantic-scholar",
+      "name": "Semantic Scholar 图谱 API",
+      "nameEn": "Semantic Scholar Graph API",
+      "kind": "API",
+      "domain": "循证文献",
+      "scale": "跨学科论文图谱，无 Key 时限流较严",
+      "license": "Allen 研究所免费开放（无 Key 可用，限流）",
+      "access": "已接入",
+      "url": "https://www.semanticscholar.org/",
+      "dataUrl": "https://api.semanticscholar.org/graph/v1/paper/search",
+      "note": "最后一层补源；接口不返回许可串，故条目版权状态未知，一律退化为「仅著录元数据 + 落地页链接」，不转载正文。"
+    },
+    {
+      "id": "api-anysearch",
+      "name": "AnySearch 网页检索 API",
+      "nameEn": "AnySearch Search API",
+      "kind": "API",
+      "domain": "公开网页",
+      "scale": "通用网页检索，单次最多 10 条",
+      "license": "商业 API（学生/开发者计划每天 2000 次免费调用，需自备 Key）",
+      "access": "已接入",
+      "url": "https://anysearch.com/",
+      "dataUrl": "https://api.anysearch.com/v1/search",
+      "note": "官方检索接口（Bearer 鉴权，非抓取结果页 HTML）；仅取标题/链接/摘要片段，解析阶段丢弃 content 正文。默认关闭，需用户在「设置 → 联网检索」开启并配置 Key 后才按单次提问检索；客户端自设每日 2000 次上限与两次请求最小间隔 1.2 秒，额度用尽当天不再外发请求。"
+    },
+    {
+      "id": "mads-tai-chi-karate",
+      "name": "武术·舞蹈·运动 3D 姿态数据集",
+      "nameEn": "MADS: Martial Arts, Dancing and Sports dataset",
+      "kind": "数据集",
+      "domain": "动作分析",
+      "scale": "多视角视频 + 3D 姿态标注，含太极（Tai-chi）与空手道动作",
+      "license": "未确认（须核实原始论文与发布页许可）",
+      "access": "登记题录",
+      "url": "",
+      "dataUrl": "",
+      "note": "⚠️ 可用于计算关节旋转角度、躯干扭转幅度等运动学指标，从而间接量化「螺旋发力」的外在表现；但许可与获取方式未核实，仅登记线索，接入前须自行检索确认。"
+    },
+    {
+      "id": "daoism-knowledge-rag",
+      "name": "道教知识 RAG 数据集",
+      "nameEn": "Daoism Knowledge RAG",
+      "kind": "语料",
+      "domain": "道家思想",
+      "scale": "约 9.6 万条结构化条目（概念/经文/人物/科仪等）",
+      "license": "Apache-2.0（Hugging Face 页面声明）",
+      "access": "登记题录",
+      "url": "https://huggingface.co/datasets/lius-cc/daoism-knowledge-rag",
+      "dataUrl": "",
+      "note": "⚠️ 面向 RAG 检索的语义层语料，体量为数十 MB 级，不适合打包进 APK；如需使用应在自建服务器侧接入，且只做条目化引用，不整库随包分发。"
+    },
+    {
+      "id": "hsq-td-qigong-instructions",
+      "name": "健身气功指令微调数据集",
+      "nameEn": "HSQ-TD (Health Qigong Instruction Dataset)",
+      "kind": "数据集",
+      "domain": "传统功法",
+      "scale": "57,843 条指令（蒸馏自官方教材与专业文献）",
+      "license": "未确认（ScienceDB 页面须核实）",
+      "access": "登记题录",
+      "url": "https://www.scidb.cn/",
+      "dataUrl": "",
+      "note": "⚠️ 属指令微调（SFT）语料，面向模型训练而非端上消费，不下载、不打包；且其蒸馏来源多为版权教材，二次使用许可须先核实。"
+    },
+    {
+      "id": "tcm-yangsheng-corpus",
+      "name": "中医养生图文语料",
+      "nameEn": "TCM Yangsheng Corpus",
+      "kind": "语料",
+      "domain": "中医养生",
+      "scale": "饮食/作息/运动/情志/四季时令养生的图文资料",
+      "license": "未确认（平台注册申请制）",
+      "access": "登记题录",
+      "url": "",
+      "dataUrl": "",
+      "note": "⚠️ 混合图文资料，媒体资源版权归原作者，本应用一律不收录媒体；仅登记线索，接入前须核实许可与获取方式。"
     }
   ]
 }

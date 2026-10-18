@@ -12,13 +12,20 @@ import 'wearable_provider.dart';
 ///
 /// 必须包含画面描述：纯 OCR 提示词会让人物/场景照片只产出零散文字
 /// （如视频截图只剩状态栏时间与播放器进度），体型、动作等关键信息全部丢失。
-const String kChatImagePrompt =
-    '这是用户上传的图片（可能是运动手表数据、体检报告、训练App记录、支付/账单截图，'
+const String kChatImagePrompt = '这是用户上传的图片（可能是运动手表数据、体检报告、训练App记录、支付/账单截图，'
     '也可能是人物、场景、器材等照片）。请按以下两部分输出：\n'
     '1. 画面内容描述：图中的人物（体型、姿态、衣着、动作）、物品、场景环境、'
     '图表曲线走势等；若无人物或特殊物品也请明确说明。\n'
     '2. 全部文字提取：逐项提取图中出现的所有文字（标题、日期时间、项目名称、'
     '数值、单位、状态标记等），保持原文行序与表格结构；图中无文字时注明「无文字」。';
+
+/// 思维链落库上限（字符数）。reasoning 原文常达数千字，全量落库会把本地存储
+/// （50 条上限）撑爆；折叠卡片只需让人看出模型大致的推演脉络。
+const int kReasoningMaxChars = 600;
+
+String _clipReasoning(String text) => text.length <= kReasoningMaxChars
+    ? text
+    : '${text.substring(0, kReasoningMaxChars)}…（思考过程已截断）';
 
 /// 智能体"思考过程"中的一个步骤
 ///
@@ -43,13 +50,24 @@ class ChatMessage {
   /// assistant 消息是否为失败提示（可重试）
   final bool error;
 
-  /// FIT-2：待确认方案载荷（`{type, data, saved}`）；无方案时为 null。
-  /// 兼容旧持久化记录：旧 JSON 无此字段 → 解析为 null。
+  /// FIT-2：待确认方案载荷；无方案时为 null。
+  ///
+  /// 统一为「卡片容器」格式 `{'cards': [ {type, data}, ... ], 'saved': {...}}`，
+  /// 因为同一轮回答可能产出多个待确认方案（并行调用多个写工具）。
+  /// 旧持久化记录为单卡片格式 `{type, data, saved}` —— [cards] 会自动适配，
+  /// 因此历史消息无需迁移即可继续渲染。
   final Map<String, dynamic>? payload;
 
   /// 随消息发送的截图本地路径（仅 user 消息可能非空）。
   /// 兼容旧持久化记录：旧 JSON 无此字段 → 解析为空。
   final List<String> imagePaths;
+
+  /// 模型思维链原文（仅推理类模型有）。落库前已截断（见 [kReasoningMaxChars]），
+  /// 仅供 UI 折叠展示；旧持久化记录无此字段 → null。
+  final String? reasoning;
+
+  /// 本轮工具调用步骤（工具名/参数/结果摘要）。旧持久化记录无此字段 → 空。
+  final List<AgentToolStep> toolSteps;
 
   const ChatMessage({
     required this.role,
@@ -59,10 +77,36 @@ class ChatMessage {
     this.error = false,
     this.payload,
     this.imagePaths = const [],
+    this.reasoning,
+    this.toolSteps = const [],
   });
 
   /// 卡片是否已保存（仅当 payload 存在时有效）
   bool get payloadSaved => payload?['saved'] == true;
+
+  /// 本条消息待确认的**全部**方案卡片（按产出顺序）。
+  ///
+  /// 新格式为容器 `{'cards': [...]}`，旧格式为单卡片 `{type, data, saved}`
+  /// —— 两者在此统一为列表，历史记录无需迁移。
+  List<Map<String, dynamic>> get cards {
+    final p = payload;
+    if (p == null) return const [];
+    final raw = p['cards'];
+    if (raw is List) {
+      return [
+        for (final c in raw)
+          if (c is Map) Map<String, dynamic>.from(c),
+      ];
+    }
+    // 旧单卡片格式：整张 payload 本身就是一张卡
+    if (p['type'] != null) return [Map<String, dynamic>.from(p)];
+    return const [];
+  }
+
+  /// 是否有可折叠的过程内容（思考链或工具步骤）
+  bool get hasProcess =>
+      (reasoning != null && reasoning!.trim().isNotEmpty) ||
+      toolSteps.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
         'role': role,
@@ -72,6 +116,9 @@ class ChatMessage {
         'error': error,
         if (payload != null) 'payload': payload,
         if (imagePaths.isNotEmpty) 'imagePaths': imagePaths,
+        if (reasoning != null && reasoning!.isNotEmpty) 'reasoning': reasoning,
+        if (toolSteps.isNotEmpty)
+          'toolSteps': [for (final s in toolSteps) s.toJson()],
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -87,6 +134,16 @@ class ChatMessage {
         if (p is String && p.isNotEmpty) images.add(p);
       }
     }
+    final steps = <AgentToolStep>[];
+    final rawSteps = json['toolSteps'];
+    if (rawSteps is List) {
+      for (final s in rawSteps) {
+        if (s is Map) {
+          steps.add(AgentToolStep.fromJson(Map<String, dynamic>.from(s)));
+        }
+      }
+    }
+    final rawReasoning = json['reasoning']?.toString();
     return ChatMessage(
       role: json['role'] == 'assistant' ? 'assistant' : 'user',
       content: json['content']?.toString() ?? '',
@@ -97,6 +154,9 @@ class ChatMessage {
       error: json['error'] == true,
       payload: payload,
       imagePaths: images,
+      reasoning:
+          (rawReasoning == null || rawReasoning.isEmpty) ? null : rawReasoning,
+      toolSteps: steps,
     );
   }
 
@@ -108,6 +168,8 @@ class ChatMessage {
     bool? error,
     Map<String, dynamic>? payload,
     List<String>? imagePaths,
+    String? reasoning,
+    List<AgentToolStep>? toolSteps,
   }) {
     return ChatMessage(
       role: role ?? this.role,
@@ -117,6 +179,8 @@ class ChatMessage {
       error: error ?? this.error,
       payload: payload ?? this.payload,
       imagePaths: imagePaths ?? this.imagePaths,
+      reasoning: reasoning ?? this.reasoning,
+      toolSteps: toolSteps ?? this.toolSteps,
     );
   }
 }
@@ -149,7 +213,8 @@ class AgentProvider extends ChangeNotifier {
   bool get ready => _agentService != null;
 
   /// 思考过程步骤（相对 [_thinkingStartedAt] 有序）
-  List<AgentThinkingStep> get thinkingSteps => List.unmodifiable(_thinkingSteps);
+  List<AgentThinkingStep> get thinkingSteps =>
+      List.unmodifiable(_thinkingSteps);
 
   /// 思考起始时间（用于 UI 计算已等待秒数）
   DateTime? get thinkingStartedAt => _thinkingStartedAt;
@@ -224,9 +289,8 @@ class AgentProvider extends ChangeNotifier {
     final ocrParts = <String>[];
     String? visionError;
     if (images.isNotEmpty) {
-      _toolStatus = images.length > 1
-          ? '正在并行识别 ${images.length} 张图片…'
-          : '正在识别图片…';
+      _toolStatus =
+          images.length > 1 ? '正在并行识别 ${images.length} 张图片…' : '正在识别图片…';
       notifyListeners();
       final recognized = await Future.wait(images.map(_recognizeImage));
       final errors = <String>[];
@@ -276,40 +340,68 @@ class AgentProvider extends ChangeNotifier {
         if (!m.error) {'role': m.role, 'content': m.content},
     ];
 
-    // 流式接收：尾部挂占位气泡，随增量刷新（120ms 节流，避免高频 rebuild）
-    int? streamIdx;
-    var lastStreamNotify = DateTime.now();
+    // 流式接收：尾部挂占位气泡，随增量刷新（120ms 节流，避免高频 rebuild）。
+    // 该气泡同时承载本轮的「思考链 + 工具步骤」：过程信息随气泡一并落库，
+    // 历史消息也能折叠回看（此前过程只在发送中飘在列表底部，回答完成后即消失）。
+    int? bubbleIdx;
+    final toolSteps = <AgentToolStep>[];
+    final reasoningBuf = StringBuffer();
+    var lastNotify = DateTime.now();
+
+    void notifyThrottled({bool force = false}) {
+      final now = DateTime.now();
+      if (force || now.difference(lastNotify).inMilliseconds >= 120) {
+        lastNotify = now;
+        notifyListeners();
+      }
+    }
+
+    /// 把最新的思考链与工具步骤写进气泡（气泡不存在时按需创建）
+    void syncProcess({bool force = false}) {
+      if (bubbleIdx == null) {
+        _messages.add(ChatMessage(
+          role: 'assistant',
+          content: '',
+          time: DateTime.now(),
+        ));
+        bubbleIdx = _messages.length - 1;
+        _toolStatus = null;
+      }
+      _messages[bubbleIdx!] = _messages[bubbleIdx!].copyWith(
+        reasoning: reasoningBuf.isEmpty
+            ? null
+            : _clipReasoning(reasoningBuf.toString()),
+        toolSteps: List<AgentToolStep>.of(toolSteps),
+      );
+      notifyThrottled(force: force);
+    }
+
     void handleDelta(String cumulative) {
       if (cumulative.isEmpty) {
-        // 检测到工具调用 → 撤掉流式占位，回到工具状态条
-        if (streamIdx != null) {
-          _messages.removeAt(streamIdx!);
-          streamIdx = null;
+        // 检测到工具调用 → 撤掉正文（工具轮次通常无正文），但保留过程卡片
+        if (bubbleIdx != null && _messages[bubbleIdx!].content.isNotEmpty) {
+          _messages[bubbleIdx!] = _messages[bubbleIdx!].copyWith(content: '');
         }
         _streamingAnswer = false;
         notifyListeners();
         return;
       }
-      if (streamIdx == null) {
+      if (bubbleIdx == null) {
         _messages.add(ChatMessage(
           role: 'assistant',
           content: cumulative,
           time: DateTime.now(),
         ));
-        streamIdx = _messages.length - 1;
-        lastStreamNotify = DateTime.now();
+        bubbleIdx = _messages.length - 1;
+        lastNotify = DateTime.now();
         _toolStatus = null;
         _streamingAnswer = true;
         notifyListeners();
         return;
       }
-      _messages[streamIdx!] =
-          _messages[streamIdx!].copyWith(content: cumulative);
-      final now = DateTime.now();
-      if (now.difference(lastStreamNotify).inMilliseconds >= 120) {
-        lastStreamNotify = now;
-        notifyListeners();
-      }
+      _messages[bubbleIdx!] =
+          _messages[bubbleIdx!].copyWith(content: cumulative);
+      notifyThrottled();
     }
 
     final AgentReply reply;
@@ -324,9 +416,27 @@ class AgentProvider extends ChangeNotifier {
         },
         onDelta: handleDelta,
         onThought: (t) => _addThinkingStep('推演：$t'),
+        onReasoning: (r) {
+          reasoningBuf
+            ..clear()
+            ..write(r);
+          syncProcess();
+        },
+        onToolStep: (step) {
+          toolSteps.add(step);
+          syncProcess(force: true);
+        },
       );
     } catch (e) {
-      if (streamIdx != null) _messages.removeAt(streamIdx!);
+      // 过程卡片（思考链/工具步骤）留存可回看，只清掉未成文的正文
+      if (bubbleIdx != null) {
+        final b = _messages[bubbleIdx!];
+        if (!b.hasProcess && b.content.trim().isEmpty) {
+          _messages.removeAt(bubbleIdx!);
+        } else if (b.content.isNotEmpty) {
+          _messages[bubbleIdx!] = b.copyWith(content: '');
+        }
+      }
       _messages.add(ChatMessage(
         role: 'assistant',
         content: '发送失败：$e\n请检查网络与 AI 配置后重试。',
@@ -340,20 +450,31 @@ class AgentProvider extends ChangeNotifier {
       return;
     }
 
-    if (streamIdx != null) {
-      // 流式气泡定稿（补上工具次数与卡片负载）
-      _messages[streamIdx!] = _messages[streamIdx!].copyWith(
-        content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
+    // 定稿（补上正文、工具次数与全部待确认卡片）
+    final finalContent = reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text;
+    // 同一轮可能有多个写工具产出，全部保留为卡片容器（旧实现只留最后一个，
+    // 前面的方案会被静默覆盖）
+    final payload = reply.actions.isEmpty
+        ? null
+        : <String, dynamic>{
+            'cards': [for (final a in reply.actions) a.toJson()],
+            'saved': <String, bool>{
+              for (var i = 0; i < reply.actions.length; i++) '$i': false,
+            },
+          };
+    if (bubbleIdx != null) {
+      _messages[bubbleIdx!] = _messages[bubbleIdx!].copyWith(
+        content: finalContent,
         toolCount: reply.toolCount,
-        payload: reply.action?.toJson(),
+        payload: payload,
       );
     } else {
       _messages.add(ChatMessage(
         role: 'assistant',
-        content: reply.text.isEmpty ? '（模型未返回内容，请重试）' : reply.text,
+        content: finalContent,
         time: DateTime.now(),
         toolCount: reply.toolCount,
-        payload: reply.action?.toJson(),
+        payload: payload,
       ));
     }
     _sending = false;
@@ -414,15 +535,36 @@ class AgentProvider extends ChangeNotifier {
   /// FIT-2：把第 [index] 条消息的待确认方案标记为「已保存」（卡片保存成功后调用）
   ///
   /// 仅改内存态与持久化，不触碰业务数据；业务落库由调用方走 AppProvider 完成。
-  Future<void> markPayloadSaved(int index) async {
+  Future<void> markPayloadSaved(int index, {int cardIndex = 0}) async {
     if (index < 0 || index >= _messages.length) return;
     final m = _messages[index];
     final payload = m.payload;
-    if (payload == null || payload['saved'] == true) return;
+    if (payload == null) return;
     _agentService?.invalidateReadCache();
-    _messages[index] = m.copyWith(payload: {...payload, 'saved': true});
+
+    // 新容器格式：按卡片下标记录保存状态，一张卡保存不影响其它卡
+    final rawCards = payload['cards'];
+    if (rawCards is List) {
+      final saved =
+          Map<String, dynamic>.from((payload['saved'] as Map?) ?? const {});
+      saved['$cardIndex'] = true;
+      _messages[index] = m.copyWith(payload: {...payload, 'saved': saved});
+    } else {
+      // 旧单卡片格式
+      if (payload['saved'] == true) return;
+      _messages[index] = m.copyWith(payload: {...payload, 'saved': true});
+    }
     notifyListeners();
     await _persist();
+  }
+
+  /// 第 [cardIndex] 张卡片是否已保存（兼容旧单卡片记录：那时只有一张卡）
+  bool isCardSaved(ChatMessage m, int cardIndex) {
+    final p = m.payload;
+    if (p == null) return false;
+    final saved = p['saved'];
+    if (saved is Map) return saved['$cardIndex'] == true;
+    return saved == true;
   }
 
   // ---------------------------------------------------------------------------

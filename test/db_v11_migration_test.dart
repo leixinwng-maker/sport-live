@@ -8,7 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// P7-T3：v10 → 最新版迁移测试（桌面 ffi 明文库路径，跑真实 DatabaseHelper 升级逻辑）。
 ///
 /// 流程：手工建 v10 旧库（受影响表的旧列结构）并插入旧数据 → 关库 →
-/// 通过 DatabaseHelper.instance.database 重新打开（触发 onUpgrade 10→14）→
+/// 通过 DatabaseHelper.instance.database 重新打开（触发 onUpgrade 10→15）→
 /// 断言旧数据保留、新列带默认值、新列可写可查。
 void main() {
   setUpAll(() {
@@ -125,9 +125,9 @@ void main() {
     });
     await old.close();
 
-    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→v14 真实升级 ----
+    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→v15 真实升级 ----
     final db = await DatabaseHelper.instance.database;
-    expect(await db.getVersion(), 14);
+    expect(await db.getVersion(), 15);
 
     // ---- 3) 旧数据保留且新列带默认值 ----
     final rep = (await db

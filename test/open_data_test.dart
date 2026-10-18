@@ -495,7 +495,7 @@ void main() {
       expect(file.existsSync(), isTrue,
           reason: '缺少构建期产物，请先运行 scripts/knowledge_sources 导入脚本');
       final map = json.decode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(map['version'], '1.5.0');
+      expect(map['version'], '1.6.0');
 
       final terms = (map['ontologies'] as List)
           .map((e) => OntologyTerm.fromMap(Map<String, dynamic>.from(e as Map)))

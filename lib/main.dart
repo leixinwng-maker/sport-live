@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -14,13 +15,32 @@ import 'screens/lock/lock_screen.dart';
 import 'theme/taoist_theme.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  // 桌面端使用 sqflite_common_ffi 初始化数据库工厂（必须在首次 openDatabase 之前执行）
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
-  runApp(const MyApp());
+  // Flutter 框架错误（构建/布局/绘制异常）与 Dart 层未捕获异步异常统一在此收敛，
+  // 避免单颗 widget 抛错直接把整棵 UI 打黑屏，也不让异常静默吞掉难排查。
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[FlutterError] ${details.exceptionAsString()}\n${details.stack}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[PlatformDispatcher] $error\n$stack');
+    return true; // 已处理，不再交给系统默认崩溃处理
+  };
+
+  runZonedGuarded(
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      // 桌面端使用 sqflite_common_ffi 初始化数据库工厂（必须在首次 openDatabase 之前执行）
+      if (!kIsWeb &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      debugPrint('[ZoneUncaught] $error\n$stack');
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {

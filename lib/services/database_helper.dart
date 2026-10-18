@@ -37,7 +37,6 @@ import 'db_platform.dart';
 /// - 移动端 SQLCipher 加密，桌面调试端明文 ffi（见 db_platform.dart）。
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
-  static Database? _database;
   static const Uuid _uuid = Uuid();
 
   /// 本地缓存库名
@@ -46,12 +45,33 @@ class DatabaseHelper {
   /// 安全存储中的库密钥键名
   static const String _dbKeyStorageKey = 'wendao_sqlcipher_key';
 
+  /// 当前 schema 版本。
+  ///
+  /// 加密端与桌面 ffi 端必须共用同一个版本号：两端若不一致，同一份库文件
+  /// 在不同平台打开会跑到不同的升级分支（一端建表、一端 ALTER），
+  /// 直接表现为「换平台启动后表结构对不上」。
+  static const int _schemaVersion = 15;
+
   DatabaseHelper._();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+  /// 正在进行的打开操作（并发守卫 + 句柄持有者）。
+  ///
+  /// 仅判「是否已有句柄」不够：两个调用者会同时看到未打开并各自 openDatabase，
+  /// 后完成的覆盖前者 —— 泄漏一个句柄且可能读到不同的升级状态。用 Future 占位，
+  /// 并发调用共享同一次打开；[reset] 负责关闭并置空它。
+  static Future<Database>? _opening;
+
+  Future<Database> get database => _opening ??= _initDatabase();
+
+  /// 关闭并清空句柄（清痕/切换账号时用）
+  static Future<void> reset() async {
+    final pending = _opening;
+    _opening = null;
+    if (pending != null) {
+      try {
+        await (await pending).close();
+      } catch (_) {}
+    }
   }
 
   // ============ 初始化与加密 ============
@@ -63,7 +83,7 @@ class DatabaseHelper {
       return sqlcipher.openDatabase(
         path,
         password: key,
-        version: 14,
+        version: _schemaVersion,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       );
@@ -73,7 +93,7 @@ class DatabaseHelper {
     return sqflite_ffi.databaseFactoryFfi.openDatabase(
       path,
       options: sqflite_ffi.OpenDatabaseOptions(
-        version: 14,
+        version: _schemaVersion,
         onCreate: _createTables,
         onUpgrade: _upgradeTables,
       ),
@@ -91,21 +111,31 @@ class DatabaseHelper {
   /// 「一键清除」会删除该密钥并重建空库。
   Future<String> _obtainDbKey() async {
     const storage = FlutterSecureStorage();
-    var key = await storage.read(key: _dbKeyStorageKey);
-    if (key == null || key.isEmpty) {
-      key = _uuid.v4().replaceAll('-', '') + _uuid.v4().replaceAll('-', '');
+    try {
+      final key = await storage.read(key: _dbKeyStorageKey);
+      if (key != null && key.isNotEmpty) return key;
+    } catch (_) {
+      // 读失败按「未存过」处理，走下面的生成流程
+    }
+    final key = _uuid.v4().replaceAll('-', '') + _uuid.v4().replaceAll('-', '');
+    try {
       await storage.write(key: _dbKeyStorageKey, value: key);
+    } catch (_) {
+      // 安全存储不可用（模拟器/Keystore 异常）：不能让整个 openDatabase 失败
+      // —— 那样用户看到的是白屏且无任何提示。降级为「本次会话内存密钥」，
+      // 库仍可用，只是下次冷启动会重新生成（表现为库打不开，属于可诊断的降级）。
     }
     return key;
   }
 
   /// 清除本地痕迹：关闭库、删除库文件与密钥（云端数据不受影响）。
+  ///
+  /// 必须先经 [reset] 关闭并**清空 [_opening]**：句柄缓存在 [_opening] 里，
+  /// 只清 [_database] 的话，重新读写时 `database` getter 会直接返回那个已被
+  /// 关闭的旧句柄，后续所有查询都会抛「database has already been closed」
+  /// —— 表现为「点了清除本地数据，App 就再也读不出数据」。
   Future<void> wipeLocalData() async {
-    final db = _database;
-    if (db != null) {
-      await db.close();
-      _database = null;
-    }
+    await reset();
     final dir = await _databasesPath();
     final path = join(dir, _dbName);
     await join2Delete(path); // 主库文件（失败应上抛）
@@ -474,6 +504,38 @@ class DatabaseHelper {
         'CREATE INDEX idx_wearable_type ON wearable_samples(data_type)');
     await db.execute(
         'CREATE INDEX idx_queue_table ON sync_queue(table_name, row_id)');
+    // v15：补齐高频过滤/排序列的索引（见 [_addHotIndexes]）
+    await _addHotIndexes(db);
+    resetColumnCache();
+  }
+
+  /// v15 新增的高频查询列索引。
+  ///
+  /// 这些是「按非主键列过滤或排序」的热路径：摘录按书籍级联、指标按报告回溯、
+  /// 指标按类型筛选、月度预算查重、调整日志倒序时间线、周快照按周取。
+  /// 缺索引时随数据增长退化为全表扫描，其中 adjustment_logs / weekly_summaries
+  /// 是只增不减的累积表，退化最明显。
+  ///
+  /// 单条失败（表不存在）只跳过并忽略：升级路径上任何一条 CREATE INDEX 抛错
+  /// 都会让整个 openDatabase 失败，用户直接打不开 App——为了一个可选优化索引
+  /// 付这种代价不值得。这里与上方 ALTER 块忽略 duplicate column 的容错口径一致。
+  static Future<void> _addHotIndexes(Database db) async {
+    const sqls = [
+      'CREATE INDEX IF NOT EXISTS idx_book_notes_book ON book_notes(book_id)',
+      'CREATE INDEX IF NOT EXISTS idx_metrics_report ON health_metrics(source_report_id)',
+      'CREATE INDEX IF NOT EXISTS idx_metrics_type ON health_metrics(type)',
+      'CREATE INDEX IF NOT EXISTS idx_budgets_period ON budgets(category, year, month)',
+      'CREATE INDEX IF NOT EXISTS idx_adjust_created ON adjustment_logs(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_weekly_start ON weekly_summaries(week_start)',
+    ];
+    for (final sql in sqls) {
+      try {
+        await db.execute(sql);
+      } catch (e) {
+        // 表尚未建立（自建/裁剪过的库）时跳过；索引只是加速，不该阻断建库与升级
+        if (!e.toString().contains('no such table')) rethrow;
+      }
+    }
   }
 
   Future<void> _upgradeTables(
@@ -569,6 +631,13 @@ class DatabaseHelper {
         )
       ''');
     }
+    // v14 → v15：补齐高频查询列索引（无表结构变更，仅索引）。
+    // 老库不会重跑 _createTables，索引必须在这里单独补一次，否则升级后依旧全表扫描。
+    if (oldVersion < 15) {
+      await _addHotIndexes(db);
+    }
+    // 表结构/索引变更后必须失效列表缓存，避免 pull 落库沿用升级前的旧列集合。
+    resetColumnCache();
   }
 
   Future<void> _dropAllTables(Database db) async {
@@ -766,8 +835,7 @@ class DatabaseHelper {
       Map<String, dynamic> data,
       {required int version, String? updatedAt}) async {
     final db = await database;
-    final colInfo = await db.rawQuery('PRAGMA table_info($table)');
-    final cols = colInfo.map((r) => r['name'] as String).toSet();
+    final cols = await _columnsOf(db, table);
     final row = <String, dynamic>{
       for (final e in data.entries)
         if (e.key != 'id' && cols.contains(e.key))
@@ -795,6 +863,25 @@ class DatabaseHelper {
     final db = await database;
     await db.delete(table, where: 'id = ?', whereArgs: [rowId]);
   }
+
+  /// 表的列名集合缓存。
+  ///
+  /// pull 落库时每行都要过滤「服务端给了但本地表没有的列」，此前每行跑一次
+  /// `PRAGMA table_info`（一次全量拉取上百行 = 上百次 PRAGMA 查询）。
+  /// 列结构只在建表/升级时变，缓存一次即可；升级路径由 [resetColumnCache] 失效。
+  static final Map<String, Set<String>> _columnCache = {};
+
+  static Future<Set<String>> _columnsOf(Database db, String table) async {
+    final cached = _columnCache[table];
+    if (cached != null) return cached;
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final cols = info.map((r) => r['name'] as String).toSet();
+    _columnCache[table] = cols;
+    return cols;
+  }
+
+  /// 表结构变更后调用（建表 / 升级 / 清库重建），避免沿用旧列集合把新列过滤掉。
+  static void resetColumnCache() => _columnCache.clear();
 
   /// push applied 后回写服务端版本号（作为下次 push 的 base_version）
   Future<void> setRowVersion(String table, String rowId, int version) async {
@@ -1005,6 +1092,24 @@ class DatabaseHelper {
     return rowId;
   }
 
+  /// 批量写入账单（CSV 导入用）。
+  ///
+  /// 单条 saveFinanceRecord 每次都开一个事务，导入几百到几千行时
+  /// 就是几百到几千次 fsync —— 事务提交开销远大于数据本身。
+  /// 这里合并为单事务，耗时从分钟级降到秒级。
+  Future<int> insertFinanceRecordsBatch(List<FinanceRecord> records) async {
+    if (records.isEmpty) return 0;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final r in records) {
+        await _upsertWithin(
+            txn, 'finance_records', r.id ?? _uuid.v4(), r.toMap());
+      }
+    });
+    onLocalWrite?.call();
+    return records.length;
+  }
+
   Future<List<FinanceRecord>> getFinanceRecords({DateTime? from, DateTime? to}) async {
     final db = await database;
     String? where;
@@ -1116,20 +1221,24 @@ class DatabaseHelper {
     return maps.map((m) => KnowledgeEntry.fromMap(m)).toList();
   }
 
+  /// 播种内置知识条目。
+  ///
+  /// 每次启动都跑一遍（按确定性 UUID 幂等 upsert，`ConflictAlgorithm.ignore`）。
+  /// 此前是「表为空才播种」，导致后续版本新增的条目永远进不了老用户的库——
+  /// 版本升级只改代码不改数据，用户看不到新增内容。改成补种后：
+  /// - 已存在的条目（含用户自己添加的，其 id 为随机 UUID）一律不覆盖，只跳过；
+  /// - 只有缺失的条目被补进去，条数与启动开销都随「缺失数量」而非全量增长。
   Future<void> seedKnowledge(List<KnowledgeEntry> entries) async {
+    if (entries.isEmpty) return;
     final db = await database;
-    final count =
-        _firstInt(await db.rawQuery('SELECT COUNT(*) FROM knowledge_entries'));
-    if (count == 0) {
-      final batch = db.batch();
-      for (final e in entries) {
-        final row = e.toMap();
-        row['id'] = _seedId('knowledge', '${e.domain}:${e.title}');
-        batch.insert('knowledge_entries', row,
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-      }
-      await batch.commit(noResult: true);
+    final batch = db.batch();
+    for (final e in entries) {
+      final row = e.toMap();
+      row['id'] = _seedId('knowledge', '${e.domain}:${e.title}');
+      batch.insert('knowledge_entries', row,
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     }
+    await batch.commit(noResult: true);
   }
 
   Future<void> deleteKnowledgeEntry(String id) async {

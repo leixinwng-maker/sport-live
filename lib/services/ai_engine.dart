@@ -2,6 +2,8 @@ import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show SocketException;
+import 'dart:typed_data' show Uint8List;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/health_metric.dart';
 import '../models/health_report.dart';
@@ -15,7 +17,8 @@ class ToolCall {
   final String name;
   final Map<String, dynamic> arguments;
 
-  const ToolCall({required this.id, required this.name, required this.arguments});
+  const ToolCall(
+      {required this.id, required this.name, required this.arguments});
 }
 
 /// 模型响应：纯文本或工具调用
@@ -23,7 +26,24 @@ class ChatResponse {
   final String? text;
   final List<ToolCall>? toolCalls;
 
-  const ChatResponse({this.text, this.toolCalls});
+  /// 推理过程原文（思维链）。仅推理类模型（DeepSeek-R1、Qwen3、GLM-Z1、Kimi 等）
+  /// 会返回 `reasoning_content`/`reasoning`/`thinking` 字段；不支持者恒为 null。
+  /// 仅供 UI 折叠展示，不参与消息回传（回传 reasoning 会被多数网关拒绝）。
+  final String? reasoning;
+
+  const ChatResponse({this.text, this.toolCalls, this.reasoning});
+}
+
+/// 从 OpenAI 兼容响应体（或 SSE delta）中取出推理过程字段。
+///
+/// 各家命名不一：DeepSeek 用 `reasoning_content`，部分网关用 `reasoning`，
+/// GLM 系用 `thinking`。三者按序取第一个非空字符串。
+String? _extractReasoning(Map<dynamic, dynamic> src) {
+  for (final key in const ['reasoning_content', 'reasoning', 'thinking']) {
+    final v = src[key];
+    if (v is String && v.isNotEmpty) return v;
+  }
+  return null;
 }
 
 /// 模型不支持 function calling（tools 参数被拒绝）
@@ -67,9 +87,16 @@ class _Retryable implements Exception {
 /// 支持：通义千问、文心一言、DeepSeek
 class AIEngine {
   static const String _baseUrlKey = 'ai_base_url';
-  static const String _apiKeyKey = 'ai_api_key';
   static const String _modelKey = 'ai_model';
   static const String _visionModelKey = 'ai_vision_model';
+
+  /// API Key 的加密存储键。
+  ///
+  /// Key 一律走 flutter_secure_storage（Keystore/Keychain），**不再落 SharedPreferences**——
+  /// prefs 在 Android 上是明文 XML、root/备份可直接读出密钥。地址与模型名不含机密，
+  /// 仍留 prefs 便于读取；历史版本已写入 prefs 的 Key 由 [_migrateApiKey] 搬到安全存储。
+  static const String _apiKeyKey = 'ai_api_key';
+  static const _storage = FlutterSecureStorage();
 
   String _baseUrl = '';
   String _apiKey = '';
@@ -97,16 +124,51 @@ class AIEngine {
   bool get activeSupportsTools => _supportsTools;
   void setSupportsTools(bool value) => _supportsTools = value;
 
-  /// 初始化，从本地读取配置
+  /// 模型配置代次：每次 [saveConfig]（新增/切换/编辑激活模型）自增。
+  /// 供上层判断「基于当前配置得出的结论是否已过期」——例如 AgentService 的
+  /// 「模型不支持 tools」降级标记只对当时那套配置有效，模型一换即应重试工具调用。
+  int _configGeneration = 0;
+  int get configGeneration => _configGeneration;
+
+  /// 初始化，从本地读取配置。
+  ///
+  /// 兼容历史版本：早期把 Key 明文写进了 SharedPreferences，这里读到后搬到安全存储
+  /// 并抹掉明文副本（详见 [_apiKeyKey]）。
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_baseUrlKey) ?? '';
-    _apiKey = prefs.getString(_apiKeyKey) ?? '';
     _model = prefs.getString(_modelKey) ?? 'qwen-turbo';
     _visionModel = prefs.getString(_visionModelKey) ?? '';
+    _apiKey = await _migrateApiKey(prefs);
   }
 
-  /// 保存AI配置
+  /// 读取 API Key，顺带完成「prefs 明文 → 安全存储」的一次性迁移。
+  ///
+  /// 安全存储里已有值时以它为准（说明迁移做过或本就是新写入）；为空时才回退读 prefs，
+  /// 读到则搬运并删除明文。迁移失败（安全存储不可用）时保留 prefs 明文，宁可降级
+  /// 也不能让用户已配好的 Key 凭空丢失。
+  Future<String> _migrateApiKey(SharedPreferences prefs) async {
+    String? secure;
+    try {
+      secure = await _storage.read(key: _apiKeyKey);
+    } catch (_) {
+      // 安全存储不可用：直接回退明文读取，保证老用户仍能正常对话
+      return prefs.getString(_apiKeyKey) ?? '';
+    }
+    if (secure != null && secure.isNotEmpty) return secure;
+
+    final legacy = prefs.getString(_apiKeyKey);
+    if (legacy == null || legacy.isEmpty) return '';
+    try {
+      await _storage.write(key: _apiKeyKey, value: legacy);
+      await prefs.remove(_apiKeyKey);
+    } catch (_) {
+      // 搬运失败：明文暂时留着，下次启动重试
+    }
+    return legacy;
+  }
+
+  /// 保存AI配置（Key 写加密存储，其余非机密字段写 prefs）
   Future<void> saveConfig({
     required String baseUrl,
     required String apiKey,
@@ -115,13 +177,24 @@ class AIEngine {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_baseUrlKey, baseUrl);
-    await prefs.setString(_apiKeyKey, apiKey);
     await prefs.setString(_modelKey, model);
     await prefs.setString(_visionModelKey, visionModel);
+    await _writeApiKey(prefs, apiKey);
     _baseUrl = baseUrl;
     _apiKey = apiKey;
     _model = model;
     _visionModel = visionModel;
+    _configGeneration++;
+  }
+
+  /// 写入 API Key：优先安全存储；安全存储不可用时降级 prefs，避免用户填了却存不下。
+  Future<void> _writeApiKey(SharedPreferences prefs, String apiKey) async {
+    try {
+      await _storage.write(key: _apiKeyKey, value: apiKey);
+      await prefs.remove(_apiKeyKey); // 清掉可能残留的明文副本
+    } catch (_) {
+      await prefs.setString(_apiKeyKey, apiKey);
+    }
   }
 
   bool get isConfigured => _baseUrl.isNotEmpty && _apiKey.isNotEmpty;
@@ -171,6 +244,16 @@ class AIEngine {
   /// 交由上层做非流式兜底或提示用户，避免「卡死」体验。
   static const Duration _streamTotalBudget = Duration(seconds: 120);
 
+  /// 把一次请求的超时压到 [remaining] 之内（留 [floor] 下限）。
+  ///
+  /// 工具循环下发了总时长硬墙时，单次请求不能各自吃满默认超时，否则多个请求
+  /// 叠加会让硬墙形同虚设。下限保证慢模型至少有一次完整尝试的机会。
+  static Duration _clampDeadlineTimeout(
+      Duration remaining, Duration def, Duration floor) {
+    if (remaining < floor) return floor;
+    return remaining < def ? remaining : def;
+  }
+
   /// 统一的 chat/completions POST：带超时与自动重试。
   ///
   /// 代理/弱网场景下常出现「Software caused connection abort」
@@ -178,10 +261,15 @@ class AIEngine {
   /// 中转网关的 5xx（502/503/504 网关超时、529 上游过载）同样是临时抖动，
   /// 此处换新连接重试一次即可大概率恢复，避免直接报错给用户。
   /// 重试仍失败则抛出原始异常或返回最后一次响应，交由上层展示。
+  ///
+  /// [deadline] 由上层（智能体工具循环）下发的硬墙时刻：非 null 时用它取代
+  /// 默认的重试预算，并把单次请求超时压到剩余时间，确保整轮工具循环的总耗时
+  /// 可控，不会因「每个请求各自吃满超时」叠加成分钟级干等。
   Future<http.Response> _postJson(
     String url,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    DateTime? deadline,
+  }) async {
     final uri = Uri.parse(url);
     final headers = {
       'Content-Type': 'application/json',
@@ -190,14 +278,20 @@ class AIEngine {
     final encoded = jsonEncode(body);
 
     Exception? lastError;
-    final deadline = DateTime.now().add(_streamTotalBudget);
+    final deadlineEnd = deadline ?? DateTime.now().add(_streamTotalBudget);
     for (var attempt = 0; attempt <= _maxRetries; attempt++) {
       // 累计耗时已超预算：停止重试，避免多次 90s 超时叠加拖成分钟级干等
-      if (attempt > 0 && DateTime.now().isAfter(deadline)) break;
+      if (attempt > 0 && DateTime.now().isAfter(deadlineEnd)) break;
+      const hardFloor = Duration(seconds: 10);
+      final remaining = deadlineEnd.difference(DateTime.now());
+      // 硬墙下发时：单次请求超时压到剩余时长，留 10s 下限保证慢模型也有一次机会
+      final attemptTimeout = deadline == null
+          ? _requestTimeout
+          : _clampDeadlineTimeout(remaining, _requestTimeout, hardFloor);
       try {
         final resp = await _httpClient
             .post(uri, headers: headers, body: encoded)
-            .timeout(_requestTimeout);
+            .timeout(attemptTimeout);
         // 5xx 为网关/上游临时错误：稍候重试；最后一次尝试直接返回交给上层处理
         if (resp.statusCode < 500 || attempt == _maxRetries) return resp;
         lastError = Exception('AI网关临时不可用（${resp.statusCode}）');
@@ -254,16 +348,20 @@ class AIEngine {
   ///
   /// - 文本增量通过 [onDelta]（累计文本）实时回调，仅当尚未出现 tool_calls 时转发；
   ///   出现 tool_calls 后停止转发（工具轮次通常无正文）
+  /// - 推理过程通过 [onReasoning]（累计推理文本）实时回调（仅推理类模型有）
   /// - 网关不支持流式（响应非 event-stream）时自动退回整包 JSON 解析
   /// - **全链路重试**：建连失败、网关 5xx 抖动、以及 SSE **读取中途**被掐断
   ///   （`Connection closed while receiving data`）共用一份重试预算
   ///   [_maxRetries] + [_maxStreamRetries]。中途重开前会用 [onRetry] 通知上层，
   ///   并先回调空串让 UI 撤掉上半段的残缺回答，避免首尾拼出重复文本
   /// - 鉴权/限流/模型报错等确定性异常照旧直接上抛，不做无谓重试
-  Future<({String text, List<ToolCall>? toolCalls})> _streamChatCompletion(
+  Future<({String text, String? reasoning, List<ToolCall>? toolCalls})>
+      _streamChatCompletion(
     Map<String, dynamic> body, {
     void Function(String cumulativeText)? onDelta,
+    void Function(String cumulativeReasoning)? onReasoning,
     void Function(String message)? onRetry,
+    DateTime? deadline,
   }) async {
     final uri = Uri.parse('$_apiBase/v1/chat/completions');
     final headers = {
@@ -274,20 +372,32 @@ class AIEngine {
 
     const maxAttempts = _maxRetries + _maxStreamRetries + 1;
     Object? lastError;
-    final deadline = DateTime.now().add(_streamTotalBudget);
+    // 上层下发了硬墙时优先服从它（工具循环的总剩余时间），否则用默认预算
+    final deadlineEnd = deadline ?? DateTime.now().add(_streamTotalBudget);
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      // 累计耗时已超预算：不再重开，直接结束重试，交由上层兜底/提示
-      if (attempt > 0 && DateTime.now().isAfter(deadline)) break;
+      // 累计耗时已超硬墙/预算：不再重开，直接结束重试，交由上层兜底/提示
+      if (attempt > 0 && DateTime.now().isAfter(deadlineEnd)) break;
       var forwarded = false;
-      ({String text, List<ToolCall>? toolCalls})? roundResult;
+      ({
+        String text,
+        String? reasoning,
+        List<ToolCall>? toolCalls
+      })? roundResult;
 
       try {
         // ---- 阶段一：建连 ----
         final req = http.Request('POST', uri)
           ..headers.addAll(headers)
           ..body = encoded;
-        final r = await _send(req);
+        // 硬墙下发时：单次建连超时压到剩余时长（留 10s 下限），
+        // 保证「等一个永不响应的连接」不会吃掉整轮预算
+        final left = deadlineEnd.difference(DateTime.now());
+        final connectTimeout = deadline == null
+            ? _requestTimeout
+            : _clampDeadlineTimeout(
+                left, _requestTimeout, const Duration(seconds: 10));
+        final r = await _send(req, connectTimeout);
         if (r.statusCode >= 500) {
           // 5xx：网关/上游临时错误，drain 后按可重开处理
           await r.stream.drain<void>().catchError((_) {});
@@ -304,20 +414,27 @@ class AIEngine {
           // 网关不支持流式：按整包 JSON 解析（结构与非流式一致）
           final full = await _readBody(resp);
           final data = jsonDecode(full);
-          final message =
-              ((data['choices'] as List)[0] as Map)['message'] as Map<String, dynamic>? ??
-                  {};
+          final message = ((data['choices'] as List)[0] as Map)['message']
+                  as Map<String, dynamic>? ??
+              {};
           roundResult = (
             text: (message['content'] ?? '') as String,
+            reasoning: _extractReasoning(message),
             toolCalls: _parseToolCalls(message['tool_calls']),
           );
         } else {
           // ---- 阶段二：SSE 增量读取（中途断流同样可整轮重开） ----
           final textBuf = StringBuffer();
+          final reasoningBuf = StringBuffer();
           final toolAcc = <int, _ToolCallAcc>{};
           try {
+            // 空闲超时跟随硬墙：剩余时间不足时收窄，避免最后一轮仍在干等 60s
+            final idle = deadline == null
+                ? _streamIdleTimeout
+                : _clampDeadlineTimeout(deadlineEnd.difference(DateTime.now()),
+                    _streamIdleTimeout, const Duration(seconds: 5));
             final lines = resp.stream
-                .timeout(_streamIdleTimeout)
+                .timeout(idle)
                 .transform(utf8.decoder)
                 .transform(const LineSplitter());
             await for (final line in lines) {
@@ -333,8 +450,9 @@ class AIEngine {
               if (obj is! Map) continue;
               final err = obj['error'];
               if (err != null) {
-                final msg =
-                    err is Map ? (err['message'] ?? err).toString() : err.toString();
+                final msg = err is Map
+                    ? (err['message'] ?? err).toString()
+                    : err.toString();
                 throw Exception('模型返回错误：$msg');
               }
               final choices = obj['choices'];
@@ -342,6 +460,12 @@ class AIEngine {
               final choice = choices[0];
               final delta = (choice is Map ? choice['delta'] : null);
               if (delta is! Map) continue;
+              // 推理过程增量（思维链）：独立累加并实时回调，不受 tool_calls 影响
+              final reasoning = _extractReasoning(delta);
+              if (reasoning != null) {
+                reasoningBuf.write(reasoning);
+                onReasoning?.call(reasoningBuf.toString());
+              }
               final content = delta['content'];
               if (content is String && content.isNotEmpty) {
                 textBuf.write(content);
@@ -375,8 +499,12 @@ class AIEngine {
             _resetClient();
             throw _Retryable(e);
           } on TimeoutException catch (e) {
+            // 空闲超时：已吐字却迟迟等不到下一个分片（网关半开连接）。
+            // 这里不整轮重开——重开会把已经吐出的长回答再生成一遍，代价更大；
+            // 直接跳出循环，用已收到的内容收尾，让上层基于部分内容继续作答
+            // 或把已吐出的正文呈现给用户。尚未吐字才按可重试处理。
             _resetClient();
-            throw _Retryable(e);
+            if (textBuf.isEmpty && toolAcc.isEmpty) throw _Retryable(e);
           }
 
           final calls = <ToolCall>[];
@@ -399,6 +527,7 @@ class AIEngine {
           }
           roundResult = (
             text: textBuf.toString(),
+            reasoning: reasoningBuf.isEmpty ? null : reasoningBuf.toString(),
             toolCalls: calls.isEmpty ? null : calls,
           );
         }
@@ -422,9 +551,10 @@ class AIEngine {
   }
 
   /// 发起流式请求：网络类异常统一转成可重试标记
-  Future<http.StreamedResponse> _send(http.Request req) async {
+  Future<http.StreamedResponse> _send(http.Request req,
+      [Duration timeout = _requestTimeout]) async {
     try {
-      return await _httpClient.send(req).timeout(_requestTimeout);
+      return await _httpClient.send(req).timeout(timeout);
     } on http.ClientException catch (e) {
       _resetClient();
       throw _Retryable(e);
@@ -503,11 +633,14 @@ class AIEngine {
   /// 流式链路不可用时（含 SSE **读取中途**被网关掐断且重试预算耗尽）自动回退
   /// 非流式 [chatWithTools]：单次「请求–响应」没有长连接可掐，弱网关下明显更稳，
   /// 代价是失去逐字输出。[onRetry] 用于向 UI 透出"正在重新接续"的提示。
+  /// [onReasoning] 实时透出推理类模型的思维链（累计文本）。
   Future<ChatResponse> chatWithToolsStream({
     required List<Map<String, dynamic>> messages,
     required List<Map<String, dynamic>> tools,
     void Function(String cumulativeText)? onDelta,
+    void Function(String cumulativeReasoning)? onReasoning,
     void Function(String message)? onRetry,
+    DateTime? deadline,
   }) async {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
@@ -526,16 +659,20 @@ class AIEngine {
           'temperature': 0.7,
         },
         onDelta: onDelta,
+        onReasoning: onReasoning,
         onRetry: onRetry,
+        deadline: deadline,
       );
       return ChatResponse(
         text: r.text.isEmpty ? null : r.text,
         toolCalls: r.toolCalls,
+        reasoning: r.reasoning,
       );
     } on AINetworkException {
-      // 流式被网关反复掐断：改走非流式重试一次
+      // 流式被网关反复掐断：改走非流式重试一次（沿用同一硬墙）
       onRetry?.call('流式链路不稳，改用普通模式重试…');
-      return chatWithTools(messages: messages, tools: tools);
+      return chatWithTools(
+          messages: messages, tools: tools, deadline: deadline);
     }
   }
 
@@ -543,6 +680,7 @@ class AIEngine {
   Future<String> chatFallbackStream(
     List<Map<String, dynamic>> messages, {
     void Function(String cumulativeText)? onDelta,
+    void Function(String cumulativeReasoning)? onReasoning,
     void Function(String message)? onRetry,
   }) async {
     if (!isConfigured) {
@@ -552,6 +690,7 @@ class AIEngine {
       final r = await _streamChatCompletion(
         {'model': _model, 'messages': messages, 'temperature': 0.7},
         onDelta: onDelta,
+        onReasoning: onReasoning,
         onRetry: onRetry,
       );
       return r.text;
@@ -588,6 +727,7 @@ class AIEngine {
   Future<ChatResponse> chatWithTools({
     required List<Map<String, dynamic>> messages,
     required List<Map<String, dynamic>> tools,
+    DateTime? deadline,
   }) async {
     if (!isConfigured) {
       throw Exception('请先在设置中配置AI服务');
@@ -598,13 +738,17 @@ class AIEngine {
     }
 
     final url = '$_apiBase/v1/chat/completions';
-    final response = await _postJson(url, {
-      'model': _model,
-      'messages': messages,
-      'tools': tools,
-      'tool_choice': 'auto',
-      'temperature': 0.7,
-    });
+    final response = await _postJson(
+      url,
+      {
+        'model': _model,
+        'messages': messages,
+        'tools': tools,
+        'tool_choice': 'auto',
+        'temperature': 0.7,
+      },
+      deadline: deadline,
+    );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -631,9 +775,13 @@ class AIEngine {
             arguments: args,
           ));
         }
-        return ChatResponse(toolCalls: calls);
+        return ChatResponse(
+            toolCalls: calls, reasoning: _extractReasoning(message));
       }
-      return ChatResponse(text: (message['content'] ?? '') as String);
+      return ChatResponse(
+        text: (message['content'] ?? '') as String,
+        reasoning: _extractReasoning(message),
+      );
     } else if (response.statusCode == 400) {
       // 部分模型/网关不支持 tools 参数，识别后由上层降级
       final body = utf8.decode(response.bodyBytes);
@@ -689,20 +837,22 @@ class AIEngine {
     if (useGenkitForTestModel) {
       return _testModelViaGenkit(base: base, key: key, mdl: mdl);
     }
-    final response = await _httpClient.post(
-      Uri.parse('$base/v1/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $key',
-      },
-      body: jsonEncode({
-        'model': mdl,
-        'messages': [
-          {'role': 'user', 'content': '你好，请只回复「连接正常」四个字。'},
-        ],
-        'temperature': 0,
-      }),
-    ).timeout(_requestTimeout);
+    final response = await _httpClient
+        .post(
+          Uri.parse('$base/v1/chat/completions'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': mdl,
+            'messages': [
+              {'role': 'user', 'content': '你好，请只回复「连接正常」四个字。'},
+            ],
+            'temperature': 0,
+          }),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       final text = data['choices'][0]['message']['content'];
@@ -712,8 +862,8 @@ class AIEngine {
       throw Exception('鉴权失败（${response.statusCode}）：API Key 无效或已过期');
     }
     // 其余状态码统一走中文映射（截断 body，避免长段英文/HTML 直达用户）
-    throw httpError(
-        response.statusCode, utf8.decode(response.bodyBytes, allowMalformed: true));
+    throw httpError(response.statusCode,
+        utf8.decode(response.bodyBytes, allowMalformed: true));
   }
 
   /// Genkit 链路的连通性测试（示范接入，开关 [useGenkitForTestModel] 控制）。
@@ -835,8 +985,14 @@ class AIEngine {
     String prompt =
         '这是一张体检报告/健康数据的图片。请完整提取图片中的全部文字内容，包括：项目名称、检测数值、单位、参考范围、异常标记。只输出提取到的文字，不要解释。',
   }) {
+    Uint8List bytes;
+    try {
+      bytes = base64Decode(imageBase64);
+    } catch (_) {
+      throw VisionServiceException(null, '图片数据解析失败，请重新选择图片');
+    }
     return VisionService.instance.recognizeImage(
-      bytes: base64Decode(imageBase64),
+      bytes: bytes,
       prompt: prompt,
     );
   }
@@ -943,7 +1099,8 @@ class AIEngine {
     final buf = StringBuffer();
     for (final r in reports) {
       final dateStr = r.date.toIso8601String().substring(0, 10);
-      buf.writeln('【报告】$dateStr ${r.reportType}（总灯色：${lightOf(r.riskLevel)}）${r.title}');
+      buf.writeln(
+          '【报告】$dateStr ${r.reportType}（总灯色：${lightOf(r.riskLevel)}）${r.title}');
       buf.writeln('总评：${r.aiSummary.isEmpty ? '（无）' : r.aiSummary}');
       final metrics =
           r.id == null ? null : (metricsByReport[r.id!] ?? const []);
@@ -956,9 +1113,8 @@ class AIEngine {
         }
       } else if (r.ocrText.trim().isNotEmpty) {
         final t = r.ocrText.trim();
-        final clipped = t.length > 1500
-            ? '${t.substring(0, 1500)}…（原文超长已截断）'
-            : t;
+        final clipped =
+            t.length > 1500 ? '${t.substring(0, 1500)}…（原文超长已截断）' : t;
         buf.writeln('该报告无入库指标，识别原文（截断）：\n$clipped');
       } else {
         buf.writeln('该报告无入库指标、无识别原文。');

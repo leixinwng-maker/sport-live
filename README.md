@@ -60,7 +60,8 @@
 - 回答遵循**循证引用规范**：给出结论必附指南出处与证据等级，绝不编造文献
 
 ### 📚 文献检索与疾病—运动关联知识库（P5）
-- **开源文献检索** `search_literature`：接入 Europe PMC 与 OpenAlex 开放接口，按关键词返回**文献元数据**（标题 / 期刊 / 年份 / DOI / 链接），仅元数据、不下全文；需在设置中开启联网
+- **开源文献检索** `search_literature`：接入 Europe PMC、OpenAlex、Crossref、Semantic Scholar 四个开放接口，按关键词返回**文献元数据**（标题 / 期刊 / 年份 / DOI / 链接），仅元数据、不下全文；需在设置中开启联网
+- **公开网页检索** `web_search`：接入 AnySearch 官方检索 API（Bearer 鉴权、非抓取结果页），仅取**标题 / 链接 / 摘要片段**，解析阶段丢弃接口返回的正文；Key 存系统加密存储（Keystore / Keychain），默认关闭，需在「设置 → 联网检索」开启并配置 Key。客户端自设两道闸门：按本地日期计数、**每天上限 2000 次**（对应学生 / 开发者免费额度），以及两次请求最小间隔 1.2 秒，额度用尽当天不再外发请求，剩余次数在设置页可见
 - **疾病—运动关联库（两层证据结构，纯离线，零网络依赖）**：工具 `search_condition_exercise` 回答「某疾病 / 人群适合什么运动」，并能进一步给出**具体动作示例**
   - 第一层（强证据）：疾病 / 人群 → 运动类别 + **FITT-VP 剂量**，`domain='疾病运动'`，来源为权威指南（PAG 2018 / WHO 2020 / ACSM / 中国《人群身体活动指南(2021)》等）
   - 第二层（弱证据）：运动类别 → **具体动作示例 + 一般性禁忌**，仅供「选动作」参考，**不含任何疗效主张**
@@ -124,7 +125,7 @@
 Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · health（Health Connect / HealthKit）· google_mlkit_text_recognition · file_picker · pdfx（PDF 渲染）· flutter_local_notifications（复查提醒）· FastAPI + SQLite 云端 · 兼容通义千问 / DeepSeek / 文心一言 / 自定义 API
 
 ## 📁 目录结构
-- `lib/services/` AI引擎、本地智脑算法、联网搜索、云同步（CloudApi/SyncEngine）、应用锁、循证知识库、健康数据聚合、体成分解析、**文献检索（Europe PMC/OpenAlex）**、**视觉识别（vision/：独立配置 / 服务 / 分型异常）**、**PDF 渲染 / 报告提取 / 复查提醒（health/）**
+- `lib/services/` AI引擎、本地智脑算法、联网搜索（文献 / AnySearch 网页）、云同步（CloudApi/SyncEngine）、应用锁、循证知识库、健康数据聚合、体成分解析、**文献检索（Europe PMC/OpenAlex/Crossref/Semantic Scholar）**、**视觉识别（vision/：独立配置 / 服务 / 分型异常）**、**PDF 渲染 / 报告提取 / 复查提醒（health/）**
 - `lib/providers/` 业务状态（AppProvider / AgentProvider / **WearableProvider**）
 - `lib/screens/` 训练/饮食/财务/知识库（含**开放数据与本体**）/AI/云同步/锁屏/**健康（同意页/数据源诊断/体测录入/报告导入与档案/提取确认）** 各界面
 - `assets/data/` 内置数据资产（**`evidence_kb.json` 循证知识库 + 疾病—运动两层关联 + 家庭用药安全库 + 核心膳食补充剂库 + 本体术语与数据源登记**；**`exercise_catalog.json` 开放动作库 2428 条**按需加载）
@@ -168,6 +169,17 @@ MIT 为「按现状（AS IS）」授权，不对内容准确性与使用后果�
 | NIH ODS 膳食补充剂消费者事实清单 | 美国政府作品，公有领域（17 U.S.C. §105） | 条目化改写 |
 | FDA 消费者资讯 | 美国政府作品，公有领域（17 U.S.C. §105） | 条目化改写 |
 | EFSA 咖啡因安全性科学意见（2015） | 开放获取 | 条目化改写，标注出处 |
+| Europe PMC REST API | EMBL-EBI 免费开放（含商业用途） | 联网检索仅取题录元数据，解析阶段丢弃摘要与正文，本地不落任何正文 |
+| OpenAlex API | CC0 1.0（公共领域） | 仅取题录元数据；CC BY-NC 系列许可条目在解析阶段直接丢弃 |
+| Crossref REST API | 官方免费开放 | 兜底源，仅取题录元数据与许可声明 |
+| Semantic Scholar Graph API | Allen 研究所免费开放（无 Key 限流） | 兜底源；接口不返回许可串，条目一律退化为纯著录题录，不转载正文 |
+| AnySearch Search API | 商业 API（学生 / 开发者计划每天 2000 次免费调用，用户自备 Key） | 官方检索接口，非抓取结果页；仅取标题 / 链接 / 摘要片段，解析阶段丢弃正文，不落库、不二次分发；客户端另设每日 2000 次上限与 1.2 秒最小间隔 |
+| 肌筋膜链（含螺旋线）系统评价（Wilke 等） | PubMed 摘要免费公开 | 仅转述结论（螺旋线 9 个连接中 5 个获验证，证据「中等至强」），未复制原文 |
+| Myers《解剖列车》螺旋线章节 | 商业出版物（非开放获取） | 仅转述概念并改写，未逐字复制 |
+
+**关于联网检索的取舍**：早期版本内置了抓取搜狗微信 / Bing / 百度结果页 HTML 的联网搜索，**该实现已整体移除**——它违反目标站服务条款、随时被反爬打断，选择器一改即失效，是本项目风险最高的一段代码。现分两层：学术证据走官方开放的文献 API（Europe PMC / OpenAlex / Crossref / Semantic Scholar），只取题录、不落正文；通用网页走 AnySearch 官方检索 API（Bearer 鉴权、返回 JSON），只取标题 / 链接 / 摘要片段并丢弃正文。两层均默认关闭、仅在用户显式开启后按单次提问检索，未开启时不产生任何外发请求。如不希望依赖第三方检索服务，也可改为部署自建元搜索实例（如 SearXNG，AGPL-3.0），App 只访问自己的域名。
+
+**关于开放数据集**：`dataset_registry_seed.json` 中的条目分三种获取状态——`已接入`（数据已随包分发）、`可接入`、`登记题录`。**`登记题录` 仅记录线索，不下载任何正文数据**，单测对此有硬断言。体量较大的语料型数据集（如道教知识 RAG 约 9.6 万条、健身气功指令集 5.7 万条）属训练语料而非端上消费场景，**一律不下载、不打包**，如需完整使用应在自建服务器侧接入。
 
 **内置书籍通道**：`books/`（原始文件）与 `assets/books/`（提取文本）**仅允许公有领域或允许分发的开放许可来源**（如《黄帝内经》等古籍）。`assets/books/` 是打包资产，其中的文本会随 APK 分发，而 `.gitignore` 只保护代码仓库、不保护发布包，因此现代版权书籍不得放入；`scripts/extract_books.py` 已内置来源白名单闸门。
 

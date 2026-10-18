@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "generatedAt": "2026-10-17T13:34:38",
+  "generatedAt": "2026-10-18T10:21:40",
   "description": "开放动作库目录：Exercises Dataset（含自然中文说明）+ Free Exercise DB + Longhaul Exercises。构建期导入、仅取数据、剥离全部媒体字段；随 App 离线打包，按需加载。",
   "generatedFrom": [
     {

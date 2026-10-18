@@ -27,7 +27,7 @@
 | 项 | 出处 | 当前状态 |
 |---|---|---|
 | 家庭用药安全知识库 | `specs/2026-10-08-p5-home-health-kb-design.md` | **已闭环**（P6-A，64 条用药安全，工具 `search_otc_safety`） |
-| 补剂 / 营养品数据库 | 会话中提出 | **已闭环**（P6-C，24 条补剂，工具 `lookup_supplement`）；P6-B 调研报告未产出 |
+| 补剂 / 营养品数据库 | 会话中提出 | **已闭环**（P6-C，24 条补剂，工具 `lookup_supplement`；P6-B 运行时数据源 NIH DSLD + Healthy Aging Atlas，工具 `search_supplement_label` / `search_supplement_evidence`） |
 | 华为 Health Service Kit | `specs/2026-10-07-p4-health-data-design.md` §1 | 资质门槛：实缴注册资本 ≥50 万且成立满 1 年 |
 | 云康宝 BLE 直连体脂秤 | 同上 | 申请制 SDK，条款未知 |
 | 环境与天气 API（和风、彩云） | `research/2026-10-07-p4-data-sources-research.md` §7 | 未调研 |
@@ -38,7 +38,7 @@
 
 ## 3. P6 知识域补完
 
-P6 全部落在同一条已有管线上（`EvidenceEntry` + `import_knowledge.py` + `KnowledgeIndex` + 工具三处登记），不引入新架构，因此排在首位。其中 P6-A、P6-C 与 P6-D 已交付，只剩 P6-B 调研报告未产出。
+P6 全部落在同一条已有管线上（`EvidenceEntry` + `import_knowledge.py` + `KnowledgeIndex` + 工具三处登记），不引入新架构，因此排在首位。P6-A 至 P6-D 均已交付。
 
 ### 3.1 P6-A 家庭用药安全知识库（已交付）
 
@@ -55,7 +55,21 @@ T3 单测与收尾（0.5 天）
 
 验收口径沿用设计 §7，关键几条：问"对乙酰氨基酚一天最多吃多少"返回 2g/天上限 + 出处 + 免责；问"藿香正气水和头孢能一起吗"返回双硫仑反应警示；孕妇、儿童、慢病场景只给"禁用 / 慎用 / 遵医嘱"，不给具体剂量；命中红旗症状关键词优先输出就医提示；断网完全可用；`flutter analyze` 无问题、全量测试通过、release 可编译。
 
-### 3.2 P6-B 补剂数据库调研
+### 3.2 P6-B 补剂数据库调研（已交付）
+
+已交付：调研结论直接落到实现，未单独产出 `docs/research/*-supplement-database-research.md`（四个问题的结论在代码与单测中固化）。原始切分保留在下方备查。
+
+**首选源 NIH DSLD**（Dietary Supplement Label Database）。入口 `https://api.ods.od.nih.gov/dsld/v9/search-filter`；注意 `dsld.od.nih.gov` 被 Cloudflare 人机校验拦死（实测 403），必须走 `api.ods.od.nih.gov`。许可 CC0 1.0 公有领域，官方明写 "No permission is needed for their use"，允许本地打包与再分发，建议署名 DSLD；官方限流 1000 次/小时/IP。实测 `_source` 字段：`fullName / brandName / productType / physicalState / netContents / allIngredients[] / claims[] / offMarket / entryDate`；无命中返回 `{"hits":[],"stats":{"count":0}}`。
+
+**第二源 Healthy Aging Atlas**（补剂 × 健康目标的循证分级）。端点 `https://healthyagingatlas.com/api/mcp/`，MCP Streamable HTTP，无状态、无需注册、无需 Key，响应为裸 JSON。数据集 CC BY 4.0（Zenodo DOI `10.5281/zenodo.21412552`）；ToS 限 100 次 / 24 小时滚动窗口。只接 5 个循证工具（`search_evidence` / `get_evidence_summary` / `get_citations` / `query_evidence_map` / `compare_evidence`）；另 5 个描述里明写 "may contain affiliate URLs" 的导购工具（`search_supplements` / `get_product` / `compare_supplements` / `get_price_history` / `recommend_for_goal`）一律不接。
+
+**接入形态**取运行时查询，与 P6-C 静态导入并存（静态 24 条离线兜底 + 运行时按名称/品牌查实时标注与循证分级）。新增 `lib/services/mcp_client.dart`（通用 MCP 客户端桥，把官方对外开放的 MCP 服务当普通 HTTPS 数据源接入）、`supplement_evidence_service.dart`（HAA）、`supplement_label_service.dart`（DSLD）；`agent_service.dart` 暴露 `search_supplement_evidence` / `search_supplement_label` 两个工具（工具总数 34 → 36），受设置页"联网总开关"控制（默认关闭，关闭时不产生任何外发请求），失败回落不抛异常。
+
+**闸门**：DSLD 1000 次 / 1 小时、HAA 100 次 / 24 小时，均为滚动窗口 + 1500ms 最小间隔，时间戳持久化在 SharedPreferences。HAA 侧另有结构性防 PII（`sanitizeField` 拦邮箱 / 手机号 / 身份证），因上游 5 个循证工具的描述强制要求不得用于个人或敏感健康信息。所有输出强制署名来源与许可。
+
+**内容边界**：不做疗效承诺；功效宣称受《广告法》《食品安全法》管制，输出统一附"非医疗建议、非购买建议"免责，与 P5 疾病—运动库"禁止证据越级"同等强度。
+
+以下为原始切分，保留备查。
 
 先出报告再定，约 0.5 个开发日，不写代码。产出 `docs/research/2026-10-XX-supplement-database-research.md`。
 
@@ -77,7 +91,7 @@ T3 单测与收尾（0.5 天）
 
 运行时查询路线：在 `FoodLookupService` 旁增加补剂条码查询，命中即缓存到本地，同样受设置页"循证文献联网检索"开关控制，同样失败回落不抛异常。这条路线的好处是与既有条码链路同构，成本最低。
 
-P6-A 与 P6-C 已交付，剩余 P6-B 约 0.5 个开发日（P6 原始估算合计约 4.5 个开发日）。
+P6-A 至 P6-D 均已交付（P6 原始估算合计约 4.5 个开发日）。
 
 ### 3.4 P6-D 开放数据与本体接入（已交付）
 
@@ -155,12 +169,12 @@ P6-B 补剂调研 ──┘
                           P7-B iOS（需 macOS）
 ```
 
-图中 P6-A 与 P6-C 已交付；P6-D 开放数据与本体接入为独立支线，已交付，不占用上述链条。
+图中 P6-A 至 P6-C 已交付（P6-B 的运行时数据源与 P6-C 的静态导入并存）；P6-D 开放数据与本体接入为独立支线，已交付，不占用上述链条。
 
 | 期 | 内容 | 预估 | 前置 |
 |---|---|---|---|
 | P6-A | 家庭用药安全知识库（已交付） | 2 天 | 无，设计已就绪 |
-| P6-B | 补剂数据库调研 | 0.5 天 | 无 |
+| P6-B | 补剂数据库调研与运行时数据源（已交付） | 0.5 天 | 无 |
 | P6-C | 补剂接入（已交付） | 2 天 | P6-B 结论 |
 | P6-D | 开放数据与本体接入（已交付） | 独立支线 | 无 |
 | P7-A | 环境与天气 API | 1.5 天 | 免费额度与商用条款确认 |
@@ -173,11 +187,11 @@ P6-B 补剂调研 ──┘
 | P9-C | 包体与性能 | 1 天 | 无 |
 | P9-D | 上架与后端生产化 | 2 天 | 目标定位 |
 
-可确定性投入合计约 16 个开发日（含已交付的 P6-A 与 P6-C）；扣除这两项的 4 天后，剩余约 11.5 个开发日。P6-B 是当前唯一可以立刻开工且无任何外部依赖的项；P9-B 与 P9-C 属于随时可插入的独立工作；P7-C 与 P7-D 在外部条件满足前不计入排期。
+可确定性投入合计约 16 个开发日（含已交付的 P6-A 至 P6-C）；扣除这三项的 4.5 天后，剩余约 11.5 个开发日。P9-B 与 P9-C 属于随时可插入的独立工作；P7-C 与 P7-D 在外部条件满足前不计入排期。
 
 ## 8. 需要拍板的岔路口
 
-补剂库走静态导入还是运行时查询 —— **已拍板**：P6-C 已按静态导入交付（24 条，工具 `lookup_supplement`），运行时条码查询路线未采用。P6-B 调研报告仍未产出；若后续要显著扩库，再以该报告为准复核形态。
+补剂库走静态导入还是运行时查询 —— **已拍板且两者并存**：P6-C 静态导入交付 24 条（工具 `lookup_supplement`）作为离线兜底；P6-B 追加运行时数据源（NIH DSLD 实标注配料表 + Healthy Aging Atlas 循证分级，工具 `search_supplement_label` / `search_supplement_evidence`），受联网总开关控制。若后续要显著扩静态库，再以运行时命中数据为准复核导入范围。
 
 是否要做 iOS 与华为。iOS 需要一台 Mac 与开发者账号，华为需要企业资质，这两个答案直接决定 P7-B 与 P7-C 排不排。
 

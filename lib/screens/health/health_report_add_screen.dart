@@ -135,6 +135,7 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
   /// 重选：清空当前选择并删除临时归档
   Future<void> _clearSelection() async {
     await ReportFileStore.instance.delete(_archivedPath);
+    if (!mounted) return;
     setState(() {
       _filePath = null;
       _fileType = 'image';
@@ -274,11 +275,14 @@ class _HealthReportAddScreenState extends State<HealthReportAddScreen> {
         createdAt: DateTime.now(),
       );
       final summary = await provider.analyzeHealthReport(report);
+      if (!mounted) return;
       setState(() {
         _aiSummary = summary;
         _analyzing = false;
       });
     } catch (e) {
+      // AI 解读是数秒级网络请求，期间用户按返回键退出本页很常见
+      if (!mounted) return;
       setState(() {
         _analyzing = false;
         _lastError = 'AI解读失败: $e';

@@ -4,6 +4,7 @@ import '../../providers/app_provider.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/user_profile.dart';
 import '../../services/agreement_consent.dart';
+import '../../services/any_search_service.dart';
 import '../../services/app_lock_service.dart';
 import '../../services/cloud_api.dart';
 import '../../services/database_helper.dart';
@@ -217,6 +218,78 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
+          // 网页搜索（AnySearch 官方 API，仅标题/链接/摘要；Key 存系统安全存储）
+          Card(
+            child: ListTile(
+              leading: Icon(
+                Icons.travel_explore,
+                color: provider.anySearchConfigured
+                    ? TaoistTheme.jadeGreen
+                    : TaoistTheme.cloudGray,
+              ),
+              title: const Text('网页搜索 · AnySearch'),
+              subtitle: Text(
+                !provider.anySearchConfigured
+                    ? '未配置 Key：AI 暂时无法检索新闻、政策、机构通知等公开网页'
+                    : provider.evidenceOnlineSearch
+                        ? '已配置 ${provider.anySearchMaskedKey}：'
+                            'AI 可检索公开网页，仅取标题、链接与摘要片段'
+                            '\n${provider.anySearchQuotaText}'
+                        : '已配置 ${provider.anySearchMaskedKey}：'
+                            '联网总开关关闭中，暂不外发任何请求'
+                            '\n${provider.anySearchQuotaText}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _editAnySearchKey(context, provider),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 补剂数据源（P6-B：NIH DSLD 配料表 + Healthy Aging Atlas 循证，均无需 Key）
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.medication_liquid_outlined,
+                    color: provider.supplementDataAvailable
+                        ? TaoistTheme.jadeGreen
+                        : TaoistTheme.cloudGray,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('补剂数据源（无需 Key）',
+                            style: TextStyle(fontSize: 16)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'NIH DSLD：市售补剂标注配料表（CC0 公有领域）\n'
+                          'Healthy Aging Atlas：补剂×目标循证分级'
+                          '（CC BY 4.0，DOI 10.5281/zenodo.21412552）\n'
+                          '${provider.evidenceOnlineSearch ? '已随联网总开关启用' : '联网总开关关闭中，暂不外发任何请求'}\n'
+                          '${provider.supplementLabelQuotaText}\n'
+                          '${provider.supplementEvidenceQuotaText}',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: TaoistTheme.cloudGray),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: '刷新用量',
+                    onPressed: () => provider.refreshSupplementQuota(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // 运动健康数据（P4-T6：单独同意 · 数据源诊断 · 撤回授权）
           Card(
             child: ListTile(
@@ -373,6 +446,162 @@ class SettingsScreen extends StatelessWidget {
     final mm = local.month.toString().padLeft(2, '0');
     final dd = local.day.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd';
+  }
+
+  /// 配置 / 清除 AnySearch Key。
+  ///
+  /// 已保存的 Key 不回填到输入框（避免把密钥重新暴露到界面），
+  /// 只在下方显示脱敏串；保存前先发一次最小请求校验。
+  Future<void> _editAnySearchKey(
+      BuildContext context, AppProvider provider) async {
+    // 打开前刷新额度计数：跨天后剩余次数会自动恢复
+    await provider.refreshAnySearchQuota();
+    if (!context.mounted) return;
+    final controller = TextEditingController();
+    var obscure = true;
+    var busy = false;
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('网页搜索 · AnySearch'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Key 只写入系统加密存储（Keystore / Keychain），'
+                  '界面仅显示脱敏串。配置后 AI 可检索新闻、政策法规、'
+                  '机构通知等公开网页，结果只含标题、链接与摘要片段。',
+                  style: TextStyle(fontSize: 12.5),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'AnySearch 学生 / 开发者免费额度为每天 2000 次，'
+                  '本应用按本地日期计数、上限 ${AnySearchService.dailyQuota} 次，'
+                  '并对连续请求做间隔限速；额度用尽当天不再外发请求。'
+                  '可在该卡片副标题查看剩余次数。',
+                  style: TextStyle(
+                      fontSize: 12.5, color: TaoistTheme.cloudGray),
+                ),
+                if (provider.anySearchConfigured) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    provider.anySearchQuotaText,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: TaoistTheme.bambooGreen),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  enabled: !busy,
+                  obscureText: obscure,
+                  decoration: InputDecoration(
+                    labelText: 'API Key',
+                    hintText: 'as_sk_...',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          obscure ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () =>
+                          setDialogState(() => obscure = !obscure),
+                    ),
+                  ),
+                ),
+                if (provider.anySearchConfigured) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '当前：${provider.anySearchMaskedKey}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    error!,
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.redAccent),
+                  ),
+                ],
+                if (busy) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            if (provider.anySearchConfigured)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        await provider.clearAnySearchKey();
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                      },
+                child: const Text('清除 Key',
+                    style: TextStyle(color: Colors.redAccent)),
+              ),
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final key = controller.text.trim();
+                      if (key.isEmpty) {
+                        setDialogState(() => error = '请输入 API Key');
+                        return;
+                      }
+                      if (!key.startsWith('as_sk_')) {
+                        setDialogState(
+                            () => error = 'Key 格式不正确，应以 as_sk_ 开头');
+                        return;
+                      }
+                      setDialogState(() {
+                        busy = true;
+                        error = null;
+                      });
+                      try {
+                        await provider.saveAnySearchKey(key);
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('网页搜索 Key 已校验并加密保存')),
+                          );
+                        }
+                      } on AnySearchException catch (e) {
+                        setDialogState(() {
+                          busy = false;
+                          error = e.message;
+                        });
+                      } catch (e) {
+                        setDialogState(() {
+                          busy = false;
+                          error = '保存失败：$e';
+                        });
+                      }
+                    },
+              child: const Text('校验并保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
   }
 
   /// 退出登录

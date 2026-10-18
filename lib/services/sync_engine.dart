@@ -25,6 +25,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   static final SyncEngine instance = SyncEngine._();
 
   static const int _batchSize = 200;
+  /// 单轮 syncNow 内 push 的最大批次轮数。
+  ///
+  /// 护栏用途：正常情况队列一轮批就清空；若服务端返回结果缺失导致部分 op 无法出队，
+  /// 下一轮会取到同一批 op，没有上限就是一次不休息的紧密循环（耗电 + 打满服务端）。
+  static const int _maxPushRounds = 50;
   static const Duration _debounce = Duration(seconds: 5);
   static const List<Duration> _backoff = [
     Duration(seconds: 5),
@@ -180,7 +185,7 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> _pushAll() async {
     var touched = false;
-    while (true) {
+    for (var round = 0; round < _maxPushRounds; round++) {
       final ops = await DatabaseHelper.instance.getPendingOps(limit: _batchSize);
       if (ops.isEmpty) break;
 
@@ -271,16 +276,29 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
+      // 服务端 results 按 (table, id) 索引后再匹配，不依赖返回顺序与本地发送顺序一致。
+      // 网关重排或压缩结果时，按下标对齐会把 A 行的裁决结果错配到 B 行上
+      // —— 版本号写错行，后续 sync 会以错误的 base_version 反复冲突。
+      final byKey = <String, Map<String, dynamic>>{};
+      for (final r in results) {
+        final rt = r['table'] as String?;
+        final rid = r['id'] as String?;
+        if (rt == null || rid == null) continue;
+        byKey['$rt\u0000$rid'] = r;
+      }
       final serverTime = out['server_time'] as String?;
       final doneIds = <int>[];
       var touched = false;
-      for (var j = 0;
-          j < results.length && j < changes.length;
-          j++) {
-        final r = results[j];
+      for (var j = 0; j < changes.length; j++) {
         final change = changes[j];
         final table = change['table'] as String;
         final rowId = change['id'] as String;
+        final r = byKey['$table\u0000$rowId'];
+        if (r == null) {
+          // 服务端没给这一行的裁决：宁可留在队列里下次重传，
+          // 也不能当成成功出队——那样本地改动会永久丢失。
+          continue;
+        }
         final status = r['status'] as String? ?? 'applied';
         final version = (r['server_version'] as num?)?.toInt() ?? 0;
         if (status == 'conflict') {
@@ -366,7 +384,7 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
             touched = true;
             continue;
           }
-          if (dirty[table]!.contains(rowId)) continue;
+          if (dirty[table]?.contains(rowId) ?? false) continue;
           final data = item['data'];
           if (data is Map) {
             await DatabaseHelper.instance.applyServerRow(

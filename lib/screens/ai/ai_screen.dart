@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../models/evidence.dart';
 import '../../providers/agent_provider.dart';
 import '../../providers/app_provider.dart';
+import '../../services/agent_service.dart';
 import '../../services/cloud_api.dart';
 import '../../services/model_config.dart';
-import '../../services/search_service.dart';
 import '../../services/vision/vision_config.dart';
 import '../../services/vision/vision_exceptions.dart';
 import '../../services/vision/vision_service.dart';
@@ -68,9 +69,8 @@ class _ThinkingPanelState extends State<_ThinkingPanel> {
     }
 
     final start = agent.thinkingStartedAt;
-    final elapsed = start == null
-        ? 0
-        : DateTime.now().difference(start).inSeconds;
+    final elapsed =
+        start == null ? 0 : DateTime.now().difference(start).inSeconds;
     final steps = agent.thinkingSteps;
 
     return Container(
@@ -106,8 +106,8 @@ class _ThinkingPanelState extends State<_ThinkingPanel> {
               const Spacer(),
               Text(
                 '已等待 ${elapsed}s',
-                style: const TextStyle(
-                    fontSize: 11, color: TaoistTheme.cloudGray),
+                style:
+                    const TextStyle(fontSize: 11, color: TaoistTheme.cloudGray),
               ),
             ],
           ),
@@ -151,6 +151,169 @@ class _ThinkingPanelState extends State<_ThinkingPanel> {
                 ),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 对话流内的「思考过程」折叠卡片
+///
+/// 把模型思维链与逐次工具调用（工具名 / 参数 / 结果摘要）收进一条可展开的卡片：
+/// 默认折叠为一行摘要，点开可见完整推演与每次查询拿到了什么。
+/// 与底部 [_ThinkingPanel]（仅发送中可见）不同，本卡片随消息一并持久化，
+/// 历史回答也能回看当时的过程。
+class _ProcessCard extends StatefulWidget {
+  const _ProcessCard({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  State<_ProcessCard> createState() => _ProcessCardState();
+}
+
+class _ProcessCardState extends State<_ProcessCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.message;
+    // 正文尚未成文即表示本轮仍在生成中：头部给个进度感
+    final streaming =
+        context.watch<AgentProvider>().sending && m.content.trim().isEmpty;
+    final steps = m.toolSteps;
+    final reasoning = m.reasoning?.trim() ?? '';
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: Container(
+        decoration: BoxDecoration(
+          color: TaoistTheme.mistGray.withValues(alpha: 0.30),
+          borderRadius: BorderRadius.circular(10),
+          border:
+              Border.all(color: TaoistTheme.jadeGreen.withValues(alpha: 0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                child: Row(
+                  children: [
+                    if (streaming)
+                      const SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(strokeWidth: 1.8),
+                      )
+                    else
+                      const Icon(Icons.psychology_outlined,
+                          size: 13, color: TaoistTheme.cloudGray),
+                    const SizedBox(width: 6),
+                    const Text(
+                      '思考过程',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: TaoistTheme.inkBlack,
+                      ),
+                    ),
+                    if (steps.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '· 调用 ${steps.length} 个工具',
+                        style: const TextStyle(
+                            fontSize: 11, color: TaoistTheme.cloudGray),
+                      ),
+                    ],
+                    const Spacer(),
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: TaoistTheme.cloudGray,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_expanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (reasoning.isNotEmpty) ...[
+                      for (final line in reasoning.split('\n'))
+                        if (line.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: Text(
+                              line.trim(),
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                height: 1.5,
+                                color: TaoistTheme.cloudGray,
+                              ),
+                            ),
+                          ),
+                      if (steps.isNotEmpty) const SizedBox(height: 6),
+                    ],
+                    for (final s in steps) _buildStep(s),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 单次工具调用：标签 + 入参摘要 + 结果摘要（失败标红）
+  Widget _buildStep(AgentToolStep s) {
+    final argText =
+        s.arguments.entries.map((e) => '${e.key}=${e.value}').join(', ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                s.ok ? Icons.check_circle_outline : Icons.error_outline,
+                size: 12,
+                color: s.ok ? TaoistTheme.jadeGreen : const Color(0xFFD9534F),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  s.label + (argText.isEmpty ? '' : '（$argText）'),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: TaoistTheme.inkBlack,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (s.summary.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 18, top: 2),
+              child: Text(
+                s.summary,
+                style: const TextStyle(
+                  fontSize: 11,
+                  height: 1.45,
+                  color: TaoistTheme.cloudGray,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -529,6 +692,8 @@ class _AIScreenState extends State<AIScreen> {
     final isUser = m.role == 'user';
     final time =
         '${m.time.hour.toString().padLeft(2, '0')}:${m.time.minute.toString().padLeft(2, '0')}';
+    // 生成中的助手消息往往只有「思考 + 工具步骤」，正文尚未成文；此时不渲染空气泡。
+    final showBubble = isUser || m.content.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -564,64 +729,70 @@ class _AIScreenState extends State<AIScreen> {
                 ],
               ),
             ),
-          Row(
-            mainAxisAlignment:
-                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (isUser)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Text(time,
-                      style: const TextStyle(
-                          fontSize: 10, color: TaoistTheme.cloudGray)),
-                ),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  decoration: BoxDecoration(
-                    color: isUser
-                        ? TaoistTheme.jadeGreen
-                        : TaoistTheme.paperWhite,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(14),
-                      topRight: const Radius.circular(14),
-                      bottomLeft: Radius.circular(isUser ? 14 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 14),
-                    ),
-                    border: isUser
-                        ? null
-                        : Border.all(color: TaoistTheme.mistGray, width: 1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+          // 对话流内的「思考过程」卡片：思维链 + 工具调用步骤（可折叠）
+          if (!isUser && m.hasProcess)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _ProcessCard(message: m),
+            ),
+          if (showBubble)
+            Row(
+              mainAxisAlignment:
+                  isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (isUser)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(time,
+                        style: const TextStyle(
+                            fontSize: 10, color: TaoistTheme.cloudGray)),
+                  ),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? TaoistTheme.jadeGreen
+                          : TaoistTheme.paperWhite,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(14),
+                        topRight: const Radius.circular(14),
+                        bottomLeft: Radius.circular(isUser ? 14 : 4),
+                        bottomRight: Radius.circular(isUser ? 4 : 14),
                       ),
-                    ],
-                  ),
-                  child: SelectableText(
-                    m.content,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.55,
-                      color:
-                          isUser ? Colors.white : TaoistTheme.inkBlack,
+                      border: isUser
+                          ? null
+                          : Border.all(color: TaoistTheme.mistGray, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: SelectableText(
+                      m.content,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.55,
+                        color: isUser ? Colors.white : TaoistTheme.inkBlack,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (!isUser)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: Text(time,
-                      style: const TextStyle(
-                          fontSize: 10, color: TaoistTheme.cloudGray)),
-                ),
-            ],
-          ),
+                if (!isUser)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Text(time,
+                        style: const TextStyle(
+                            fontSize: 10, color: TaoistTheme.cloudGray)),
+                  ),
+              ],
+            ),
           // 失败气泡：重试入口
           if (!isUser && m.error)
             Padding(
@@ -637,8 +808,7 @@ class _AIScreenState extends State<AIScreen> {
                     style: TextStyle(fontSize: 11, color: Color(0xFFD9534F)),
                   ),
                   TextButton(
-                    onPressed: () =>
-                        context.read<AgentProvider>().retryLast(),
+                    onPressed: () => context.read<AgentProvider>().retryLast(),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(0, 28),
@@ -648,103 +818,83 @@ class _AIScreenState extends State<AIScreen> {
                 ],
               ),
             ),
-          // 正常回答：显示查询了 N 项数据
-          if (!isUser && !m.error && m.toolCount > 0)
+          // 正常回答：显示查询了 N 项数据（已有的思考卡片会展示工具明细，避免重复）
+          if (!isUser && !m.error && m.toolCount > 0 && !m.hasProcess)
             Padding(
               padding: const EdgeInsets.only(top: 2, left: 4),
               child: Text(
                 '已查询 ${m.toolCount} 项数据',
-                style: const TextStyle(
-                    fontSize: 11, color: TaoistTheme.cloudGray),
+                style:
+                    const TextStyle(fontSize: 11, color: TaoistTheme.cloudGray),
               ),
             ),
-          // FIT-2：待确认的方案卡片（训练 / 饮食）
-          if (!isUser && m.payload != null)
+          // FIT-2：待确认的方案卡片（训练 / 饮食）。同一轮可能产出多张，逐张渲染。
+          if (!isUser && m.cards.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: _buildActionCard(context, m, index),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var ci = 0; ci < m.cards.length; ci++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                          bottom: ci == m.cards.length - 1 ? 0 : 8),
+                      child: _buildActionCard(context, m, index, ci),
+                    ),
+                ],
+              ),
             ),
         ],
       ),
     );
   }
 
-  /// FIT-2：按载荷类型渲染待确认卡片；保存成功后回调标记消息为「已保存」。
-  Widget _buildActionCard(BuildContext context, ChatMessage m, int index) {
-    final payload = m.payload;
-    if (payload == null) return const SizedBox.shrink();
+  /// FIT-2：按载荷类型渲染第 [cardIndex] 张待确认卡片；
+  /// 保存成功后只把该张标记为「已保存」，同一轮其它卡片不受影响。
+  Widget _buildActionCard(
+      BuildContext context, ChatMessage m, int index, int cardIndex) {
+    final cards = m.cards;
+    if (cardIndex < 0 || cardIndex >= cards.length) {
+      return const SizedBox.shrink();
+    }
+    final payload = cards[cardIndex];
     final type = payload['type']?.toString() ?? '';
+    final agent = context.read<AgentProvider>();
     Future<void> onSaved() =>
-        context.read<AgentProvider>().markPayloadSaved(index);
+        agent.markPayloadSaved(index, cardIndex: cardIndex);
+    final saved = agent.isCardSaved(m, cardIndex);
     if (type == 'diet_plan' || type == 'diet_log') {
-      return DietPlanCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return DietPlanCard(payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'delete_diet') {
-      return DietDeleteCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return DietDeleteCard(payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'health_metrics') {
-      return HealthMetricsCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return HealthMetricsCard(payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'finance_records') {
       return FinanceRecordsCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+          payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'workout_records') {
       return WorkoutRecordsCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+          payload: payload, saved: saved, onSaved: onSaved);
     }
     // 档案新增类卡片（FIT-2 两段确认）
     if (type == 'food_catalog') {
-      return FoodCatalogCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return FoodCatalogCard(payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'life_status') {
-      return LifeStatusCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return LifeStatusCard(payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'knowledge_entry') {
       return KnowledgeEntryCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+          payload: payload, saved: saved, onSaved: onSaved);
     }
     if (type == 'health_report') {
-      return HealthReportCard(
-        payload: payload,
-        saved: m.payloadSaved,
-        onSaved: onSaved,
-      );
+      return HealthReportCard(payload: payload, saved: saved, onSaved: onSaved);
     }
-    return WorkoutPlanCard(
-      payload: payload,
-      saved: m.payloadSaved,
-      onSaved: onSaved,
-    );
+    return WorkoutPlanCard(payload: payload, saved: saved, onSaved: onSaved);
   }
 
   Widget _buildQuickChips(BuildContext context, AgentProvider agent) {
@@ -1555,7 +1705,7 @@ class _WebSearchCardState extends State<WebSearchCard> {
   final _controller = TextEditingController();
   bool _searching = false;
   bool _analyzing = false;
-  List<SearchResult>? _results;
+  List<LiteratureRef>? _results;
   String? _analysis;
   String? _error;
   String _lastQuery = '';
@@ -1587,7 +1737,7 @@ class _WebSearchCardState extends State<WebSearchCard> {
       setState(() {
         _results = results;
         if (results.isEmpty) {
-          _error = '未搜索到结果，换个关键词试试';
+          _error = '未检索到题录。换个更学术化的关键词，或先在设置里开启「循证文献联网检索」';
         }
       });
     } catch (e) {
@@ -1618,6 +1768,17 @@ class _WebSearchCardState extends State<WebSearchCard> {
     setState(() => _analyzing = false);
   }
 
+  /// 题录副标题：作者 · 期刊 · 年份 · 许可
+  String _refMeta(LiteratureRef r) {
+    return [
+      if (r.authors.isNotEmpty) r.authors,
+      if (r.journal.isNotEmpty) r.journal,
+      if (r.year > 0) '${r.year}',
+      if (r.isOpenAccess) '开放获取',
+      if (r.license.isNotEmpty) r.license,
+    ].join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -1632,7 +1793,7 @@ class _WebSearchCardState extends State<WebSearchCard> {
                     color: TaoistTheme.bambooGreen, size: 20),
                 SizedBox(width: 8),
                 Text(
-                  '联网搜索',
+                  '文献检索',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -1643,7 +1804,8 @@ class _WebSearchCardState extends State<WebSearchCard> {
             ),
             const SizedBox(height: 4),
             const Text(
-              '搜微信公众号/Bing/百度，让AI基于最新信息分析回答',
+              '检索开放学术文献库（Europe PMC / OpenAlex / Crossref / Semantic Scholar）的题录，'
+              '只取标题与期刊信息，不含正文',
               style: TextStyle(
                 fontSize: 11,
                 color: TaoistTheme.cloudGray,
@@ -1700,8 +1862,8 @@ class _WebSearchCardState extends State<WebSearchCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: TaoistTheme.bambooGreen
-                                .withValues(alpha: 0.1),
+                            color:
+                                TaoistTheme.bambooGreen.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
@@ -1714,15 +1876,33 @@ class _WebSearchCardState extends State<WebSearchCard> {
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            r.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: TaoistTheme.inkBlack,
-                              height: 1.4,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                r.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: TaoistTheme.inkBlack,
+                                  height: 1.4,
+                                ),
+                              ),
+                              if (_refMeta(r).isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    _refMeta(r),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: TaoistTheme.cloudGray,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -2116,15 +2296,16 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle, color: dotColor),
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: dotColor),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             const Text(
-              'API Key 经服务端加密后存于你的账号下，重装或换机登录即可自动取回，'
-              '无需重新填写。密钥不参与业务数据同步，数据库只存密文。',
+              '只备份接口地址与模型名，换机登录后自动回填，省去重新配置。'
+              'API Key 是可直接计费的敏感凭据，仅经系统密钥库（Keystore/Keychain）'
+              '加密保存在本机，不上传云端，换机后需重新填写。',
               style: TextStyle(
                 fontSize: 12,
                 color: TaoistTheme.cloudGray,
@@ -2137,8 +2318,8 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle, color: dotColor),
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: dotColor),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -2212,7 +2393,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('移除云端备份'),
         content: const Text(
-          '将删除云端的 AI 配置副本（含 API Key）。本机配置不受影响，'
+          '将删除云端的模型配置副本。本机配置与 API Key 不受影响，'
           '下次保存配置时会重新上传。确定继续？',
         ),
         actions: [
@@ -2303,8 +2484,8 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
                 '${_providerNameOf(m.baseUrl)} · ${m.model}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 12, color: TaoistTheme.cloudGray),
+                style:
+                    const TextStyle(fontSize: 12, color: TaoistTheme.cloudGray),
               ),
               if (!m.supportsTools)
                 const Padding(
@@ -2438,8 +2619,7 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('删除',
-                style: TextStyle(color: Color(0xFFD9534F))),
+            child: const Text('删除', style: TextStyle(color: Color(0xFFD9534F))),
           ),
         ],
       ),
@@ -2638,7 +2818,8 @@ class _AIConfigScreenState extends State<AIConfigScreen> {
               ],
             ),
             Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: EdgeInsets.zero,
@@ -2838,9 +3019,8 @@ class _ModelEditSheetState extends State<_ModelEditSheet> {
         apiKey: key,
         id: widget.existing?.id ?? '',
       );
-      final brief = reply.trim().isEmpty
-          ? '（空回复）'
-          : reply.trim().replaceAll('\n', ' ');
+      final brief =
+          reply.trim().isEmpty ? '（空回复）' : reply.trim().replaceAll('\n', ' ');
       messenger.showSnackBar(
         SnackBar(content: Text('连接正常，模型回复：$brief')),
       );
@@ -2884,8 +3064,7 @@ class _ModelEditSheetState extends State<_ModelEditSheet> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final p in ChatModelPresets.all)
-                  _presetChip(p.provider),
+                for (final p in ChatModelPresets.all) _presetChip(p.provider),
                 _presetChip('自定义'),
               ],
             ),

@@ -26,24 +26,29 @@ import '../services/sync_engine.dart';
 import '../services/ai_engine.dart';
 import '../services/lunar_service.dart';
 import '../services/bill_import_service.dart';
-import '../services/search_service.dart';
 import '../services/food_lookup_service.dart';
 import '../services/diet_target.dart';
 import '../services/workout_session_controller.dart';
 import '../services/fasting_settings.dart';
 import '../services/fasting_service.dart';
 import '../services/literature_lookup_service.dart';
+import '../services/any_search_service.dart';
+import '../services/mcp_client.dart';
+import '../services/supplement_evidence_service.dart';
+import '../services/supplement_label_service.dart';
 import '../services/knowledge_engine.dart';
 import '../services/book_seeder.dart';
 import '../services/local_ocr_service.dart';
 import '../services/health/followup_reminder.dart';
 import '../services/health/report_file_store.dart';
+import '../services/vision/vision_service.dart';
 import '../services/health/report_ingestion_service.dart';
 import '../services/model_config.dart';
 import '../services/vision/vision_config.dart';
-import '../services/vision/vision_service.dart';
+import '../services/vision/vision_exceptions.dart';
 import '../data/food_catalog_data.dart';
 import '../data/knowledge_seed_data.dart';
+import '../utils/date_util.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -109,6 +114,14 @@ class AppProvider extends ChangeNotifier {
   bool evidenceOnlineSearch = false;
   static const String _kEvidenceOnline = 'evidence_online_search';
 
+  /// AnySearch 网页检索是否已配置 Key（Key 本体在安全存储，不入内存快照）
+  bool anySearchConfigured = false;
+
+  /// 补剂数据源是否可用：两者都无需 Key，只受联网总开关控制。
+  /// - Healthy Aging Atlas（循证分级，CC BY 4.0）
+  /// - NIH DSLD（厂商申报配料表，CC0 公有领域）
+  bool get supplementDataAvailable => evidenceOnlineSearch;
+
   // FIT-7 饮食增强：每日营养目标 + 断食设置（SharedPreferences 持久化）
   DietTarget dietTarget = const DietTarget();
   FastingSettings fastingSettings = const FastingSettings();
@@ -139,6 +152,23 @@ class AppProvider extends ChangeNotifier {
   /// 训练会话是否已尝试从持久化还原（防重复还原）
   bool _sessionRestored = false;
 
+  /// [init] 是否已启动（防重入）。
+  ///
+  /// 启动链上 main.dart 与 HomeScreen 都曾调用 `init()`，导致播种、全量加载、
+  /// 同步引擎挂接各跑两遍，且两次并发交错的 notifyListeners 会让 UI 读到中间态。
+  bool _initStarted = false;
+
+  /// 会话失效广播订阅（[dispose] 时取消，避免 provider 重建后重复触发）
+  StreamSubscription<dynamic>? _sessionSub;
+
+  @override
+  void dispose() {
+    _sessionSub?.cancel();
+    _sessionSub = null;
+    workoutSession.dispose();
+    super.dispose();
+  }
+
   // 会话状态（T4 登录门）：null=检查中；true=需登录；false=已登录或离线浏览
   bool? needsLogin;
 
@@ -166,6 +196,9 @@ class AppProvider extends ChangeNotifier {
   String? aiCloudError;
 
   Future<void> init() async {
+    // 幂等：重复调用直接返回，避免播种/全量加载/同步挂接跑两遍
+    if (_initStarted) return;
+    _initStarted = true;
     isLoading = true;
     notifyListeners();
     try {
@@ -173,7 +206,7 @@ class AppProvider extends ChangeNotifier {
       final cloud = CloudApi.instance;
       await cloud.init();
       needsLogin = !cloud.authenticated;
-      cloud.sessionExpired.listen((_) {
+      _sessionSub = cloud.sessionExpired.listen((_) {
         if (needsLogin != true) {
           needsLogin = true;
           // 会话失效：停同步引擎，待重新登录后由 completeLogin 重启
@@ -203,10 +236,15 @@ class AppProvider extends ChangeNotifier {
       await _loadEvidenceAsset();
       // P4-T3 读取本地设置（联网检索开关等）
       await _loadSettings();
+      // 网页检索（AnySearch）：从加密存储读取 Key
+      await AnySearchService.instance.init();
+      anySearchConfigured = AnySearchService.instance.isConfigured;
       // 内置书籍自动入库（仅首次，异步后台执行避免阻塞启动）
-      BookSeeder.seedIfNeeded(_db).then((count) {
-        if (count > 0) loadAllData();
-      });
+      unawaited(BookSeeder.seedIfNeeded(_db).then((count) {
+        if (count > 0) return loadAllData();
+      }).catchError((Object e) {
+        debugPrint('[AppProvider] 内置书籍入库失败：$e');
+      }));
       await loadAllData();
       lunarInfo = _lunarService.getTodayInfo();
       // P7-T5 复查提醒：插件初始化 + 按全部报告行动清单幂等重调度
@@ -215,11 +253,7 @@ class AppProvider extends ChangeNotifier {
       await FollowupReminder.instance.rescheduleAll(healthReports);
       // 阴阳动态平衡（v1.3.0）：本自然周首次启动时复盘上一周（幂等，内部静默容错）；
       // 异步执行不阻塞启动，若目标被修正则重载并刷新界面
-      AdaptiveGoalEngine.runWeeklyReviewIfDue().then((changed) async {
-        if (!changed) return;
-        dietTarget = await _dietTargetStore.load();
-        notifyListeners();
-      });
+      unawaited(AdaptiveGoalEngine.runWeeklyReviewIfDue());
     } catch (e) {
       error = e.toString();
     }
@@ -242,9 +276,11 @@ class AppProvider extends ChangeNotifier {
   /// 本地缓存清除由设置页"一键清除本地数据"负责（T6）。
   Future<void> logout() async {
     SyncEngine.instance.stop();
-    await SyncEngine.instance.clearPullCursor();
-    await _db.clearQueue();
-    await CloudApi.instance.clearSession();
+    // 逐个步骤容错：任何一步失败（如清游标时网络/DB 异常）都不得中断后续清理，
+    // 否则会残留 token 或待传队列，把当前账号数据误传给下一位用户。
+    await _quiet(() => SyncEngine.instance.clearPullCursor());
+    await _quiet(() => _db.clearQueue());
+    await _quiet(() => CloudApi.instance.clearSession());
     needsLogin = true;
     // 换账号：云端备份状态归位，避免把上一位用户的备份时间显示给下一位
     aiCloudBacked = false;
@@ -253,10 +289,84 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 执行清理类副作用并吞掉异常：登出/清缓存这类流程里，单步失败不应阻断后续步骤，
+  /// 否则会留下半清理状态（残留 token 或待传队列），比失败本身更危险。
+  Future<void> _quiet(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      debugPrint('[AppProvider] cleanup step failed: $e');
+    }
+  }
+
   /// 刷新历法信息（用于切换日期/时辰变化）
   void refreshLunarInfo([DateTime? date]) {
     lunarInfo = _lunarService.getTodayInfo(date);
     notifyListeners();
+  }
+
+  /// 增量刷新：只重读那张被改动的表，避免单条增删触发 15 次全表往返 + 全树 rebuild。
+  Future<void> _reloadOne(Future<void> Function() loader) async {
+    await loader();
+    _personalCacheDate = '';
+    notifyListeners();
+  }
+
+  // ---- 单表重载器（供 [_reloadOne] 使用）----
+  //
+  // 这些只读回被改动的那张表。跨表操作（如报告入库会同时改 reports/metrics）
+  // 仍走 [loadAllData]，不能图省事换成单表重载，否则另一张表会停在旧数据上。
+  Future<void> _reloadWorkouts() async {
+    workouts = await _db.getWorkouts();
+  }
+
+  Future<void> _reloadWorkoutPlans() async {
+    workoutPlans = await _db.getWorkoutPlans();
+  }
+
+  Future<void> _reloadDiet() async {
+    dietRecords = await _db.getDietRecords();
+  }
+
+  Future<void> _reloadFasting() async {
+    fastingSessions = await _db.getFastingSessions();
+  }
+
+  Future<void> _reloadFinance() async {
+    financeRecords = await _db.getFinanceRecords();
+  }
+
+  Future<void> _reloadBudgets() async {
+    final now = DateTime.now();
+    budgets = await _db.getBudgets(now.year, now.month);
+  }
+
+  Future<void> _reloadAssets() async {
+    assets = await _db.getAssets();
+  }
+
+  Future<void> _reloadDebts() async {
+    debts = await _db.getDebts();
+  }
+
+  Future<void> _reloadLifeStatus() async {
+    lifeStatuses = await _db.getLifeStatus();
+  }
+
+  Future<void> _reloadKnowledge() async {
+    knowledgeEntries = await _db.getKnowledgeEntries();
+  }
+
+  Future<void> _reloadBooks() async {
+    books = await _db.getBooksMeta();
+  }
+
+  Future<void> _reloadHealthMetrics() async {
+    healthMetrics = await _db.getHealthMetrics();
+  }
+
+  Future<void> _reloadHealthReports() async {
+    healthReports = await _db.getHealthReports();
   }
 
   Future<void> loadAllData() async {
@@ -265,26 +375,43 @@ class AppProvider extends ChangeNotifier {
       _sessionRestored = true;
       await workoutSession.restoreIfNeeded();
     }
-    workouts = await _db.getWorkouts();
-    workoutPlans = await _db.getWorkoutPlans();
-    dietRecords = await _db.getDietRecords();
-    fastingSessions = await _db.getFastingSessions();
-    financeRecords = await _db.getFinanceRecords();
-    lifeStatuses = await _db.getLifeStatus();
-    advices = await _db.getAdvices();
+    // 15 张表互不依赖：并行读，把「全量加载」从串行 N 次 DB 往返压到一批
     final now = DateTime.now();
-    budgets = await _db.getBudgets(now.year, now.month);
-    assets = await _db.getAssets();
-    debts = await _db.getDebts();
-    knowledgeEntries = await _db.getKnowledgeEntries();
-    // 只取书籍元数据（不含正文）：正文合计约 20 MB，若在此全量读出会被
-    // loadAllData 的每次调用（增删记录/同步落地/下拉刷新）反复读取而卡死；
-    // 正文改为打开阅读器时按需加载，书籍也不参与内存知识索引（见下）。
-    books = await _db.getBooksMeta();
-    // 健康档案数据
-    healthProfile = await _db.getHealthProfile();
-    healthMetrics = await _db.getHealthMetrics();
-    healthReports = await _db.getHealthReports();
+    final results = await Future.wait<Object?>([
+      _db.getWorkouts(),
+      _db.getWorkoutPlans(),
+      _db.getDietRecords(),
+      _db.getFastingSessions(),
+      _db.getFinanceRecords(),
+      _db.getLifeStatus(),
+      _db.getAdvices(),
+      _db.getBudgets(now.year, now.month),
+      _db.getAssets(),
+      _db.getDebts(),
+      _db.getKnowledgeEntries(),
+      // 只取书籍元数据（不含正文）：正文合计约 20 MB，若在此全量读出会被
+      // loadAllData 的每次调用（增删记录/同步落地/下拉刷新）反复读取而卡死；
+      // 正文改为打开阅读器时按需加载，书籍也不参与内存知识索引（见下）。
+      _db.getBooksMeta(),
+      _db.getHealthProfile(),
+      _db.getHealthMetrics(),
+      _db.getHealthReports(),
+    ], eagerError: true);
+    workouts = results[0] as List<Workout>;
+    workoutPlans = results[1] as List<WorkoutPlan>;
+    dietRecords = results[2] as List<DietRecord>;
+    fastingSessions = results[3] as List<FastingSession>;
+    financeRecords = results[4] as List<FinanceRecord>;
+    lifeStatuses = results[5] as List<LifeStatus>;
+    advices = results[6] as List<AIAdvice>;
+    budgets = results[7] as List<Budget>;
+    assets = results[8] as List<Asset>;
+    debts = results[9] as List<Debt>;
+    knowledgeEntries = results[10] as List<KnowledgeEntry>;
+    books = results[11] as List<Book>;
+    healthProfile = results[12] as HealthProfile?;
+    healthMetrics = results[13] as List<HealthMetric>;
+    healthReports = results[14] as List<HealthReport>;
     // 数据变更后重置个人数据摘要缓存
     _personalCacheDate = '';
     notifyListeners();
@@ -506,6 +633,132 @@ class AppProvider extends ChangeNotifier {
       {int limit = 5, int? yearFrom}) async {
     if (!evidenceOnlineSearch) return const [];
     return LiteratureLookupService.search(query, limit: limit, yearFrom: yearFrom);
+  }
+
+  // ============ 网页检索（AnySearch 官方 API，仅标题/链接/摘要） ============
+
+  /// 网页检索是否可用：总开关开启 **且** 已配置 Key
+  bool get webSearchAvailable =>
+      evidenceOnlineSearch && AnySearchService.instance.isConfigured;
+
+  /// 脱敏后的 Key（设置页展示用）
+  String get anySearchMaskedKey => AnySearchService.instance.maskedKey;
+
+  /// 今日额度文案（已用 / 上限），用于设置页展示
+  String get anySearchQuotaText => AnySearchService.instance.quotaText;
+
+  /// 重新装载今日额度计数（含跨天归零）并刷新界面展示
+  Future<void> refreshAnySearchQuota() async {
+    await AnySearchService.instance.refreshQuota();
+    notifyListeners();
+  }
+
+  /// 保存网页检索 Key：先发一次最小请求校验，通过才写入加密存储
+  Future<void> saveAnySearchKey(String key) async {
+    await AnySearchService.instance.validateKey(key);
+    await AnySearchService.instance.saveKey(key);
+    anySearchConfigured = true;
+    notifyListeners();
+  }
+
+  Future<void> clearAnySearchKey() async {
+    await AnySearchService.instance.clearKey();
+    anySearchConfigured = false;
+    notifyListeners();
+  }
+
+  /// 联网检索公开网页。
+  ///
+  /// 仅在总开关开启时外发；返回的条目只含标题 / 链接 / 站点 / 摘要片段，
+  /// 接口返回的正文（content）在服务层已丢弃，本地不落库。
+  Future<List<AnySearchHit>> searchWebOnline(
+    String query, {
+    int limit = 6,
+    String zone = 'cn',
+  }) async {
+    if (!evidenceOnlineSearch) return const [];
+    return AnySearchService.instance
+        .search(query, maxResults: limit, zone: zone);
+  }
+
+  // ============ 补剂数据源（Healthy Aging Atlas + NIH DSLD） ============
+  // 两者均无需 Key，只受「联网检索」总开关控制。
+
+  /// 循证检索额度文案（设置页展示）
+  String get supplementEvidenceQuotaText =>
+      SupplementEvidenceService.instance.quotaText;
+
+  /// DSLD 标签检索额度文案（设置页展示）
+  String get supplementLabelQuotaText =>
+      SupplementLabelService.instance.quotaText;
+
+  /// 刷新两个补剂数据源的滚动窗口用量
+  Future<void> refreshSupplementQuota() async {
+    await SupplementEvidenceService.instance.refreshQuota();
+    await SupplementLabelService.instance.refreshQuota();
+    notifyListeners();
+  }
+
+  /// 补剂循证检索（Healthy Aging Atlas 官方 MCP 的 5 个循证工具，不含导购工具）。
+  ///
+  /// [mode] 取 `evidence_map`（默认，最宽容）/ `search` / `summary` / `citations` / `compare`。
+  /// 只在总开关开启时外发；字段已由服务层做结构性防 PII 归一化。
+  Future<McpToolResult> searchSupplementEvidence({
+    String? supplement,
+    String? goal,
+    String mode = 'evidence_map',
+    List<String> supplements = const [],
+    int? minimumRctCount,
+    int limit = 10,
+  }) async {
+    if (!evidenceOnlineSearch) {
+      return const McpToolResult(isError: true, text: '');
+    }
+    final svc = SupplementEvidenceService.instance;
+    switch (mode) {
+      case 'summary':
+        return svc.evidenceSummary(
+          supplement: supplement ?? '',
+          goal: goal ?? '',
+        );
+      case 'citations':
+        return svc.citations(
+          supplement: supplement ?? '',
+          goal: goal ?? '',
+          limit: limit.clamp(1, 50),
+        );
+      case 'compare':
+        return svc.compareEvidence(
+          supplements: supplements,
+          goal: goal ?? '',
+        );
+      case 'search':
+        return svc.searchEvidence(
+          supplement: supplement,
+          goal: goal,
+          limit: limit.clamp(1, 25),
+        );
+      case 'evidence_map':
+      default:
+        return svc.evidenceMap(
+          supplement: supplement,
+          goal: goal,
+          minimumRctCount: minimumRctCount,
+          limit: limit.clamp(1, 100),
+        );
+    }
+  }
+
+  /// 补剂标签 / 配料表检索（NIH DSLD，CC0）。
+  /// 只在总开关开启时外发；失败返回空结果，由调用方如实说明。
+  Future<SupplementLabelSearch> searchSupplementLabel(
+    String query, {
+    int limit = 5,
+  }) async {
+    if (!evidenceOnlineSearch) {
+      return const SupplementLabelSearch(total: 0, labels: []);
+    }
+    return SupplementLabelService.instance.search(query, limit: limit);
   }
 
   // ============ 知识库 ============
@@ -807,9 +1060,15 @@ class AppProvider extends ChangeNotifier {
   /// 获取最近个人数据摘要（训练/饮食/财务/状态），供智脑自动带入
   /// 已优化：数据降维（只留关键信息）+ 按天缓存（一天内不重复拼装）
   String getPersonalContext({int days = 3}) {
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = DateUtil.todayKey();
     if (_personalCacheDate == today) return _personalCacheText;
-    if (userProfile == null) return '';
+    if (userProfile == null) {
+      // 未建档的「空摘要」同样落缓存：否则每次智脑调用都要重跑一遍
+      // 全量过滤 + 字符串拼接，尽早 return 反而成了每次都付费。
+      _personalCacheDate = today;
+      _personalCacheText = '';
+      return '';
+    }
     final buf = StringBuffer();
     final cutoff = DateTime.now().subtract(Duration(days: days));
 
@@ -919,23 +1178,23 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> addKnowledgeEntry(KnowledgeEntry entry) async {
     await _db.saveKnowledgeEntry(entry);
-    await loadAllData();
+    await _reloadOne(_reloadKnowledge);
   }
 
   Future<void> deleteKnowledgeEntry(String id) async {
     await _db.deleteKnowledgeEntry(id);
-    await loadAllData();
+    await _reloadOne(_reloadKnowledge);
   }
 
   // ============ 书籍 ============
   Future<void> addBook(Book book) async {
     await _db.saveBook(book);
-    await loadAllData();
+    await _reloadOne(_reloadBooks);
   }
 
   Future<void> deleteBook(String id) async {
     await _db.deleteBook(id);
-    await loadAllData();
+    await _reloadOne(_reloadBooks);
   }
 
   Future<List<BookNote>> getBookNotes(String bookId) async {
@@ -963,6 +1222,9 @@ class AppProvider extends ChangeNotifier {
   Future<void> saveUserProfile(UserProfile profile) async {
     await _db.saveUserProfile(profile);
     userProfile = profile;
+    // 个人摘要按天缓存，但身高/体重/目标等改动必须当天立即生效——
+    // 否则「改了档案但智脑还按旧数值回答」，属于静默错误。
+    _personalCacheDate = '';
     notifyListeners();
   }
 
@@ -1040,34 +1302,34 @@ class AppProvider extends ChangeNotifier {
   // ============ 训练 ============
   Future<void> addWorkout(Workout workout) async {
     await _db.saveWorkout(workout);
-    await loadAllData();
+    await _reloadOne(_reloadWorkouts);
   }
 
   Future<void> deleteWorkout(String id) async {
     await _db.deleteWorkout(id);
-    await loadAllData();
+    await _reloadOne(_reloadWorkouts);
   }
 
   // ============ 训练计划（FIT-1）============
   Future<void> saveWorkoutPlan(WorkoutPlan plan) async {
     await _db.saveWorkoutPlan(plan);
-    await loadAllData();
+    await _reloadOne(_reloadWorkoutPlans);
   }
 
   Future<void> deleteWorkoutPlan(String id) async {
     await _db.deleteWorkoutPlan(id);
-    await loadAllData();
+    await _reloadOne(_reloadWorkoutPlans);
   }
 
   // ============ 饮食 ============
   Future<void> addDietRecord(DietRecord record) async {
     await _db.saveDietRecord(record);
-    await loadAllData();
+    await _reloadOne(_reloadDiet);
   }
 
   Future<void> deleteDietRecord(String id) async {
     await _db.deleteDietRecord(id);
-    await loadAllData();
+    await _reloadOne(_reloadDiet);
   }
 
   // ============ FIT-7 每日营养目标 ============
@@ -1107,7 +1369,7 @@ class AppProvider extends ChangeNotifier {
       targetHours: fastingSettings.plan.fastHours,
     );
     await _db.saveFastingSession(session);
-    await loadAllData();
+    await _reloadOne(_reloadFasting);
   }
 
   /// 结束当前断食（无进行中会话时静默返回）
@@ -1116,29 +1378,29 @@ class AppProvider extends ChangeNotifier {
     if (active == null) return;
     await _db.saveFastingSession(
         active.copyWith(endAt: at ?? DateTime.now()));
-    await loadAllData();
+    await _reloadOne(_reloadFasting);
   }
 
   Future<void> deleteFastingSession(String id) async {
     await _db.deleteFastingSession(id);
-    await loadAllData();
+    await _reloadOne(_reloadFasting);
   }
 
   // ============ 财务 ============
   Future<void> addFinanceRecord(FinanceRecord record) async {
     await _db.saveFinanceRecord(record);
-    await loadAllData();
+    await _reloadOne(_reloadFinance);
   }
 
   Future<void> deleteFinanceRecord(String id) async {
     await _db.deleteFinanceRecord(id);
-    await loadAllData();
+    await _reloadOne(_reloadFinance);
   }
 
   // ============ 预算 ============
   Future<void> saveBudget(Budget budget) async {
     await _db.saveBudget(budget);
-    await loadAllData();
+    await _reloadOne(_reloadBudgets);
   }
 
   /// 获取指定分类本月支出
@@ -1182,17 +1444,17 @@ class AppProvider extends ChangeNotifier {
   // ============ 资产持仓 ============
   Future<void> addAsset(Asset asset) async {
     await _db.saveAsset(asset);
-    await loadAllData();
+    await _reloadOne(_reloadAssets);
   }
 
   Future<void> updateAsset(Asset asset) async {
     await _db.saveAsset(asset);
-    await loadAllData();
+    await _reloadOne(_reloadAssets);
   }
 
   Future<void> deleteAsset(String id) async {
     await _db.deleteAsset(id);
-    await loadAllData();
+    await _reloadOne(_reloadAssets);
   }
 
   /// 总资产市值
@@ -1208,17 +1470,17 @@ class AppProvider extends ChangeNotifier {
   // ============ 负债 ============
   Future<void> addDebt(Debt debt) async {
     await _db.saveDebt(debt);
-    await loadAllData();
+    await _reloadOne(_reloadDebts);
   }
 
   Future<void> updateDebt(Debt debt) async {
     await _db.saveDebt(debt);
-    await loadAllData();
+    await _reloadOne(_reloadDebts);
   }
 
   Future<void> deleteDebt(String id) async {
     await _db.deleteDebt(id);
-    await loadAllData();
+    await _reloadOne(_reloadDebts);
   }
 
   /// 未还清负债总额
@@ -1237,17 +1499,20 @@ class AppProvider extends ChangeNotifier {
   /// 解析并导入CSV账单，返回导入的记录数
   Future<int> importBillCsv(String content, BillSource source) async {
     final records = BillImportService.parse(content, source);
-    for (final r in records) {
-      await _db.saveFinanceRecord(FinanceRecord(
-        date: r.date,
-        type: r.type,
-        category: r.category,
-        amount: r.amount,
-        note: '${r.merchant} ${r.description}'.trim(),
-      ));
-    }
-    await loadAllData();
-    return records.length;
+    final rows = [
+      for (final r in records)
+        FinanceRecord(
+          date: r.date,
+          type: r.type,
+          category: r.category,
+          amount: r.amount,
+          note: '${r.merchant} ${r.description}'.trim(),
+        ),
+    ];
+    // 单事务批量写：逐条 saveFinanceRecord 会为每行各开一次事务，几千行账单会卡住 UI
+    await _db.insertFinanceRecordsBatch(rows);
+    await _reloadOne(_reloadFinance);
+    return rows.length;
   }
 
   // ============ 财务AI建议 ============
@@ -1354,27 +1619,19 @@ class AppProvider extends ChangeNotifier {
   // ============ 生活状态 ============
   Future<void> addLifeStatus(LifeStatus status) async {
     await _db.saveLifeStatus(status);
-    await loadAllData();
+    await _reloadOne(_reloadLifeStatus);
   }
 
   // ============ AI建议 ============
   /// 获取今日汇总数据
   String getTodaySummary() {
-    final today = DateTime.now();
-    final dateStr = today.toIso8601String().substring(0, 10);
-
-    final todayWorkouts = workouts
-        .where((w) => w.date.toIso8601String().startsWith(dateStr))
-        .toList();
-    final todayDiet = dietRecords
-        .where((d) => d.date.toIso8601String().startsWith(dateStr))
-        .toList();
-    final todayFinance = financeRecords
-        .where((f) => f.date.toIso8601String().startsWith(dateStr))
-        .toList();
-    final todayLife = lifeStatuses
-        .where((l) => l.date.toIso8601String().startsWith(dateStr))
-        .toList();
+    // 按本地自然日判定（东八区凌晨的记录此前会被 UTC 日期键算到前一天）
+    final todayWorkouts = workouts.where((w) => DateUtil.isToday(w.date)).toList();
+    final todayDiet = dietRecords.where((d) => DateUtil.isToday(d.date)).toList();
+    final todayFinance =
+        financeRecords.where((f) => DateUtil.isToday(f.date)).toList();
+    final todayLife =
+        lifeStatuses.where((l) => DateUtil.isToday(l.date)).toList();
 
     final totalCalories = todayDiet.fold<double>(0, (sum, d) => sum + d.totalCalories);
     final totalIncome = todayFinance
@@ -1704,8 +1961,11 @@ class AppProvider extends ChangeNotifier {
   /// 登录/启动后从云端取回配置。
   ///
   /// 策略：**本地为空才用云端覆盖本地**。用户换机或重装后本地没有配置，
-  /// 云端副本直接回填，省去重新填 Key；本地已有配置时绝不反向覆盖，
-  /// 避免一台设备上的误删被云端旧副本"复活"或覆盖掉新改的 Key。
+  /// 云端副本直接回填接口地址与模型名；本地已有配置时绝不反向覆盖，
+  /// 避免一台设备上的误删被云端旧副本「复活」或覆盖掉新改的配置。
+  ///
+  /// 云端**不含 API Key**（见 [backupAiSettingsToCloud]），回填后各模型处于
+  /// 「地址就位、缺密钥」状态，由 UI 引导补填。
   Future<bool> restoreAiSettingsFromCloud() async {
     final cloud = CloudApi.instance;
     if (!cloud.authenticated) return false;
@@ -1727,8 +1987,6 @@ class AppProvider extends ChangeNotifier {
         final m = raw.cast<String, dynamic>();
         final cfg = ChatModelConfig.fromJson(m);
         if (cfg.id.isEmpty || !cfg.usable) continue;
-        final key = (m['apiKey'] ?? '').toString();
-        if (key.isNotEmpty) await _modelStore.writeKey(cfg.id, key);
         restored.add(cfg);
       }
       if (restored.isEmpty) return false;
@@ -1741,23 +1999,6 @@ class AppProvider extends ChangeNotifier {
       await _modelStore.saveAll(chatModels);
       await _modelStore.setActiveId(activeModelId!);
 
-      // 视觉配置一并回填（仅在本地尚未配置时）
-      final vision = data['vision'];
-      if (vision is Map) {
-        final v = vision.cast<String, dynamic>();
-        final cur = await VisionService.instance.config();
-        if (!cur.configured) {
-          final b = (v['baseUrl'] ?? '').toString();
-          final k = (v['apiKey'] ?? '').toString();
-          final mo = (v['model'] ?? '').toString();
-          if (b.isNotEmpty && k.isNotEmpty && mo.isNotEmpty) {
-            await VisionService.instance.saveConfig(
-                VisionConfig(baseUrl: b, apiKey: k, model: mo));
-            visionConfigured = true;
-          }
-        }
-      }
-
       await _applyActiveModel();
       notifyListeners();
       return true;
@@ -1767,26 +2008,28 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// 把当前本地配置整体覆盖上传到云端。
+  /// 把当前本地配置的**非机密部分**覆盖上传到云端。
+  ///
+  /// 安全取舍：**不上传 API Key**。密钥是可直接产生费用的凭据，一旦上云就会
+  /// 落到服务端数据库（备份/导出/host 侧日志都可能泄漏），且客户端无法验证
+  /// 服务端是否真的加密落盘。仅备份 baseUrl/model/name 等非机密字段，
+  /// 换机后用同一份接口配置，密钥在本机密钥库（Keystore/Keychain）里各存各的。
   /// 不登录直接跳过；失败只记录状态不抛错（本地已存盘，不该阻断用户操作）。
   Future<bool> backupAiSettingsToCloud() async {
     final cloud = CloudApi.instance;
     if (!cloud.authenticated) return false;
     try {
-      final payload = <Map<String, dynamic>>[];
-      for (final m in chatModels) {
-        payload.add({
-          ...m.toJson(),
-          'apiKey': await _modelStore.readKey(m.id),
-        });
-      }
-      final vc = await VisionService.instance.config();
+      final payload = <Map<String, dynamic>>[
+        for (final m in chatModels)
+          {
+            ...m.toJson(),
+            // 显式清空：即使服务端/历史版本残留 apiKey 字段也一并抹掉
+            'apiKey': '',
+          },
+      ];
       final ts = await cloud.uploadAiSettings(
         models: payload,
         activeId: activeModelId,
-        vision: vc.configured
-            ? {'baseUrl': vc.baseUrl, 'model': vc.model, 'apiKey': vc.apiKey}
-            : null,
       );
       aiCloudBacked = true;
       aiCloudUpdatedAt = ts ?? DateTime.now().toIso8601String();
@@ -1841,34 +2084,37 @@ class AppProvider extends ChangeNotifier {
   Future<void> saveHealthProfile(HealthProfile profile) async {
     final id = await _db.saveHealthProfile(profile);
     healthProfile = profile.copyWith(id: id);
+    // 健康档案（病史/过敏/用药等）会进入智脑上下文，改动后须立即失效摘要缓存
+    _personalCacheDate = '';
     notifyListeners();
   }
 
   /// 新增健康指标
   Future<void> addHealthMetric(HealthMetric metric) async {
     await _db.saveHealthMetric(metric);
-    await loadAllData();
+    await _reloadOne(_reloadHealthMetrics);
   }
 
-  /// 批量新增健康指标（如一次体测的多项体成分），全部落库后只重载一次数据
+  /// 批量新增健康指标（如一次体测的多项体成分），全部落库后只重载一次数据。
+  ///
+  /// 走单事务批量写：逐条 saveHealthMetric 会为每项各开一次事务，
+  /// 一次体测十几项就是十几次 fsync，批量接口合并成一次。
   Future<void> addHealthMetrics(List<HealthMetric> metrics) async {
     if (metrics.isEmpty) return;
-    for (final metric in metrics) {
-      await _db.saveHealthMetric(metric);
-    }
-    await loadAllData();
+    await _db.insertHealthMetricsBatch(metrics);
+    await _reloadOne(_reloadHealthMetrics);
   }
 
   /// 删除健康指标
   Future<void> deleteHealthMetric(String id) async {
     await _db.deleteHealthMetric(id);
-    await loadAllData();
+    await _reloadOne(_reloadHealthMetrics);
   }
 
   /// 保存体检报告
   Future<void> addHealthReport(HealthReport report) async {
     await _db.saveHealthReport(report);
-    await loadAllData();
+    await _reloadOne(_reloadHealthReports);
     // P7-T5：入库行动清单含复查提醒时注册本地通知
     await FollowupReminder.instance.reschedule(report.id ?? '', report.actions);
   }
@@ -1877,7 +2123,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> updateHealthReport(HealthReport report) async {
     if (report.id == null) return;
     await _db.saveHealthReport(report);
-    await loadAllData();
+    await _reloadOne(_reloadHealthReports);
     await FollowupReminder.instance.reschedule(report.id!, report.actions);
   }
 
@@ -1895,7 +2141,7 @@ class AppProvider extends ChangeNotifier {
       await ReportFileStore.instance.delete(report.filePath);
     }
     await FollowupReminder.instance.cancelReport(id);
-    await loadAllData();
+    await _reloadOne(_reloadHealthReports);
   }
 
   /// 勾选/取消行动条目完成（P7-T5）：回写 actionsJson + 重调度提醒
@@ -1970,8 +2216,14 @@ class AppProvider extends ChangeNotifier {
   /// 「提取报告全部文字」提示词。
   /// 内部转发 VisionService：独立视觉配置 → 旧通道 → 本地 OCR 三级降级。
   Future<String?> recognizeImage(String imageBase64, {String? prompt}) {
+    Uint8List bytes;
+    try {
+      bytes = base64Decode(imageBase64);
+    } catch (_) {
+      throw VisionServiceException(null, '图片数据解析失败，请重新选择图片');
+    }
     return VisionService.instance.recognizeImage(
-      bytes: base64Decode(imageBase64),
+      bytes: bytes,
       prompt: prompt,
     );
   }
@@ -2040,28 +2292,35 @@ class AppProvider extends ChangeNotifier {
   /// 成功返回模型回复；失败抛分型异常（401/网络/服务错误）。
   Future<String> testVisionConfig() => VisionService.instance.testRecognize();
 
-  // ============ 联网搜索 ============
-  /// 执行联网搜索（微信/Bing/百度多源）
-  Future<List<SearchResult>> webSearch(String keyword) async {
-    return await SearchService.search(keyword);
-  }
+  // ============ 联网检索（开放学术 API） ============
+  //
+  // 此前这里抓取搜狗微信 / Bing / 百度 的结果页 HTML 并正则解析：那是本项目
+  // 风险最高的一段代码——违反目标站服务条款、随时被反爬打断、选择器一改就失效。
+  // 现改为只走官方开放的学术文献 API（Europe PMC / OpenAlex / Crossref /
+  // Semantic Scholar），只取题录元数据、不落正文，且仅在用户开启开关时联网。
 
-  /// 基于联网搜索结果让AI分析
+  /// 联网检索开放文献题录（编排层：开关判定 + 结果格式化）。
+  Future<List<LiteratureRef>> webSearch(String query, {int limit = 8}) =>
+      searchLiteratureOnline(query, limit: limit);
+
+  /// 基于文献题录让 AI 分析（**只有书目信息，没有正文**）。
   Future<String> analyzeSearchResults(
-      String query, List<SearchResult> results) async {
-    final searchText = SearchService.formatForAI(results, query);
+      String query, List<LiteratureRef> results) async {
+    final searchText = LiteratureLookupService.formatForAi(results, query);
     final knowledge = getBrainFullContext(query);
     final messages = [
       {
         'role': 'system',
-        'content': '你是一位严谨的分析助手。以下是通过联网搜索得到的公开资料'
-            '（来自微信公众号、Bing、百度，可能包含来自小红书/抖音内容的转载）。'
-            '请综合这些信息回答用户的问题。要求：\n'
-            '1. 客观引用搜索结果中的观点，标注信息可能来自非官方渠道\n'
-            '2. 结合用户自身的身体状况/财务情况（若相关）给出建议\n'
-            '3. 当搜索结果互相矛盾时，说明差异并给出权衡建议\n'
-            '4. 如果搜索结果不足，明确说明信息有限，并给出可验证的补充建议\n'
-            '${knowledge.isNotEmpty ? "以下是本地智脑提供的相关知识（苗振运动康复/中医/财务大师理念+用户个人数据），可用于交叉验证搜索结果：\n$knowledge" : ""}',
+        'content': '你是一位严谨的分析助手。以下是通过开放学术文献接口检索到的'
+            '**题录信息**（标题/作者/期刊/年份/DOI），不含摘要与正文。'
+            '请严格遵守：\n'
+            '1. 只能依据标题与期刊信息判断"存在哪些相关研究、发表在什么层级的刊物"，'
+            '**不得虚构或转述你未看到的正文结论**；\n'
+            '2. 明确告诉用户这些是文献线索而非内容摘要，如需结论请按 DOI 自行查阅原文；\n'
+            '3. 结合用户自身的身体状况/财务情况（若相关）给出建议；\n'
+            '4. 题录不足以支撑判断时，直接说明信息有限，不要用常识补足成"研究结论"，'
+            '也不要引用未被检索到的文献。\n'
+            '${knowledge.isNotEmpty ? "以下是本地智脑提供的相关知识（苗振运动康复/中医/财务大师理念+用户个人数据），可用于交叉验证：\n$knowledge" : ""}',
       },
       {
         'role': 'user',
@@ -2100,22 +2359,18 @@ class AppProvider extends ChangeNotifier {
   }
 
   // ============ 统计 ============
-  /// 获取本周训练次数
+  /// 获取本周训练次数。周界用 [DateUtil.weekStart]（周一零点），
+  /// 与 [getWeekVolume] 共用同一口径，避免同屏两个统计差一天。
   int getWeekWorkoutCount() {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    return workouts
-        .where((w) => w.date.isAfter(weekStart))
-        .length;
+    final weekStart = DateUtil.weekStart();
+    return workouts.where((w) => !w.date.isBefore(weekStart)).length;
   }
 
   /// 本周训练总容量（kg）：按逐组明细（仅已完成组）或 组数×次数×重量 汇总
   double getWeekVolume() {
-    final now = DateTime.now();
-    final weekStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
+    final weekStart = DateUtil.weekStart();
     return workouts
-        .where((w) => w.date.isAfter(weekStart))
+        .where((w) => !w.date.isBefore(weekStart))
         .fold<double>(0, (sum, w) => sum + w.totalVolume);
   }
 
@@ -2135,10 +2390,8 @@ class AppProvider extends ChangeNotifier {
 
   /// 获取今日摄入热量
   double getTodayCalories() {
-    final today = DateTime.now();
-    final dateStr = today.toIso8601String().substring(0, 10);
     return dietRecords
-        .where((d) => d.date.toIso8601String().startsWith(dateStr))
+        .where((d) => DateUtil.isToday(d.date))
         .fold<double>(0, (sum, d) => sum + d.totalCalories);
   }
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/lunar_service.dart';
 import '../theme/taoist_theme.dart';
+import '../utils/date_util.dart';
 import 'home/widgets/yin_yang_card.dart';
 import 'workout/workout_list_screen.dart';
 import 'workout/workout_session_screen.dart';
@@ -902,18 +903,13 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildTodayOverview(BuildContext context, AppProvider provider) {
-    final today = DateTime.now();
-    final dateStr = today.toIso8601String().substring(0, 10);
-
-    final todayWorkout = provider.workouts
-        .where((w) => w.date.toIso8601String().startsWith(dateStr))
-        .toList();
-    final todayDiet = provider.dietRecords
-        .where((d) => d.date.toIso8601String().startsWith(dateStr))
-        .toList();
-    final todayLife = provider.lifeStatuses
-        .where((l) => l.date.toIso8601String().startsWith(dateStr))
-        .toList();
+    // 本地自然日口径：东八区凌晨的记录不会被算到前一天
+    final todayWorkout =
+        provider.workouts.where((w) => DateUtil.isToday(w.date)).toList();
+    final todayDiet =
+        provider.dietRecords.where((d) => DateUtil.isToday(d.date)).toList();
+    final todayLife =
+        provider.lifeStatuses.where((l) => DateUtil.isToday(l.date)).toList();
 
     return Card(
       child: Padding(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../models/diet.dart';
@@ -6,7 +7,11 @@ import '../models/health_report.dart';
 import '../providers/app_provider.dart';
 import '../providers/wearable_provider.dart';
 import 'ai_engine.dart';
+import 'any_search_service.dart';
 import 'food_lookup_service.dart';
+import 'mcp_client.dart';
+import 'supplement_evidence_service.dart';
+import 'supplement_label_service.dart';
 
 /// 智能体写工具产出的「待确认载荷」（FIT-2 核心安全设计）
 ///
@@ -36,16 +41,76 @@ class ToolResult {
   final String text;
   final PendingAction? action;
 
-  const ToolResult(this.text, {this.action});
+  /// 是否执行成功（超时/异常为 false）。仅供 [AgentToolStep] 结构化展示使用，
+  /// 不影响回传给模型的文本。
+  final bool ok;
+
+  const ToolResult(this.text, {this.action, this.ok = true});
 }
 
-/// 一次回答的最终结果：纯文本 + 可选待确认方案 + 本轮工具查询次数
+/// 一次工具调用的结构化记录（供 UI 折叠展示"工具调用步骤"卡片）
+///
+/// [arguments] 为模型给出的原始参数，[summary] 为执行结果的可读摘要（已截断）。
+class AgentToolStep {
+  /// 工具英文名（如 get_recent_diets）
+  final String name;
+
+  /// 工具中文名（如「饮食记录」）
+  final String label;
+
+  /// 模型传入的参数
+  final Map<String, dynamic> arguments;
+
+  /// 结果摘要（单行、截断），失败时为错误提示
+  final String summary;
+
+  /// 是否成功
+  final bool ok;
+
+  const AgentToolStep({
+    required this.name,
+    required this.label,
+    required this.arguments,
+    required this.summary,
+    this.ok = true,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'label': label,
+        'arguments': arguments,
+        'summary': summary,
+        'ok': ok,
+      };
+
+  /// 反序列化（容错）：字段缺失/类型不符时按默认值降级，绝不抛异常。
+  factory AgentToolStep.fromJson(Map<String, dynamic> json) {
+    final rawArgs = json['arguments'];
+    return AgentToolStep(
+      name: json['name']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      arguments: rawArgs is Map ? Map<String, dynamic>.from(rawArgs) : const {},
+      summary: json['summary']?.toString() ?? '',
+      ok: json['ok'] != false,
+    );
+  }
+}
+
+/// 一次回答的最终结果：纯文本 + 本轮产出的待确认方案（可多个）+ 工具查询次数
+///
+/// [actions] 保留**全部**写工具产出：同一轮里模型可能并行调用多个写工具
+/// （如「记一笔账」+「存一条指标」），早期实现用单个 `action` 字段会被后者静默
+/// 覆盖，用户只看到最后一张卡片、前面的方案凭空消失。改为列表后由上层逐条渲染。
 class AgentReply {
   final String text;
-  final PendingAction? action;
+  final List<PendingAction> actions;
   final int toolCount;
 
-  const AgentReply(this.text, {this.action, this.toolCount = 0});
+  const AgentReply(this.text, {List<PendingAction>? actions, this.toolCount = 0})
+      : actions = actions ?? const [];
+
+  /// 首个待确认方案（兼容只渲染单卡片的上层逻辑）；无方案时为 null。
+  PendingAction? get action => actions.isEmpty ? null : actions.first;
 }
 
 /// AI 智能体：数据感知的多轮对话核心（P3）
@@ -63,9 +128,15 @@ class AgentService {
   /// 穿戴数据源（由 AgentProvider 注入；未注入时 `get_wearable_summary` 返回"未就绪"）
   WearableProvider? wearable;
 
-  /// 当前模型是否不支持工具调用（降级模式标记）
+  /// 当前模型是否不支持工具调用（降级模式标记）。
+  ///
+  /// 仅在「同一套模型配置」下有效：记录降级发生时的配置代次 [_degradedGeneration]，
+  /// 用户切换/编辑激活模型后（[AIEngine.configGeneration] 变化）标记自动失效并
+  /// 重新尝试工具调用——否则「换成支持 tools 的模型仍走简化模式直到重启」。
   bool _toolsUnsupported = false;
-  bool get toolsUnsupported => _toolsUnsupported;
+  int _degradedGeneration = -1;
+  bool get toolsUnsupported =>
+      _toolsUnsupported && engine.configGeneration == _degradedGeneration;
 
   /// 工具轮次上限。收窄到 4：常见问答 1~2 轮即可收敛，上限越低弱网关下
   /// 「多轮 LLM 往返叠加」的最坏耗时越短，避免用户长时间干等。
@@ -76,11 +147,12 @@ class AgentService {
   static const Duration _totalBudget = Duration(seconds: 90);
 
   /// 达到轮次/时长上限时注入的强制收敛提示。
-  static const String _convergeHint =
-      '已达到工具调用次数上限，请基于已获取的信息直接给出最终回答，不要再调用工具。';
+  static const String _convergeHint = '已达到工具调用次数上限，请基于已获取的信息直接给出最终回答，不要再调用工具。';
 
   /// 兜底文案：模型在被要求收敛后仍返回工具调用时使用。
   static const String _limitText = '（已达工具调用上限，请换个问法或开新会话）';
+
+  static Duration _min(Duration a, Duration b) => a <= b ? a : b;
 
   /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 30 个工具 schema
   /// 已是固定开销，长历史会让 TTFT（首字延迟）线性变长，弱网关下更容易读断。
@@ -97,6 +169,11 @@ class AgentService {
   /// 缓存会导致撤回后 5 分钟内仍返回旧摘要（合规漏洞）。
   static const Set<String> _noCacheTools = {'get_wearable_summary'};
 
+  /// 单个工具执行超时。联网类（条码查询 lookup_food / 文献检索 search_literature）
+  /// 与平台通道类（get_wearable_summary）端点无响应时会挂住整轮工具循环；
+  /// 统一加超时兜底，超时按「工具失败」回传模型，让它基于已有信息继续作答。
+  static const Duration _toolTimeout = Duration(seconds: 20);
+
   AgentService(this.engine);
 
   /// 卡片保存成功后使读缓存失效，避免下一条消息读到写入前的旧数据
@@ -112,18 +189,30 @@ class AgentService {
   /// [onStatus] 工具调用状态回调（UI 展示"正在查询：…"、网络接续提示）
   /// [onDelta] 最终回答流式增量回调（参数为累计文本；传空串表示工具轮次复位）
   /// [onThought] 中间推理文本回调（工具调用前模型吐出的思路，非空时才回调）
+  /// [onReasoning] 思维链增量回调（累计文本；仅推理类模型有）
+  /// [onToolStep] 每次工具执行完成后的结构化步骤回调
+  /// [forceFullTools] 强制下发全量工具 schema（带图消息等无法用关键词路由时使用）
   Future<AgentReply> sendMessage({
     required List<Map<String, dynamic>> history,
     required String userText,
     void Function(String status)? onStatus,
     void Function(String cumulativeText)? onDelta,
     void Function(String thought)? onThought,
+    void Function(String cumulativeReasoning)? onReasoning,
+    void Function(AgentToolStep step)? onToolStep,
+    bool forceFullTools = false,
   }) async {
-    if (_toolsUnsupported) {
-      final text =
-          await _sendWithInjection(history, userText, onStatus, onDelta);
+    if (toolsUnsupported) {
+      final text = await _sendWithInjection(
+          history, userText, onStatus, onDelta,
+          onReasoning: onReasoning);
       return AgentReply(text);
     }
+
+    // 按意图下发工具子集（未命中意图时自动回退全量），见 [toolsForIntent]
+    final tools = forceFullTools
+        ? toolSchemas
+        : toolsForIntent(_routeText(history, userText));
 
     final messages = <Map<String, dynamic>>[
       {'role': 'system', 'content': _systemPrompt()},
@@ -131,16 +220,20 @@ class AgentService {
       {'role': 'user', 'content': userText},
     ];
 
-    PendingAction? action;
+    // 本轮全部写工具产出的待确认方案（按调用顺序保留，不互相覆盖）
+    final pending = <PendingAction>[];
     int toolCount = 0;
     bool converging = false;
     final startedAt = DateTime.now();
+    // 硬墙时刻：下发给引擎后，单次请求的超时会被压到剩余时长，
+    // 即便某个请求挂住也不会把总耗时拖过预算（见 [_totalBudget]）。
+    final deadline = startedAt.add(_totalBudget);
 
     for (int round = 0; round < _maxToolRounds; round++) {
       // 收敛触发条件：到达轮次上限，或累计耗时已超总时长预算。
       // 只注入一次（converging 置位后不再重复），避免多条收敛 system 污染上下文。
       final lastRound = round == _maxToolRounds - 1;
-      final overBudget = DateTime.now().difference(startedAt) >= _totalBudget;
+      final overBudget = !DateTime.now().isBefore(deadline);
       if ((lastRound || overBudget) && !converging) {
         converging = true;
         messages.add({'role': 'system', 'content': _convergeHint});
@@ -150,22 +243,27 @@ class AgentService {
       try {
         resp = await engine.chatWithToolsStream(
           messages: messages,
-          tools: toolSchemas,
+          tools: tools,
           onDelta: onDelta,
+          onReasoning: onReasoning,
           onRetry: onStatus,
+          deadline: deadline,
         );
       } on ToolsUnsupportedException {
-        // 首次发现模型不支持 tools → 降级为数据注入模式重答
+        // 首次发现模型不支持 tools → 降级为数据注入模式重答，
+        // 并记下当时的配置代次，供切换模型后自动失效（见 [toolsUnsupported]）
         _toolsUnsupported = true;
-        final text =
-            await _sendWithInjection(history, userText, onStatus, onDelta);
+        _degradedGeneration = engine.configGeneration;
+        final text = await _sendWithInjection(
+            history, userText, onStatus, onDelta,
+            onReasoning: onReasoning);
         return AgentReply(text);
       }
 
       final calls = resp.toolCalls;
       if (calls == null || calls.isEmpty) {
         return AgentReply(resp.text ?? '',
-            action: action, toolCount: toolCount);
+            actions: pending, toolCount: toolCount);
       }
 
       // 已要求收敛但模型仍发起工具调用：放弃本轮工具，直接返回已有文本或兜底提示，
@@ -173,7 +271,7 @@ class AgentService {
       if (converging) {
         final t = resp.text?.trim() ?? '';
         return AgentReply(t.isEmpty ? _limitText : t,
-            action: action, toolCount: toolCount);
+            actions: pending, toolCount: toolCount);
       }
 
       // 本轮是工具调用轮：模型在发起工具前若吐过思路文本，先作为「思考过程」
@@ -201,40 +299,48 @@ class AgentService {
       // 执行工具并以 role:'tool' 回传（载荷另行挂出，不进模型上下文）。
       // 多工具并行执行（互不依赖的查询并发跑，省去串行等待）；
       // 单工具沿用原路径，状态提示精确到工具名。
+      // 工具阶段同样受硬墙约束：把剩余时长（减去下一轮 LLM 的预留）作为工具超时，
+      // 留 5s 下限让慢工具仍有机会完成，避免整轮卡死越过总预算。
+      final left = deadline.difference(DateTime.now());
+      const reserve = Duration(seconds: 15);
+      final toolLimit = left > reserve
+          ? _min(left - reserve, _toolTimeout)
+          : const Duration(seconds: 5);
+
       final results = <ToolResult>[];
       if (calls.length == 1) {
         final tc = calls.first;
         onStatus?.call('正在查询：${toolLabel(tc.name)}');
         toolCount++;
-        try {
-          results.add(await executeTool(tc.name, tc.arguments));
-        } catch (e) {
-          results.add(ToolResult('工具执行失败：$e'));
-        }
+        results.add(
+            await _executeToolSafe(tc.name, tc.arguments, toolLimit: toolLimit));
       } else {
         onStatus?.call(
             '并行查询 ${calls.length} 项：${calls.map((c) => toolLabel(c.name)).join('、')}');
         toolCount += calls.length;
-        final rs = await Future.wait(calls.map((tc) async {
-          try {
-            return await executeTool(tc.name, tc.arguments);
-          } catch (e) {
-            return ToolResult('工具执行失败：$e');
-          }
-        }));
-        results.addAll(rs);
+        results.addAll(await Future.wait(calls.map(
+            (tc) => _executeToolSafe(tc.name, tc.arguments,
+                toolLimit: toolLimit))));
       }
       for (var i = 0; i < calls.length; i++) {
         final result = results[i];
-        if (result.action != null) action = result.action;
+        if (result.action != null) pending.add(result.action!);
         messages.add({
           'role': 'tool',
           'tool_call_id': calls[i].id,
           'content': result.text,
         });
+        // 结构化步骤：供 UI 在对话流里折叠展示「查了什么、拿到什么」
+        onToolStep?.call(AgentToolStep(
+          name: calls[i].name,
+          label: toolLabel(calls[i].name),
+          arguments: calls[i].arguments,
+          summary: _stepSummary(result.text),
+          ok: result.ok,
+        ));
       }
     }
-    return AgentReply(_limitText, action: action, toolCount: toolCount);
+    return AgentReply(_limitText, actions: pending, toolCount: toolCount);
   }
 
   /// 降级模式：不带 tools，把用户上下文直接注入 system
@@ -242,8 +348,9 @@ class AgentService {
     List<Map<String, dynamic>> history,
     String userText,
     void Function(String status)? onStatus,
-    void Function(String cumulativeText)? onDelta,
-  ) async {
+    void Function(String cumulativeText)? onDelta, {
+    void Function(String cumulativeReasoning)? onReasoning,
+  }) async {
     onStatus?.call('简化模式生成中…');
     final p = provider;
     final context = p == null
@@ -259,7 +366,8 @@ class AgentService {
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
-    return engine.chatFallbackStream(messages, onDelta: onDelta, onRetry: onStatus);
+    return engine.chatFallbackStream(messages,
+        onDelta: onDelta, onReasoning: onReasoning, onRetry: onStatus);
   }
 
   // ---------------------------------------------------------------------------
@@ -298,10 +406,12 @@ class AgentService {
         '2. 证据强度排序：指南推荐 > 系统评价/Meta 分析 > 单篇 RCT；'
         '优先引用强度更高的证据，强度偏低时须说明\n'
         '3. 每条循证建议必须注明出处（来源名称与链接），严禁编造文献、期刊、数据或结论\n'
-        '4. 本地库检索不到相关内容时，可调用 search_literature 联网检索开源医学文献'
-        '（Europe PMC / OpenAlex，仅元数据与链接；需用户开启「循证文献联网检索」，默认关闭）；'
+        '4. 本地库检索不到相关内容时，可调用 search_literature 联网检索开放学术文献题录'
+        '（Europe PMC / OpenAlex / Crossref / Semantic Scholar，仅题录与链接，不含正文；'
+        '需用户开启「循证文献联网检索」，默认关闭）；'
         '联网结果仍无命中，须明确说明"本地库与外网均无相关证据"，'
         '可给一般性建议但须声明依据不足，不要伪装成有文献支持。'
+        '题录只有标题与期刊信息，**不得据此断言研究结论**；'
         '引用外网文献时必须原样标注标题、期刊、年份与链接，严禁编造标题、期刊或 DOI\n'
         '5. 涉及用药、诊断、急症时提示及时就医，AI 建议不替代医生诊疗\n'
         '6. 【证据越级禁令】「疾病—运动」类问题必须调用 search_condition_exercise，'
@@ -309,7 +419,12 @@ class AgentService {
         '第二层（运动类别→具体动作示例）为弱证据，仅作选动作参考。'
         '严禁表述为「某个动作（如硬拉、卧推）能改善/治疗某疾病」，'
         '也不得由第二层动作反推疗效或把两层混为一谈。'
-        '凡给出运动处方，必须一并标注禁忌人群与就医提示\n\n'
+        '凡给出运动处方，必须一并标注禁忌人群与就医提示\n'
+        '7. 需要新闻、政策法规、机构通知、指南解读等公开网页信息时，可调用 web_search'
+        '（AnySearch 官方接口，需用户在「设置 → 联网检索」开启并配置 Key）；'
+        '它只返回标题、链接与摘要片段，引用必须给出链接，'
+        '不得把摘要转述成原文结论，不得编造标题、机构、日期或数据；'
+        '学术证据问题仍以 search_literature 为准\n\n'
         '用药安全规范（涉及退热、止咳、鼻塞、咽痛、胃肠不适等家庭用药时必须遵守）：\n'
         '1. 先调用 search_otc_safety 检索本地用药安全条目，再基于结果作答；严禁凭印象推荐药品、剂量或用法\n'
         '2. 只作答「用药安全常识」，绝不作诊断、绝不开具处方、绝不给出个体化剂量（尤其儿童、孕产、哺乳、老年、慢病人群，只给「禁用/慎用/遵医嘱」结论）\n'
@@ -390,16 +505,17 @@ class AgentService {
             params: {
               'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
             }),
-        _fn('get_recent_diets', '查询用户最近 N 天的饮食记录：日期、餐次、食物克数、热量与营养素',
-            params: {
-              'days': {'type': 'integer', 'description': '回看天数，默认 3，最大 90'},
-            }),
+        _fn('get_recent_diets', '查询用户最近 N 天的饮食记录：日期、餐次、食物克数、热量与营养素', params: {
+          'days': {'type': 'integer', 'description': '回看天数，默认 3，最大 90'},
+        }),
         _fn('get_finance_overview', '获取用户财务概况：月度收支、分类支出占比、资产负债概览', params: {}),
-        _fn('get_health_metrics', '查询用户最近 N 天的健康指标：血压、血糖、血脂、尿酸、心率、体脂率、体重等；每条含灯色（红=危急/黄=超出参考/蓝=临界/绿=正常）与参考范围',
+        _fn('get_health_metrics',
+            '查询用户最近 N 天的健康指标：血压、血糖、血脂、尿酸、心率、体脂率、体重等；每条含灯色（红=危急/黄=超出参考/蓝=临界/绿=正常）与参考范围',
             params: {
               'days': {'type': 'integer', 'description': '回看天数，默认 30，最大 90'},
             }),
-        _fn('get_health_reports',
+        _fn(
+            'get_health_reports',
             '查询用户的体检/化验报告档案：标题、日期、类型、风险灯色、AI 总评、指标数量；'
                 '传 report_id 时返回单份报告详情（含行动清单、入库指标、识别原文截断）',
             params: {
@@ -418,17 +534,19 @@ class AgentService {
                 'description': 'true 时只返回灯色为红或黄的异常报告，默认 false',
               },
             }),
-        _fn('search_knowledge',
+        _fn(
+            'search_knowledge',
             '检索用户保存的知识条目，以及循证医学库、用药安全、补剂常识条目。'
                 '注意：不包含导入书籍的正文（书籍仅存档，暂不支持全文检索）',
             params: {
               'query': {'type': 'string', 'description': '检索关键词或问题'},
             },
-            requiredParams: ['query']),
-        _fn('get_life_status', '查询用户最近 N 天的生活状态：睡眠时长、精力评分、情绪标签、备注',
-            params: {
-              'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
-            }),
+            requiredParams: [
+              'query'
+            ]),
+        _fn('get_life_status', '查询用户最近 N 天的生活状态：睡眠时长、精力评分、情绪标签、备注', params: {
+          'days': {'type': 'integer', 'description': '回看天数，默认 7，最大 90'},
+        }),
         _fn(
             'search_medical_evidence',
             '检索本地循证医学库：疾病/健康目标对应的运动、营养、中医建议，'
@@ -440,7 +558,9 @@ class AgentService {
               },
               'query': {'type': 'string', 'description': '补充检索词，可留空'},
             },
-            requiredParams: ['condition']),
+            requiredParams: [
+              'condition'
+            ]),
         _fn('query_met', '查询活动的 MET 代谢当量（Compendium 2024）：强度分级与热量消耗估算',
             params: {
               'activity': {
@@ -448,16 +568,17 @@ class AgentService {
                 'description': '活动名称，如：快走、慢跑、游泳、跳绳、骑行',
               },
             },
-            requiredParams: ['activity']),
-        _fn('query_exercise', '查询本地动作库：按肌群/器械/关键词检索动作及其要领',
-            params: {
-              'muscle': {'type': 'string', 'description': '目标肌群，如：胸、背、腿、核心'},
-              'equipment': {
-                'type': 'string',
-                'description': '可用器械，如：杠铃、哑铃、自重、器械',
-              },
-              'keyword': {'type': 'string', 'description': '动作关键词'},
-            }),
+            requiredParams: [
+              'activity'
+            ]),
+        _fn('query_exercise', '查询本地动作库：按肌群/器械/关键词检索动作及其要领', params: {
+          'muscle': {'type': 'string', 'description': '目标肌群，如：胸、背、腿、核心'},
+          'equipment': {
+            'type': 'string',
+            'description': '可用器械，如：杠铃、哑铃、自重、器械',
+          },
+          'keyword': {'type': 'string', 'description': '动作关键词'},
+        }),
         _fn(
             'lookup_food',
             '查询食物营养成分（每100g）。优先本地食物库；'
@@ -468,7 +589,9 @@ class AgentService {
                 'description': '食物名称，或商品条码（6~20 位数字）',
               },
             },
-            requiredParams: ['query']),
+            requiredParams: [
+              'query'
+            ]),
         _fn(
             'get_wearable_summary',
             '获取用户最近 N 天的穿戴设备健康数据摘要：日均步数、静息心率区间与均值、'
@@ -479,8 +602,9 @@ class AgentService {
             }),
         _fn(
             'search_literature',
-            '联网检索开源医学文献（Europe PMC 主源 + OpenAlex 补源）：'
-                '返回标题、作者、期刊、年份、DOI、许可与链接（仅元数据，不含正文）。'
+            '联网检索开放学术文献（Europe PMC 主源 + OpenAlex/Crossref/Semantic Scholar 补源）：'
+                '返回标题、作者、期刊、年份、DOI、许可与链接（仅元数据题录，不含摘要与正文，'
+                '不得据此转述研究结论）。'
                 '用于本地循证库检索不到时的补充；需用户开启「循证文献联网检索」，默认关闭',
             params: {
               'query': {'type': 'string', 'description': '检索词或问题，如：高血压 有氧运动'},
@@ -493,7 +617,99 @@ class AgentService {
                 'description': '仅返回此年份及以后的文献（可选），如 2015',
               },
             },
-            requiredParams: ['query']),
+            requiredParams: [
+              'query'
+            ]),
+        _fn(
+            'web_search',
+            '联网检索公开网页（AnySearch 官方接口）：返回标题、来源站点、链接与检索摘要片段。'
+                '适用于新闻、政策法规、机构通知、指南解读、产品与器械信息等非学术内容；'
+                '摘要不等于原文，引用必须给出链接，不得据此编造数据或转述成原文结论。'
+                '学术证据问题请优先用 search_literature。'
+                '需用户在「设置 → 联网检索」开启总开关并配置 Key，默认关闭',
+            params: {
+              'query': {'type': 'string', 'description': '检索词，如：2026 中国居民膳食指南 解读'},
+              'zone': {
+                'type': 'string',
+                'enum': ['cn', 'intl'],
+                'description': 'cn=中文网页（默认），intl=国际网页（英文资料更全）',
+              },
+              'max_results': {
+                'type': 'integer',
+                'description': '返回条数，默认 6，最大 10',
+              },
+            },
+            requiredParams: [
+              'query'
+            ]),
+        _fn(
+            'search_supplement_evidence',
+            '补剂循证检索（Healthy Aging Atlas 官方 MCP，仅循证工具，不含导购/联盟链接）：'
+                '返回补剂×健康目标的证据分级（strong/moderate/limited/absent/unclear）、'
+                'RCT 与 Meta 分析计数、研究局限、复核日期、PubMed 校验过的引文与溯源链接。'
+                'mode=evidence_map（默认，按证据密度筛，最宽容）；'
+                'mode=search（关键词检索）；mode=summary（单个组合的循证摘要，需 supplement+goal）；'
+                'mode=citations（逐条引文，需 supplement+goal）；'
+                'mode=compare（2~5 个补剂对比同一目标，填 supplements）。'
+                '仅用于公开的循证问题：不要传用户个人健康信息（病历、用药清单、诊断、症状、化验值），'
+                '涉及个人情况时提示咨询有资质的医疗专业人员。'
+                '结果引用必须带 source_url 与 CC BY 4.0 署名。需开启「联网检索」总开关，默认关闭',
+            params: {
+              'supplement': {
+                'type': 'string',
+                'description': '补剂关键词（英文或中文），如：magnesium、镁、肌酸。'
+                    '只填归一化的名称，不要填整句问话',
+              },
+              'goal': {
+                'type': 'string',
+                'description': '健康目标关键词，如：sleep、sleep quality、heart health、睡眠',
+              },
+              'mode': {
+                'type': 'string',
+                'enum': [
+                  'evidence_map',
+                  'search',
+                  'summary',
+                  'citations',
+                  'compare'
+                ],
+                'description': '检索模式，默认 evidence_map',
+              },
+              'supplements': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description': 'mode=compare 时的 2~5 个补剂名称',
+              },
+              'minimum_rct_count': {
+                'type': 'integer',
+                'description': 'mode=evidence_map 时的最小 RCT 数量过滤（可选）',
+              },
+              'limit': {
+                'type': 'integer',
+                'description': '返回条数上限（可选）',
+              },
+            }),
+        _fn(
+            'search_supplement_label',
+            '补剂标签/配料表查询（美国 NIH DSLD，CC0 公有领域）：'
+                '按品牌名、产品名或配料名检索市售补剂的**标注配料表**——'
+                '品牌、产品名、类别、剂型、净含量、逐项配料与成分形态、标签宣称类型、是否已下架。'
+                '用于回答「某补剂里到底有什么成分」；数据来自厂商申报的标签，非实验室检测，'
+                '不构成功效或安全性结论。引用须标注 DSLD 为来源。'
+                '需开启「联网检索」总开关，默认关闭',
+            params: {
+              'query': {
+                'type': 'string',
+                'description': '品牌名 / 产品名 / 配料名，如：Nature Made 维生素 D、creatine',
+              },
+              'limit': {
+                'type': 'integer',
+                'description': '返回条数，默认 3，最大 10',
+              },
+            },
+            requiredParams: [
+              'query'
+            ]),
         _fn(
             'search_condition_exercise',
             '查询「疾病—运动」两层建议：第一层为疾病/人群对应的运动类别与剂量（FITT-VP，'
@@ -515,7 +731,9 @@ class AgentService {
                 'description': '证据级别提示（可选），如：指南推荐',
               },
             },
-            requiredParams: ['condition']),
+            requiredParams: [
+              'condition'
+            ]),
         _fn(
             'search_otc_safety',
             '查询家庭用药安全条目：退热镇痛、中成药退热、咽痛、止咳化痰、干咳、'
@@ -533,7 +751,9 @@ class AgentService {
                     '中成药退热、咽痛、止咳化痰、干咳、鼻部症状、恶心呕吐、用药安全通识',
               },
             },
-            requiredParams: ['query']),
+            requiredParams: [
+              'query'
+            ]),
         _fn(
             'lookup_supplement',
             '查询本地补剂常识条目：维生素D、Omega-3（鱼油）、镁、锌、铁、钙、维生素C、'
@@ -552,7 +772,9 @@ class AgentService {
                     '铁、钙、维生素C、复合维生素、肌酸、乳清蛋白、咖啡因',
               },
             },
-            requiredParams: ['query']),
+            requiredParams: [
+              'query'
+            ]),
         // ===== FIT-2 写工具（仅生成待用户确认的方案，不会直接保存）=====
         _fn(
             'propose_workout_plan',
@@ -562,7 +784,10 @@ class AgentService {
             params: {
               'name': {'type': 'string', 'description': '计划名称，如：三分化增肌计划'},
               'goal': {'type': 'string', 'description': '目标（可选）：增肌/减脂/力量/塑形'},
-              'split': {'type': 'string', 'description': '分化方式（可选）：推拉腿/上下肢/三分化'},
+              'split': {
+                'type': 'string',
+                'description': '分化方式（可选）：推拉腿/上下肢/三分化'
+              },
               'daysPerWeek': {'type': 'integer', 'description': '每周训练天数（可选）'},
               'days': {
                 'type': 'array',
@@ -570,17 +795,32 @@ class AgentService {
                 'items': {
                   'type': 'object',
                   'properties': {
-                    'name': {'type': 'string', 'description': '当日名称，如：推日/上肢日/周一'},
+                    'name': {
+                      'type': 'string',
+                      'description': '当日名称，如：推日/上肢日/周一'
+                    },
                     'exercises': {
                       'type': 'array',
                       'description': '当日动作列表',
                       'items': {
                         'type': 'object',
                         'properties': {
-                          'name': {'type': 'string', 'description': '动作名（须来自动作库）'},
-                          'equipment': {'type': 'string', 'description': '器械（可选）'},
-                          'targetSets': {'type': 'integer', 'description': '目标组数'},
-                          'targetReps': {'type': 'integer', 'description': '目标次数'},
+                          'name': {
+                            'type': 'string',
+                            'description': '动作名（须来自动作库）'
+                          },
+                          'equipment': {
+                            'type': 'string',
+                            'description': '器械（可选）'
+                          },
+                          'targetSets': {
+                            'type': 'integer',
+                            'description': '目标组数'
+                          },
+                          'targetReps': {
+                            'type': 'integer',
+                            'description': '目标次数'
+                          },
                           'targetWeight': {
                             'type': 'number',
                             'description': '目标重量 kg（可选，自重动作可省略）',
@@ -594,7 +834,10 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['name', 'days']),
+            requiredParams: [
+              'name',
+              'days'
+            ]),
         _fn(
             'propose_diet_plan',
             '生成一份饮食方案，并在前端挂出可编辑的待确认卡片。'
@@ -623,7 +866,10 @@ class AgentService {
                         'properties': {
                           'name': {'type': 'string', 'description': '食物名称'},
                           'grams': {'type': 'number', 'description': '克数'},
-                          'calories': {'type': 'number', 'description': '热量 kcal'},
+                          'calories': {
+                            'type': 'number',
+                            'description': '热量 kcal'
+                          },
                           'protein': {'type': 'number', 'description': '蛋白质 g'},
                           'fat': {'type': 'number', 'description': '脂肪 g'},
                           'carbs': {'type': 'number', 'description': '碳水 g'},
@@ -636,7 +882,9 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['meals']),
+            requiredParams: [
+              'meals'
+            ]),
         _fn(
             'log_workout',
             '把一次已完成的训练整理成待确认记录，并在前端挂出可编辑卡片。'
@@ -658,11 +906,26 @@ class AgentService {
                       'items': {
                         'type': 'object',
                         'properties': {
-                          'name': {'type': 'string', 'description': '动作名（须来自动作库）'},
-                          'equipment': {'type': 'string', 'description': '器械（可选）'},
-                          'targetSets': {'type': 'integer', 'description': '组数'},
-                          'targetReps': {'type': 'integer', 'description': '次数'},
-                          'targetWeight': {'type': 'number', 'description': '重量 kg（可选）'},
+                          'name': {
+                            'type': 'string',
+                            'description': '动作名（须来自动作库）'
+                          },
+                          'equipment': {
+                            'type': 'string',
+                            'description': '器械（可选）'
+                          },
+                          'targetSets': {
+                            'type': 'integer',
+                            'description': '组数'
+                          },
+                          'targetReps': {
+                            'type': 'integer',
+                            'description': '次数'
+                          },
+                          'targetWeight': {
+                            'type': 'number',
+                            'description': '重量 kg（可选）'
+                          },
                         },
                         'required': ['name'],
                       },
@@ -672,7 +935,10 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['name', 'days']),
+            requiredParams: [
+              'name',
+              'days'
+            ]),
         _fn(
             'log_diet',
             '把一餐或多餐饮食整理成待确认记录，并在前端挂出可编辑卡片。'
@@ -701,7 +967,10 @@ class AgentService {
                         'properties': {
                           'name': {'type': 'string', 'description': '食物名称'},
                           'grams': {'type': 'number', 'description': '克数'},
-                          'calories': {'type': 'number', 'description': '热量 kcal'},
+                          'calories': {
+                            'type': 'number',
+                            'description': '热量 kcal'
+                          },
                           'protein': {'type': 'number', 'description': '蛋白质 g'},
                           'fat': {'type': 'number', 'description': '脂肪 g'},
                           'carbs': {'type': 'number', 'description': '碳水 g'},
@@ -714,7 +983,9 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['meals']),
+            requiredParams: [
+              'meals'
+            ]),
         _fn(
             'delete_diet_records',
             '删除已保存的饮食记录（用户要求删除或纠正某一餐时使用）。'
@@ -729,7 +1000,9 @@ class AgentService {
                 'items': {'type': 'string'},
               },
             },
-            requiredParams: ['ids']),
+            requiredParams: [
+              'ids'
+            ]),
         // ===== P6-D 开放数据工具（本体术语 / 开放动作库 / 数据源登记表）=====
         _fn(
             'query_ontology',
@@ -748,7 +1021,9 @@ class AgentService {
                 'description': '限定本体（可选）：EXMO（运动医学）或 RehabO（康复）',
               },
             },
-            requiredParams: ['query']),
+            requiredParams: [
+              'query'
+            ]),
         _fn(
             'query_exercise_catalog',
             '检索开放动作库（Exercises Dataset 1324 条含中文说明 + Free Exercise DB 738 条 + Longhaul Exercises 366 条，共 2428 条）：'
@@ -788,7 +1063,8 @@ class AgentService {
               },
             }),
         // ===== 截图归纳写工具（聊天发图 → 自动归入对应板块）=====
-        _fn('propose_health_metrics',
+        _fn(
+            'propose_health_metrics',
             '把截图（体检报告/化验单/体脂秤/运动手表健康页）识别出的健康数据整理为'
                 '待确认的健康指标卡片。只填写截图原文中出现的数值，严禁编造、估算或换算单位；'
                 '血压须拆成收缩压与舒张压两条',
@@ -802,18 +1078,47 @@ class AgentService {
                     'type': {
                       'type': 'string',
                       'enum': [
-                        '收缩压', '舒张压', '空腹血糖', '餐后血糖', '总胆固醇',
-                        '甘油三酯', '低密度脂蛋白', '高密度脂蛋白', '尿酸', '静息心率',
-                        '血氧', '体重', '体脂率', '肌肉量', '体水分率', '骨量',
-                        '蛋白质率', '基础代谢', '内脏脂肪等级', '腰围', '臀围', '胸围',
-                        '臂围', '大腿围', '小腿围',
+                        '收缩压',
+                        '舒张压',
+                        '空腹血糖',
+                        '餐后血糖',
+                        '总胆固醇',
+                        '甘油三酯',
+                        '低密度脂蛋白',
+                        '高密度脂蛋白',
+                        '尿酸',
+                        '静息心率',
+                        '血氧',
+                        '体重',
+                        '体脂率',
+                        '肌肉量',
+                        '体水分率',
+                        '骨量',
+                        '蛋白质率',
+                        '基础代谢',
+                        '内脏脂肪等级',
+                        '腰围',
+                        '臀围',
+                        '胸围',
+                        '臂围',
+                        '大腿围',
+                        '小腿围',
                       ],
                       'description': '标准指标类型（须从枚举中选择）',
                     },
                     'value': {'type': 'number', 'description': '数值（来自原文）'},
-                    'unit': {'type': 'string', 'description': '单位，省略时按类型自动带默认单位'},
-                    'date': {'type': 'string', 'description': '测量日期 YYYY-MM-DD，省略时视为今天'},
-                    'note': {'type': 'string', 'description': '备注，如：空腹 / 餐后2小时 / 静息'},
+                    'unit': {
+                      'type': 'string',
+                      'description': '单位，省略时按类型自动带默认单位'
+                    },
+                    'date': {
+                      'type': 'string',
+                      'description': '测量日期 YYYY-MM-DD，省略时视为今天'
+                    },
+                    'note': {
+                      'type': 'string',
+                      'description': '备注，如：空腹 / 餐后2小时 / 静息'
+                    },
                     'referenceRange': {
                       'type': 'string',
                       'description': '参考范围，如 3.9-6.1 mmol/L（原文有才填）',
@@ -823,8 +1128,11 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['metrics']),
-        _fn('propose_finance_records',
+            requiredParams: [
+              'metrics'
+            ]),
+        _fn(
+            'propose_finance_records',
             '把截图（工资条/账单/支付宝与微信消费记录/花呗与抖音月付还款）识别出的'
                 '收支数据整理为待确认的财务记录卡片。只填写截图原文中的金额与日期，严禁编造；'
                 '花呗/抖音月付/信用卡还款一律按 expense 记录，备注注明来源',
@@ -845,15 +1153,24 @@ class AgentService {
                       'description': '分类，如：工资 / 餐饮 / 交通 / 购物 / 还款',
                     },
                     'amount': {'type': 'number', 'description': '金额（元，正数）'},
-                    'date': {'type': 'string', 'description': '日期 YYYY-MM-DD，省略时视为今天'},
-                    'note': {'type': 'string', 'description': '备注，如：花呗还款 / 10月工资'},
+                    'date': {
+                      'type': 'string',
+                      'description': '日期 YYYY-MM-DD，省略时视为今天'
+                    },
+                    'note': {
+                      'type': 'string',
+                      'description': '备注，如：花呗还款 / 10月工资'
+                    },
                   },
                   'required': ['type', 'category', 'amount'],
                 },
               },
             },
-            requiredParams: ['records']),
-        _fn('propose_workout_records',
+            requiredParams: [
+              'records'
+            ]),
+        _fn(
+            'propose_workout_records',
             '把截图（训记等训练App/手表锻炼记录）识别出的训练历史整理为待确认的'
                 '批量训练记录卡片。每条记录对应一次训练；只填写截图原文中的动作与组次重量，'
                 '严禁编造',
@@ -868,9 +1185,15 @@ class AgentService {
                       'type': 'string',
                       'description': '训练日期 YYYY-MM-DD，省略时视为今天',
                     },
-                    'name': {'type': 'string', 'description': '训练名称/类型，如：胸肩 / 腿 / 跑步'},
+                    'name': {
+                      'type': 'string',
+                      'description': '训练名称/类型，如：胸肩 / 腿 / 跑步'
+                    },
                     'duration': {'type': 'integer', 'description': '时长（分钟）'},
-                    'intensity': {'type': 'integer', 'description': '强度 1-5，默认 3'},
+                    'intensity': {
+                      'type': 'integer',
+                      'description': '强度 1-5，默认 3'
+                    },
                     'exercises': {
                       'type': 'array',
                       'description': '动作列表',
@@ -879,8 +1202,14 @@ class AgentService {
                         'properties': {
                           'name': {'type': 'string', 'description': '动作名称'},
                           'sets': {'type': 'integer', 'description': '组数，默认 3'},
-                          'reps': {'type': 'integer', 'description': '每组次数，默认 10'},
-                          'weight': {'type': 'number', 'description': '重量 kg，自重可省略'},
+                          'reps': {
+                            'type': 'integer',
+                            'description': '每组次数，默认 10'
+                          },
+                          'weight': {
+                            'type': 'number',
+                            'description': '重量 kg，自重可省略'
+                          },
                         },
                         'required': ['name'],
                       },
@@ -890,8 +1219,11 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['records']),
-        _fn('add_food_item',
+            requiredParams: [
+              'records'
+            ]),
+        _fn(
+            'add_food_item',
             '把用户口述或截图识别出的食物新增到「食物库」，整理为待确认的食物条目卡片。'
                 '营养数值（每100g）只填用户提供或原文出现的值，缺失可省略，严禁编造；'
                 '同名食物会更新已有条目',
@@ -928,8 +1260,11 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['items']),
-        _fn('log_life_status',
+            requiredParams: [
+              'items'
+            ]),
+        _fn(
+            'log_life_status',
             '记录用户的生活状态（睡眠/精力/标签/备注），整理为待确认卡片，'
                 '用户确认后才写入；日期省略时视为今天。只填写用户表达过的内容，不要编造',
             params: {
@@ -949,7 +1284,8 @@ class AgentService {
               },
               'note': {'type': 'string', 'description': '备注'},
             }),
-        _fn('add_knowledge_entry',
+        _fn(
+            'add_knowledge_entry',
             '把用户提供的知识/经验新增到「知识库」，整理为待确认的知识条目卡片。'
                 '必须填写 source（出处/来源），否则会被拒绝，避免检索污染；'
                 '只整理用户表达过的内容，不要自行补充',
@@ -965,8 +1301,13 @@ class AgentService {
               'keywords': {'type': 'string', 'description': '关键词，逗号分隔'},
               'source': {'type': 'string', 'description': '出处/来源（必填）'},
             },
-            requiredParams: ['title', 'content', 'source']),
-        _fn('archive_health_report',
+            requiredParams: [
+              'title',
+              'content',
+              'source'
+            ]),
+        _fn(
+            'archive_health_report',
             '把用户上传或口述的体检/化验/影像/门诊报告整理为待确认的「体检报告归档」卡片。'
                 '只归档、不修改不删除；数值与结论须来自原文，严禁编造。'
                 '仅当用户明确要求把这份报告存入健康档案时才调用',
@@ -994,7 +1335,10 @@ class AgentService {
                     'type': {'type': 'string', 'description': '指标名称'},
                     'value': {'type': 'string', 'description': '数值'},
                     'unit': {'type': 'string', 'description': '单位'},
-                    'reference_range': {'type': 'string', 'description': '参考范围'},
+                    'reference_range': {
+                      'type': 'string',
+                      'description': '参考范围'
+                    },
                     'risk_level': {
                       'type': 'string',
                       'enum': ['red', 'yellow', 'blue', 'green'],
@@ -1005,7 +1349,9 @@ class AgentService {
                 },
               },
             },
-            requiredParams: ['title']),
+            requiredParams: [
+              'title'
+            ]),
       ];
 
   Map<String, dynamic> _fn(
@@ -1045,6 +1391,9 @@ class AgentService {
     'lookup_food': '食物营养',
     'get_wearable_summary': '穿戴数据',
     'search_literature': '文献检索',
+    'web_search': '网页搜索',
+    'search_supplement_evidence': '补剂循证',
+    'search_supplement_label': '补剂配料表',
     'search_condition_exercise': '疾病运动',
     'search_otc_safety': '用药安全',
     'lookup_supplement': '补剂常识',
@@ -1072,8 +1421,354 @@ class AgentService {
   String toolLabel(String name) => _toolLabels[name] ?? name;
 
   // ---------------------------------------------------------------------------
+  // 意图路由：按用户消息只下发相关工具子集
+  // ---------------------------------------------------------------------------
+
+  /// 任何意图都会附带的基础工具：用户档案与今日摘要语义最通用，几乎每次问答都可能用到
+  static const List<String> _baseToolNames = [
+    'get_user_profile',
+    'get_today_summary',
+  ];
+
+  /// 意图 → 关键词（小写比对；命中任一关键词即算命中该意图）。
+  ///
+  /// 设计要点：
+  /// - 只放「领域名词」，**不放**「记录/保存/新增」这类通用写动作词——
+  ///   它们在多个领域都成立，命中不了具体领域时宁可整体回退全量工具。
+  /// - 允许多个意图同时命中（如「高血压能做什么运动」= medical + workout + health），
+  ///   取并集，复合问题不会缺工具。
+  static const Map<String, List<String>> _intentKeywords = {
+    'workout': [
+      '训练',
+      '健身',
+      '力量',
+      '增肌',
+      '塑形',
+      '撸铁',
+      '杠铃',
+      '哑铃',
+      '深蹲',
+      '卧推',
+      '硬拉',
+      '引体',
+      '俯卧撑',
+      '组数',
+      '次数',
+      '重量',
+      '分化',
+      '有氧',
+      '跑步',
+      '骑行',
+      '游泳',
+      '跳绳',
+      '拉伸',
+      '柔韧',
+      '器械',
+      '肌肉',
+      '动作',
+      '运动',
+      '锻炼',
+      '练',
+    ],
+    'diet': [
+      '饮食',
+      '吃',
+      '餐',
+      '早餐',
+      '午餐',
+      '晚餐',
+      '加餐',
+      '宵夜',
+      '热量',
+      '卡路里',
+      '大卡',
+      '碳水',
+      '蛋白',
+      '脂肪',
+      '食物',
+      '食谱',
+      '营养',
+      '外卖',
+      '水果',
+      '蔬菜',
+      '米饭',
+      '鸡蛋',
+      '牛奶',
+    ],
+    'health': [
+      '体检',
+      '血压',
+      '血糖',
+      '血脂',
+      '尿酸',
+      '心率',
+      '体脂',
+      '体重',
+      '指标',
+      '报告',
+      '化验',
+      '影像',
+      '复查',
+      '血氧',
+      '胆固醇',
+      '甘油三酯',
+      '低密度',
+      '高密度',
+      '健康',
+      '身体',
+      '睡眠',
+      '肌肉量',
+      '基础代谢',
+      '内脏脂肪',
+      '腰围',
+      '臀围',
+    ],
+    'medical': [
+      '疾病',
+      '高血压',
+      '糖尿病',
+      '骨质疏松',
+      '关节炎',
+      '腰痛',
+      '康复',
+      '用药',
+      '药物',
+      '吃药',
+      '服药',
+      '退热',
+      '止咳',
+      '鼻塞',
+      '咽痛',
+      '症状',
+      '治疗',
+      '禁忌',
+      '循证',
+      '文献',
+      '证据',
+      '指南',
+      '补剂',
+      '维生素',
+      '鱼油',
+      'omega',
+      '镁',
+      '锌',
+      '钙',
+      '肌酸',
+      '咖啡因',
+      '蛋白粉',
+      '失眠',
+      '抑郁',
+      '焦虑',
+      '帕金森',
+      '卒中',
+      '慢阻肺',
+      '孕',
+      '儿童',
+      '老年',
+      '术语',
+      'meta',
+    ],
+    'finance': [
+      '财务',
+      '收支',
+      '花销',
+      '花费',
+      '账单',
+      '工资',
+      '收入',
+      '支出',
+      '花了',
+      '预算',
+      '理财',
+      '还款',
+      '花呗',
+      '信用卡',
+      '支付宝',
+      '微信支付',
+      '消费',
+      '记账',
+      '省钱',
+      '存款',
+      '资产',
+    ],
+    'life': [
+      '生活状态',
+      '睡眠',
+      '精力',
+      '情绪',
+      '压力',
+      '作息',
+      '疲惫',
+      '精神',
+      '熬夜',
+      '午休',
+      '状态',
+    ],
+    'knowledge': [
+      '知识',
+      '笔记',
+      '条目',
+      '资料',
+      '书籍',
+      '存档',
+      '数据源',
+      '数据集',
+      '开源',
+      '登记表',
+      '本体',
+      'exmo',
+      'rehabo',
+    ],
+    'overview': [
+      '概况',
+      '总结',
+      '摘要',
+      '近况',
+      '汇总',
+      '概览',
+      '整体情况',
+      '全貌',
+    ],
+  };
+
+  /// 意图 → 该意图下需要下发的工具名（与 [_intentKeywords] 的 key 一一对应）
+  static const Map<String, List<String>> _intentTools = {
+    'workout': [
+      'get_recent_workouts',
+      'query_exercise',
+      'query_met',
+      'propose_workout_plan',
+      'propose_workout_records',
+      'log_workout',
+    ],
+    'diet': [
+      'get_recent_diets',
+      'lookup_food',
+      'propose_diet_plan',
+      'log_diet',
+      'delete_diet_records',
+      'add_food_item',
+      'search_supplement_label',
+    ],
+    'health': [
+      'get_health_metrics',
+      'get_health_reports',
+      'get_wearable_summary',
+      'propose_health_metrics',
+      'archive_health_report',
+    ],
+    'medical': [
+      'search_medical_evidence',
+      'search_literature',
+      'web_search',
+      'search_supplement_evidence',
+      'search_supplement_label',
+      'search_condition_exercise',
+      'search_otc_safety',
+      'lookup_supplement',
+      'query_met',
+      'query_ontology',
+      'search_knowledge',
+    ],
+    'finance': ['get_finance_overview', 'propose_finance_records'],
+    'life': ['get_life_status', 'log_life_status', 'get_wearable_summary'],
+    'knowledge': [
+      'search_knowledge',
+      'add_knowledge_entry',
+      'list_open_datasets',
+      'query_ontology',
+      'query_exercise_catalog',
+      'web_search',
+    ],
+    'overview': [
+      'get_recent_workouts',
+      'get_recent_diets',
+      'get_finance_overview',
+      'get_health_metrics',
+      'get_life_status',
+    ],
+  };
+
+  /// 按意图挑选工具子集。
+  ///
+  /// 动机：此前每轮请求体都固定携带全部 33 个工具 schema（数千 token），
+  /// 这份固定开销直接摊在首字延迟上；而一次问答实际通常只用到 1~3 个工具。
+  ///
+  /// 做法：关键词判定命中的意图 → 下发「基础工具 ∪ 命中意图工具」；
+  /// **一个意图都没命中时回退全量**——宁可多带 schema，也绝不因漏工具
+  /// 让模型"无据作答"（本项目最核心的红线是不得编造数据）。
+  List<Map<String, dynamic>> toolsForIntent(String text) {
+    final lower = text.toLowerCase();
+    final names = <String>{..._baseToolNames};
+    var hits = 0;
+    for (final entry in _intentKeywords.entries) {
+      if (entry.value.any(lower.contains)) {
+        hits++;
+        names.addAll(_intentTools[entry.key] ?? const []);
+      }
+    }
+    if (hits == 0) return toolSchemas; // 未命中：回退全量，保证不漏工具
+    return [
+      for (final schema in toolSchemas)
+        if (names.contains(_toolName(schema))) schema,
+    ];
+  }
+
+  /// 取 schema 里的工具名（toolSchemas 为 OpenAI function calling 格式）
+  String _toolName(Map<String, dynamic> schema) {
+    final fn = schema['function'];
+    if (fn is Map) return (fn['name'] ?? '').toString();
+    return '';
+  }
+
+  /// 路由输入：当前消息 + 最近两条历史（截断）。
+  ///
+  /// 带上历史是为了让「那帮我记下来」这类省略主语的追问也能命中正确意图
+  /// （前文在聊饮食 → 命中 diet）。截断取**尾部**，确保当前消息不被截掉。
+  String _routeText(List<Map<String, dynamic>> history, String userText) {
+    final tail =
+        history.length > 2 ? history.sublist(history.length - 2) : history;
+    final joined = [
+      for (final m in tail) (m['content'] ?? '').toString(),
+      userText,
+    ].join(' ');
+    return joined.length > 1200
+        ? joined.substring(joined.length - 1200)
+        : joined;
+  }
+
+  // ---------------------------------------------------------------------------
   // 工具执行
   // ---------------------------------------------------------------------------
+
+  /// 执行工具并兜住异常与超时：任一失败/超时都转成可读文本回传模型，
+  /// 绝不让单个工具把整轮工具循环拖死（[Future.timeout] 见 [_toolTimeout]）。
+  ///
+  /// [toolLimit] 覆盖默认超时：由调用方按总预算剩余时长下发，保证工具阶段
+  /// 不会越过硬墙（默认 [_toolTimeout]）。
+  Future<ToolResult> _executeToolSafe(
+    String name,
+    Map<String, dynamic> args, {
+    Duration? toolLimit,
+  }) async {
+    final limit = toolLimit ?? _toolTimeout;
+    try {
+      return await executeTool(name, args).timeout(limit);
+    } on TimeoutException {
+      return ToolResult(
+          '工具「${toolLabel(name)}」执行超时（${limit.inSeconds} 秒），已跳过',
+          ok: false);
+    } catch (e) {
+      return ToolResult('工具执行失败：$e', ok: false);
+    }
+  }
+
+  /// 把工具结果压成单行摘要（供「工具调用步骤」卡片展示）。
+  /// 折叠卡片只需让人一眼看出拿到了什么，不需要完整结果（模型仍收到全文）。
+  static String _stepSummary(String text) {
+    final oneLine = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return oneLine.length > 240 ? '${oneLine.substring(0, 240)}…' : oneLine;
+  }
 
   /// 统一工具入口：写工具只产 [PendingAction]（绝不落库），读工具复用 [_runReadTool]。
   Future<ToolResult> executeTool(String name, Map<String, dynamic> args) async {
@@ -1214,8 +1909,7 @@ class AgentService {
       });
     }
     if (records.isEmpty) {
-      return ToolResult(
-          '未找到对应的饮食记录（无效 id：${missing.join('、')}）。'
+      return ToolResult('未找到对应的饮食记录（无效 id：${missing.join('、')}）。'
           '请先调用 get_recent_diets 获取有效的记录 id，不得凭空编造');
     }
     return ToolResult(
@@ -1297,15 +1991,13 @@ class AgentService {
       });
     }
     if (metrics.isEmpty) {
-      return const ToolResult(
-          '参数校验失败：metrics 中每条都需要 type 与 value（数值须来自原文）');
+      return const ToolResult('参数校验失败：metrics 中每条都需要 type 与 value（数值须来自原文）');
     }
     return ToolResult(
       '已生成待确认的健康指标卡片（共 ${metrics.length} 条）。'
       '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入健康档案。'
       '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
-      action: PendingAction(
-          type: 'health_metrics', data: {'metrics': metrics}),
+      action: PendingAction(type: 'health_metrics', data: {'metrics': metrics}),
     );
   }
 
@@ -1341,8 +2033,8 @@ class AgentService {
       '已生成待确认的收支记录卡片（共 ${records.length} 条）。'
       '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入财务板块。'
       '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
-      action: PendingAction(
-          type: 'finance_records', data: {'records': records}),
+      action:
+          PendingAction(type: 'finance_records', data: {'records': records}),
     );
   }
 
@@ -1383,15 +2075,14 @@ class AgentService {
       });
     }
     if (records.isEmpty) {
-      return const ToolResult(
-          '参数校验失败：records 中每条都需要 name 与至少一个动作（须来自原文）');
+      return const ToolResult('参数校验失败：records 中每条都需要 name 与至少一个动作（须来自原文）');
     }
     return ToolResult(
       '已生成待确认的训练记录卡片（共 ${records.length} 次训练）。'
       '该数据尚未保存，需用户在前端卡片上点击保存按钮后才会写入训练板块。'
       '请提示用户「可在下方卡片核对或修改后保存」，不要在文字里重复罗列明细。',
-      action: PendingAction(
-          type: 'workout_records', data: {'records': records}),
+      action:
+          PendingAction(type: 'workout_records', data: {'records': records}),
     );
   }
 
@@ -1578,8 +2269,7 @@ class AgentService {
         if (condition.isEmpty && query.isEmpty) {
           return 'condition 参数不能为空';
         }
-        final hits =
-            p.searchEvidence(query, condition: condition, topN: 4);
+        final hits = p.searchEvidence(query, condition: condition, topN: 4);
         return _clip(_formatEvidence(hits, '$condition $query'.trim()));
       case 'query_met':
         final activity = (args['activity'] ?? '').toString().trim();
@@ -1605,6 +2295,12 @@ class AgentService {
         return _clip(await _wearableSummary(_daysArg(args, 7)));
       case 'search_literature':
         return _clip(await _searchLiterature(args));
+      case 'web_search':
+        return _clip(await _webSearch(args));
+      case 'search_supplement_evidence':
+        return _clip(await _supplementEvidence(args));
+      case 'search_supplement_label':
+        return _clip(await _supplementLabel(args));
       case 'search_condition_exercise':
         final condition = (args['condition'] ?? '').toString().trim();
         if (condition.isEmpty) return 'condition 参数不能为空';
@@ -1639,8 +2335,8 @@ class AgentService {
         final q = (args['query'] ?? '').toString().trim();
         final onto = (args['ontology'] ?? '').toString().trim();
         if (q.isEmpty && onto.isEmpty) return 'query 参数不能为空';
-        final terms = p.searchOntology(q,
-            ontology: onto.isEmpty ? null : onto, topN: 5);
+        final terms =
+            p.searchOntology(q, ontology: onto.isEmpty ? null : onto, topN: 5);
         return _clip(_formatOntology(terms, q.isEmpty ? onto : q));
       case 'query_exercise_catalog':
         final bp = (args['body_part'] ?? '').toString().trim();
@@ -1691,6 +2387,25 @@ class AgentService {
     return null;
   }
 
+  /// 宽松解析字符串数组（模型可能给数组，也可能给逗号分隔的字符串）
+  List<String> _stringListArg(Map<String, dynamic> args, String key) {
+    final raw = args[key];
+    if (raw is List) {
+      return raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    if (raw is String) {
+      return raw
+          .split(RegExp(r'[,，、;；]'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
   /// 宽松解析数值：接受 num 与纯数字字符串（如 "8"、"12.5"、"1,234.56"），失败返回 null。
   /// 模型传参偶尔会把数字包成字符串，严格 cast 会静默丢弃整条数据
   double? _numArg(dynamic raw) {
@@ -1711,15 +2426,14 @@ class AgentService {
   String _formatWorkouts(int days) {
     final p = provider!;
     final cutoff = DateTime.now().subtract(Duration(days: days));
-    final list = p.workouts
-        .where((w) => w.date.isAfter(cutoff))
-        .toList()
+    final list = p.workouts.where((w) => w.date.isAfter(cutoff)).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (list.isEmpty) return '最近 $days 天没有训练记录';
 
     final sb = StringBuffer('最近 $days 天共 ${list.length} 次训练：');
     for (final w in list) {
-      sb.write('\n- ${_fmtDate(w.date)} ${w.type}，时长 ${w.duration} 分钟，强度 ${w.intensity}/5');
+      sb.write(
+          '\n- ${_fmtDate(w.date)} ${w.type}，时长 ${w.duration} 分钟，强度 ${w.intensity}/5');
       for (final ex in w.exercises) {
         final weight = ex.weight > 0 ? '×${ex.weight}kg' : '（自重）';
         sb.write('\n  · ${ex.name} ${ex.sets}组×${ex.reps}次$weight');
@@ -1731,15 +2445,14 @@ class AgentService {
   String _formatDiets(int days) {
     final p = provider!;
     final cutoff = DateTime.now().subtract(Duration(days: days));
-    final list = p.dietRecords
-        .where((d) => d.date.isAfter(cutoff))
-        .toList()
+    final list = p.dietRecords.where((d) => d.date.isAfter(cutoff)).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (list.isEmpty) return '最近 $days 天没有饮食记录';
 
     final sb = StringBuffer('最近 $days 天共 ${list.length} 条饮食记录：');
     for (final d in list) {
-      sb.write('\n- [id:${d.id}] ${_fmtDate(d.date)} ${d.mealType} 共 ${d.totalCalories.round()} kcal');
+      sb.write(
+          '\n- [id:${d.id}] ${_fmtDate(d.date)} ${d.mealType} 共 ${d.totalCalories.round()} kcal');
       for (final f in d.foods) {
         sb.write('\n  · ${f.name} ${f.grams}g（${f.calories.round()}kcal/'
             '蛋白质${f.protein}g/脂肪${f.fat}g/碳水${f.carbs}g）');
@@ -1751,19 +2464,22 @@ class AgentService {
   String _formatHealthMetrics(int days) {
     final p = provider!;
     final cutoff = DateTime.now().subtract(Duration(days: days));
-    final list = p.healthMetrics
-        .where((m) => m.date.isAfter(cutoff))
-        .toList()
+    final list = p.healthMetrics.where((m) => m.date.isAfter(cutoff)).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (list.isEmpty) return '最近 $days 天没有健康指标记录';
 
     final sb = StringBuffer('最近 $days 天共 ${list.length} 条健康指标：');
     for (final m in list) {
-      final unit = (m.unit ?? m.defaultUnit).isNotEmpty ? ' ${m.unit ?? m.defaultUnit}' : '';
+      final unit = (m.unit ?? m.defaultUnit).isNotEmpty
+          ? ' ${m.unit ?? m.defaultUnit}'
+          : '';
       final note = m.note.isNotEmpty ? '（${m.note}）' : '';
-      final light = m.riskLevel.isNotEmpty ? '（${_lightName(m.riskLevel)}）' : '';
-      final range = m.referenceRange.isNotEmpty ? ' 参考 ${m.referenceRange}' : '';
-      sb.write('\n- ${_fmtDate(m.date)} ${m.type}: ${m.value}$unit$note$light$range');
+      final light =
+          m.riskLevel.isNotEmpty ? '（${_lightName(m.riskLevel)}）' : '';
+      final range =
+          m.referenceRange.isNotEmpty ? ' 参考 ${m.referenceRange}' : '';
+      sb.write(
+          '\n- ${_fmtDate(m.date)} ${m.type}: ${m.value}$unit$note$light$range');
     }
     return sb.toString();
   }
@@ -1805,15 +2521,12 @@ class AgentService {
           .toList();
     }
     if (list.isEmpty) {
-      return args['only_abnormal'] == true
-          ? '没有灯色为红/黄的异常报告'
-          : '暂无体检报告记录';
+      return args['only_abnormal'] == true ? '没有灯色为红/黄的异常报告' : '暂无体检报告记录';
     }
     final rawLimit = args['limit'];
     final limit =
         rawLimit is int && rawLimit > 0 && rawLimit <= 20 ? rawLimit : 5;
-    final sb = StringBuffer(
-        '共 ${list.length} 份报告，返回最近 $limit 份（按日期倒序）：');
+    final sb = StringBuffer('共 ${list.length} 份报告，返回最近 $limit 份（按日期倒序）：');
     for (final r in list.take(limit)) {
       final metricCount = p.healthMetrics
           .where((m) => r.id != null && m.sourceReportId == r.id)
@@ -1852,8 +2565,9 @@ class AgentService {
     if (metrics.isNotEmpty) {
       sb.write('- 入库指标：\n');
       for (final m in metrics) {
-        final unit =
-            (m.unit ?? m.defaultUnit).isNotEmpty ? ' ${m.unit ?? m.defaultUnit}' : '';
+        final unit = (m.unit ?? m.defaultUnit).isNotEmpty
+            ? ' ${m.unit ?? m.defaultUnit}'
+            : '';
         final range =
             m.referenceRange.isNotEmpty ? '，参考 ${m.referenceRange}' : '';
         sb.write('  * ${m.type}: ${m.value}$unit'
@@ -1873,9 +2587,7 @@ class AgentService {
   String _formatLifeStatus(int days) {
     final p = provider!;
     final cutoff = DateTime.now().subtract(Duration(days: days));
-    final list = p.lifeStatuses
-        .where((s) => s.date.isAfter(cutoff))
-        .toList()
+    final list = p.lifeStatuses.where((s) => s.date.isAfter(cutoff)).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (list.isEmpty) return '最近 $days 天没有生活状态记录';
 
@@ -1883,7 +2595,8 @@ class AgentService {
     for (final s in list) {
       final tags = s.tags.isNotEmpty ? '，标签：${s.tags.join("/")}' : '';
       final note = s.note.isNotEmpty ? '，备注：${s.note}' : '';
-      sb.write('\n- ${_fmtDate(s.date)} 睡眠 ${s.sleepHours}h，精力 ${s.energyScore}/10$tags$note');
+      sb.write(
+          '\n- ${_fmtDate(s.date)} 睡眠 ${s.sleepHours}h，精力 ${s.energyScore}/10$tags$note');
     }
     return sb.toString();
   }
@@ -1929,7 +2642,8 @@ class AgentService {
     for (final m in list) {
       sb.write('\n- ${m.activity}（${m.category}）：MET ${m.met}，${m.intensity}');
       if (weight != null && weight > 0) {
-        sb.write('，按体重 ${weight}kg 约 ${m.kcalPerMin(weight).toStringAsFixed(1)} kcal/分钟');
+        sb.write(
+            '，按体重 ${weight}kg 约 ${m.kcalPerMin(weight).toStringAsFixed(1)} kcal/分钟');
       }
       if (m.note.isNotEmpty) sb.write('（${m.note}）');
     }
@@ -1943,7 +2657,8 @@ class AgentService {
     final sb = StringBuffer('动作库结果（来源：Free Exercise DB 结构，本地）：');
     for (final x in list) {
       final en = x.nameEn.isEmpty ? '' : '（${x.nameEn}）';
-      sb.write('\n- ${x.name}$en｜肌群：${x.muscle}｜器械：${x.equipment}｜难度：${x.level}');
+      sb.write(
+          '\n- ${x.name}$en｜肌群：${x.muscle}｜器械：${x.equipment}｜难度：${x.level}');
       if (x.cues.isNotEmpty) sb.write('\n  要领：${x.cues}');
     }
     return sb.toString();
@@ -1994,8 +2709,7 @@ class AgentService {
   }
 
   /// 运动健康信息的固定免责话术（P5 疾病—运动，安全合规硬要求）
-  static const String _exerciseDisclaimer =
-      '本内容为一般性运动健康信息，不构成医疗建议。具体运动方案请遵医嘱，'
+  static const String _exerciseDisclaimer = '本内容为一般性运动健康信息，不构成医疗建议。具体运动方案请遵医嘱，'
       '并在专业人员指导下进行；运动中若出现胸痛、眩晕、呼吸困难、异常心悸等不适，'
       '请立即停止并就医。';
 
@@ -2095,7 +2809,8 @@ class AgentService {
         final rb = _evidenceRank[b.evidenceLevel] ?? 9;
         return ra.compareTo(rb);
       });
-    final sb = StringBuffer('补剂常识检索结果（本地库，来源口径：指南＝官方文件（NIH ODS/FDA）＞专家＝专业学会共识（ISSN/EFSA））：');
+    final sb = StringBuffer(
+        '补剂常识检索结果（本地库，来源口径：指南＝官方文件（NIH ODS/FDA）＞专家＝专业学会共识（ISSN/EFSA））：');
     for (final e in sorted) {
       sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
       sb.write('\n要点：${e.recommendation}');
@@ -2162,8 +2877,9 @@ class AgentService {
     // 2) 本地无命中：联网需显式开启
     if (!p.evidenceOnlineSearch) {
       return '本地循证库无「$term」相关证据。'
-          '联网文献检索需先在「设置 → 循证文献联网检索」开启（默认关闭）；'
-          '开启后可从 Europe PMC / OpenAlex 检索开源医学文献（仅元数据与链接）。';
+          '联网文献检索需先在「设置 → 联网检索」开启（默认关闭）；'
+          '开启后可从 Europe PMC / OpenAlex / Crossref / Semantic Scholar '
+          '检索开源医学文献（仅元数据与链接）。';
     }
 
     final refs = await p.searchLiteratureOnline(
@@ -2172,7 +2888,8 @@ class AgentService {
       yearFrom: yearFrom,
     );
     if (refs.isEmpty) {
-      return '本地循证库与联网源（Europe PMC / OpenAlex）均无「$term」相关文献。'
+      return '本地循证库与联网源（Europe PMC / OpenAlex / Crossref / Semantic Scholar）'
+          '均无「$term」相关文献。'
           '请勿编造文献、期刊或 DOI；可如实说明该问题缺乏公开文献依据。';
     }
     return _formatLiterature(refs, term);
@@ -2183,8 +2900,8 @@ class AgentService {
       return '联网文献检索无结果（检索：$query）。请勿编造文献；'
           '可如实说明该问题暂未检索到公开文献。';
     }
-    final sb = StringBuffer(
-        '开源医学文献检索结果（Europe PMC / OpenAlex，仅元数据，检索：$query）：');
+    final sb =
+        StringBuffer('开源医学文献检索结果（Europe PMC / OpenAlex，仅元数据，检索：$query）：');
     for (final r in list) {
       final year = r.year > 0 ? '${r.year}' : '年份未标注';
       final journal = r.journal.isNotEmpty ? r.journal : '期刊未标注';
@@ -2199,6 +2916,116 @@ class AgentService {
     }
     sb.write('\n\n提示：以上为文献元数据（非结论）。引用时须逐条核对原文，严禁编造或夸大。');
     return sb.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 网页检索工具（AnySearch 官方 API，仅标题/链接/摘要）
+  // ---------------------------------------------------------------------------
+
+  /// 通用网页检索：用于新闻、政策、机构通知、指南解读等非学术内容。
+  ///
+  /// 合规：默认关闭；未配置 Key 或未开总开关时只回可读提示，绝不静默外发；
+  /// 只回标题 / 站点 / 链接 / 摘要片段，接口返回的正文在服务层已丢弃。
+  Future<String> _webSearch(Map<String, dynamic> args) async {
+    final p = provider!;
+    final query = (args['query'] ?? '').toString().trim();
+    if (query.isEmpty) return 'query 参数不能为空';
+
+    if (!p.evidenceOnlineSearch) {
+      return '网页检索需先在「设置 → 联网检索」开启总开关（默认关闭，开启前不产生任何外发请求）。';
+    }
+    if (!p.anySearchConfigured) {
+      return '尚未配置 AnySearch API Key。请引导用户到「设置 → 联网检索 → 网页搜索」粘贴 Key 后再试；'
+          '在此之前如实说明无法检索公开网页，不要凭印象编造新闻、政策原文或链接。';
+    }
+
+    final zone = (args['zone'] ?? 'cn').toString();
+    final limit = _intArg(args, 'max_results') ?? 6;
+    try {
+      final hits = await p.searchWebOnline(
+        query,
+        limit: limit.clamp(1, 10),
+        zone: zone == 'intl' ? 'intl' : 'cn',
+      );
+      return AnySearchService.formatForAi(hits, query);
+    } on AnySearchException catch (e) {
+      return '${e.message}。请如实告知用户检索失败，不要凭印象补足内容。';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // P6-B 补剂数据源：HAA 循证 + NIH DSLD 配料表
+  // ---------------------------------------------------------------------------
+
+  /// 补剂循证检索（Healthy Aging Atlas 官方 MCP，仅接 5 个循证工具）。
+  ///
+  /// 合规：默认关闭；不把用户原始问句透传——只把归一化关键词交给服务层，
+  /// 服务层再做 PII 硬拦截；引用必须带 source_url 与 CC BY 4.0 署名。
+  Future<String> _supplementEvidence(Map<String, dynamic> args) async {
+    final p = provider!;
+    if (!p.evidenceOnlineSearch) {
+      return '补剂循证检索需先在「设置 → 联网检索」开启总开关（默认关闭，开启前不产生任何外发请求）。';
+    }
+    final mode = (args['mode'] ?? 'evidence_map').toString();
+    final supplement = (args['supplement'] ?? '').toString().trim();
+    final goal = (args['goal'] ?? '').toString().trim();
+    final limit = _intArg(args, 'limit');
+    final supplements = _stringListArg(args, 'supplements');
+
+    if ((mode == 'summary' || mode == 'citations') &&
+        (supplement.isEmpty || goal.isEmpty)) {
+      return 'mode=$mode 需要同时提供 supplement 与 goal 两个关键词。';
+    }
+    if (mode == 'compare' && supplements.length < 2) {
+      return 'mode=compare 需要提供 supplements 数组（2~5 个补剂名称）。';
+    }
+    if (mode != 'compare' && supplement.isEmpty && goal.isEmpty) {
+      return '至少提供 supplement 或 goal 之一（只填归一化关键词，不要填整句问话）。';
+    }
+
+    try {
+      final r = await p.searchSupplementEvidence(
+        supplement: supplement.isEmpty ? null : supplement,
+        goal: goal.isEmpty ? null : goal,
+        mode: mode,
+        supplements: supplements,
+        minimumRctCount: _intArg(args, 'minimum_rct_count'),
+        limit: limit ?? 10,
+      );
+      switch (mode) {
+        case 'summary':
+          return SupplementEvidenceService.formatEvidenceSummary(r);
+        case 'citations':
+          return SupplementEvidenceService.formatCitations(r);
+        case 'compare':
+          return SupplementEvidenceService.formatCompare(r);
+        case 'search':
+          return SupplementEvidenceService.formatSearchEvidence(r);
+        default:
+          return SupplementEvidenceService.formatEvidenceMap(r);
+      }
+    } on SupplementEvidenceException catch (e) {
+      return '${e.message} 请如实告知用户检索失败，不要凭印象编造证据分级或引文。';
+    } on McpException catch (e) {
+      return '${e.message} 请如实告知用户检索失败，不要凭印象编造证据分级或引文。';
+    }
+  }
+
+  /// 补剂标签 / 配料表检索（NIH DSLD，CC0 公有领域）。
+  Future<String> _supplementLabel(Map<String, dynamic> args) async {
+    final p = provider!;
+    final query = (args['query'] ?? '').toString().trim();
+    if (query.isEmpty) return 'query 参数不能为空';
+    if (!p.evidenceOnlineSearch) {
+      return '补剂标签查询需先在「设置 → 联网检索」开启总开关（默认关闭，开启前不产生任何外发请求）。';
+    }
+    final limit = _intArg(args, 'limit') ?? 3;
+    try {
+      final res = await p.searchSupplementLabel(query, limit: limit.clamp(1, 10));
+      return SupplementLabelService.formatForAi(res, query);
+    } on SupplementLabelException catch (e) {
+      return '${e.message} 请如实告知用户查询失败，不要凭印象编造配料表。';
+    }
   }
 
   // ---------------------------------------------------------------------------

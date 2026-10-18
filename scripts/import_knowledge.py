@@ -54,7 +54,9 @@ EVIDENCE_REQUIRED = [
     'id', 'domain', 'condition', 'topic', 'recommendation',
     'evidenceLevel', 'source', 'url', 'license',
 ]
-EVIDENCE_LEVELS = ('指南推荐', '系统评价', 'RCT')
+# 「古籍」为中医经典原文的单独口径：属传统学说记载，不是临床证据等级，
+# 排序时置于最低位，避免与传统导引/经络条目被误读为与指南同级。
+EVIDENCE_LEVELS = ('指南推荐', '系统评价', 'RCT', '古籍')
 
 # 用药安全条目：性质为「官方文件规定」与「说明书范本」，不适配临床证据三级分级。
 # 故独立设白名单：指南＝官方文件（如卫健委参考表）；专家＝NMPA 说明书范本。
@@ -360,8 +362,9 @@ def main():
          'license': 'CC0（公共领域）；仅用于疾病名称规范化对齐'},
         {'name': 'ISSN Position Stands', 'url': 'https://jissn.biomedcentral.com/',
          'license': 'CC BY 4.0（署名）'},
-        {'name': '《黄帝内经》等中医典籍', 'url': 'https://www.gov.cn/',
-         'license': '古籍（公有领域），译文为自撰改写'},
+        {'name': '《黄帝内经》（素问·灵枢）中医典籍',
+         'url': 'https://zh.wikisource.org/wiki/黃帝內經',
+         'license': '古籍原文属公有领域；底本转录自中文维基文库（CC BY-SA 4.0）；仅作条目化摘要改写，未逐字复制'},
         {'name': '国家卫健委《新冠病毒感染者居家治疗常用药参考表》（2022-12-08）',
          'url': 'https://news.cctv.com/2022/12/16/ARTIQruRkEJ64gUJm88HnvLk221216.shtml',
          'license': '政府公开发布；经官方媒体刊载全文，仅条目化改写'},

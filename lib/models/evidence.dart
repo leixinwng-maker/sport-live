@@ -20,7 +20,10 @@ class EvidenceEntry {
   /// 结构化推荐正文（宜含 FITT：频率 / 强度 / 时间 / 类型）
   final String recommendation;
 
-  /// 证据等级：指南推荐 / 系统评价 / RCT
+  /// 证据等级：指南推荐 / 系统评价 / RCT / 古籍
+  ///
+  /// 「古籍」为中医经典原文的单独口径（传统学说记载，非临床证据等级），
+  /// 排序时始终位于最低位，避免与指南/系统评价混列。
   final String evidenceLevel;
 
   /// 出处（机构 + 文献名）

@@ -41,7 +41,7 @@ void main() {
       expect(e.recommendation, isNotEmpty);
       expect(e.source, isNotEmpty, reason: '${e.id} 缺出处');
       expect(e.license, isNotEmpty, reason: '${e.id} 缺许可标注');
-      expect(e.evidenceLevel, anyOf('指南推荐', '系统评价', 'RCT'));
+      expect(e.evidenceLevel, anyOf('指南推荐', '系统评价', 'RCT', '古籍'));
     }
   });
 

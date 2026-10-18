@@ -403,8 +403,12 @@ class AgentService {
         '循证引用规范（涉及疾病、运动处方、营养建议时必须遵守）：\n'
         '1. 先调用 search_medical_evidence 检索本地循证库，再基于结果作答；'
         '需要具体动作/强度/食材时配合 query_exercise、query_met、lookup_food\n'
-        '2. 证据强度排序：指南推荐 > 系统评价/Meta 分析 > 单篇 RCT；'
-        '优先引用强度更高的证据，强度偏低时须说明\n'
+        '2. 证据强度排序：指南推荐 > 系统评价/Meta 分析 > 单篇 RCT > 古籍；'
+        '优先引用强度更高的证据，强度偏低时须说明。'
+        '「古籍」为中医经典原文口径（传统学说记载，非临床证据等级）：'
+        '引用时须以「传统理论认为……」表述，不得与指南结论混列或当作疗效证据，'
+        '并附「本内容为传统文化与养生知识，不构成医疗诊断或治疗建议」；'
+        '不得据古籍给出针刺、艾灸、按压或方药的具体操作处方\n'
         '3. 每条循证建议必须注明出处（来源名称与链接），严禁编造文献、期刊、数据或结论\n'
         '4. 本地库检索不到相关内容时，可调用 search_literature 联网检索开放学术文献题录'
         '（Europe PMC / OpenAlex / Crossref / Semantic Scholar，仅题录与链接，不含正文；'
@@ -550,7 +554,7 @@ class AgentService {
         _fn(
             'search_medical_evidence',
             '检索本地循证医学库：疾病/健康目标对应的运动、营养、中医建议，'
-                '含证据强度（指南推荐/系统评价/RCT）与出处，结果按证据强度排序',
+                '含证据强度（指南推荐/系统评价/RCT/古籍）与出处，结果按证据强度排序',
             params: {
               'condition': {
                 'type': 'string',
@@ -2605,14 +2609,16 @@ class AgentService {
   // P4 循证 / 运动营养 工具格式化
   // ---------------------------------------------------------------------------
 
-  /// 证据强度排序权重（越小越强）：指南推荐 > 系统评价 > 单篇 RCT
+  /// 证据强度排序权重（越小越强）：指南推荐 > 系统评价 > 单篇 RCT > 古籍
   /// 「指南」「专家」为用药安全条目专用口径（指南＝官方文件；专家＝说明书范本）
+  /// 「古籍」为中医经典原文口径——属传统学说记载，不是临床证据等级，故排最末
   static const Map<String, int> _evidenceRank = {
     '指南推荐': 0,
     '指南': 0,
     '系统评价': 1,
     '专家': 1,
     'RCT': 2,
+    '古籍': 3,
   };
 
   String _formatEvidence(List<EvidenceEntry> list, String query) {
@@ -2625,7 +2631,7 @@ class AgentService {
         final rb = _evidenceRank[b.evidenceLevel] ?? 9;
         return ra.compareTo(rb);
       });
-    final sb = StringBuffer('循证检索结果（本地循证库，按证据强度：指南推荐>系统评价>RCT）：');
+    final sb = StringBuffer('循证检索结果（本地循证库，按证据强度：指南推荐>系统评价>RCT>古籍）：');
     for (final e in sorted) {
       sb.write('\n\n【${e.condition}｜${e.evidenceLevel}】${e.topic}');
       sb.write('\n建议：${e.recommendation}');

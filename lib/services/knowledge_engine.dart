@@ -29,6 +29,9 @@ class _IndexedChunk {
   final Map<String, int> tokenFreq;
   final double docLen;
 
+  /// 标题分词集合：命中标题的词额外加权（标题比正文更能代表主题）
+  final Set<String> titleTokens;
+
   /// 是否无视领域过滤始终参与检索（循证库条目量少价值高，避免被场景过滤误伤）
   final bool alwaysSearch;
 
@@ -42,6 +45,7 @@ class _IndexedChunk {
     required this.domain,
     required this.tokenFreq,
     required this.docLen,
+    required this.titleTokens,
     this.alwaysSearch = false,
     this.meta = '',
   });
@@ -68,6 +72,7 @@ class KnowledgeIndex {
         domain: e.domain,
         tokenFreq: KnowledgeEngine._buildTokenFreq(full),
         docLen: full.length.toDouble(),
+        titleTokens: KnowledgeEngine._tokenize(e.title).toSet(),
       ));
     }
     // 2. 书籍段落
@@ -84,6 +89,7 @@ class KnowledgeIndex {
           domain: book.domain,
           tokenFreq: KnowledgeEngine._buildTokenFreq(para),
           docLen: para.length.toDouble(),
+          titleTokens: KnowledgeEngine._tokenize(book.title).toSet(),
         ));
       }
     }
@@ -100,6 +106,9 @@ class KnowledgeIndex {
         domain: ev.domain,
         tokenFreq: KnowledgeEngine._buildTokenFreq(full),
         docLen: full.length.toDouble(),
+        // 病名 + 主题词更代表条目中心，标题命中时额外加权
+        titleTokens:
+            KnowledgeEngine._tokenize('${ev.condition} ${ev.topic}').toSet(),
         alwaysSearch: true,
         meta: '出处：${ev.source}${ev.url.isEmpty ? '' : '（${ev.url}）'}',
       ));
@@ -113,7 +122,8 @@ class KnowledgeIndex {
     int topN = 6,
     List<String>? domains,
   }) {
-    final queryTokens = KnowledgeEngine._tokenize(query);
+    // 同义词扩展：把口语说法补成规范词，解决「膝盖疼」搜不到「膝关节」这类问题
+    final queryTokens = KnowledgeEngine._expandQuery(query);
     final results = <KnowledgeChunk>[];
     for (final c in _chunks) {
       if (!c.alwaysSearch &&
@@ -122,8 +132,12 @@ class KnowledgeIndex {
           !domains.contains(c.domain)) {
         continue;
       }
-      final score =
-          KnowledgeEngine._score(c.tokenFreq, queryTokens, c.docLen);
+      final score = KnowledgeEngine._score(
+        c.tokenFreq,
+        queryTokens,
+        c.docLen,
+        titleTokens: c.titleTokens,
+      );
       final boosted = score * (c.domain == 'fitness' ? 1.1 : 1.0);
       if (boosted > 0.001) {
         results.add(KnowledgeChunk(
@@ -258,20 +272,92 @@ class KnowledgeEngine {
     return result;
   }
 
+  // ==================== 查询扩展（同义词） ====================
+
+  /// 口语说法 → 规范词的映射。
+  ///
+  /// 只做「查询扩展」：命中键就把对应的规范词补进查询词，不改写原文。
+  /// 键必须是 2 字以上的完整口语片段，避免单字造成大面积误命中。
+  static const Map<String, List<String>> _synonyms = {
+    '膝盖': ['膝关节', '膝'],
+    '膝关节': ['膝'],
+    '腰疼': ['腰痛', '腰椎'],
+    '腰酸': ['腰痛', '腰部'],
+    '脖子': ['颈', '颈部'],
+    '肩膀': ['肩', '肩部'],
+    '手肘': ['肘', '肘部'],
+    '脚踝': ['踝', '踝关节'],
+    '屁股': ['臀', '臀部'],
+    '肚子': ['腹', '腹部'],
+    '睡不着': ['失眠', '睡眠'],
+    '睡不好': ['失眠', '睡眠质量'],
+    '失眠': ['睡眠'],
+    '熬夜': ['睡眠不足', '作息'],
+    '拉肚子': ['腹泻', '肠道'],
+    '便秘': ['排便', '膳食纤维'],
+    '血压高': ['高血压', '血压'],
+    '血糖高': ['高血糖', '血糖'],
+    '血脂高': ['血脂异常', '血脂'],
+    '三高': ['高血压', '高血糖', '血脂异常'],
+    '减肥': ['减重', '减脂', '体重'],
+    '减脂': ['减重', '体脂'],
+    '增肌': ['肌肉', '力量训练'],
+    '练肌肉': ['增肌', '抗阻训练'],
+    '没力气': ['乏力', '疲劳'],
+    '喘不上气': ['气促', '呼吸困难'],
+    '心跳快': ['心悸', '心率'],
+    '心慌': ['心悸'],
+    '头晕': ['眩晕'],
+    '偏头痛': ['头痛'],
+    '颈椎': ['颈', '颈部'],
+    '鼠标手': ['腕管', '手腕'],
+    '网球肘': ['肘'],
+    '五十肩': ['肩周炎', '肩'],
+    '痛经': ['月经', '经期'],
+    '来例假': ['月经', '经期'],
+    '体检报告': ['体检', '化验'],
+    '尿酸高': ['高尿酸', '痛风'],
+    '脂肪肝': ['肝脏', '脂肪'],
+    '胃疼': ['胃痛', '胃部'],
+    '水肿': ['浮肿'],
+  };
+
+  /// 查询扩展：保留原分词，追加命中的规范词及其分词
+  static List<String> _expandQuery(String query) {
+    final tokens = _tokenize(query);
+    final seen = tokens.toSet();
+    for (final entry in _synonyms.entries) {
+      if (!query.contains(entry.key)) continue;
+      for (final word in entry.value) {
+        for (final t in _tokenize(word)) {
+          if (seen.add(t)) tokens.add(t);
+        }
+      }
+    }
+    return tokens;
+  }
+
   // ==================== 打分 ====================
 
   /// 相关度打分（轻量BM25风格）
   /// [docTokens] 文档词表
-  /// [queryTokens] 问题词表
+  /// [queryTokens] 问题词表（已做同义词扩展）
+  /// [titleTokens] 标题词集合：命中标题额外加权，标题比正文更能代表主题
   static double _score(
-      Map<String, int> docTokens, List<String> queryTokens, double docLen) {
+    Map<String, int> docTokens,
+    List<String> queryTokens,
+    double docLen, {
+    Set<String> titleTokens = const {},
+  }) {
     var score = 0.0;
     for (final qt in queryTokens) {
       final tf = docTokens[qt];
-      if (tf == null) continue;
+      final inTitle = titleTokens.contains(qt);
+      if (tf == null && !inTitle) continue;
       // TF 加权 + 长词（更具体）加权
       final weight = qt.length >= 4 ? 1.5 : (qt.length >= 3 ? 1.2 : 1.0);
-      score += (1 + _log(1.0 + tf)) * weight / (1 + docLen / 200);
+      final tfPart = tf == null ? 0.0 : (1 + _log(1.0 + tf));
+      score += (tfPart + (inTitle ? 1.2 : 0.0)) * weight / (1 + docLen / 200);
     }
     return score;
   }

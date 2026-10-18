@@ -6,6 +6,8 @@ import '../models/evidence.dart';
 import '../models/health_report.dart';
 import '../providers/app_provider.dart';
 import '../providers/wearable_provider.dart';
+import 'agent_experts.dart';
+import 'agent_tools.dart';
 import 'ai_engine.dart';
 import 'any_search_service.dart';
 import 'food_lookup_service.dart';
@@ -154,20 +156,21 @@ class AgentService {
 
   static Duration _min(Duration a, Duration b) => a <= b ? a : b;
 
-  /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 30 个工具 schema
+  /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 36 个工具 schema
   /// 已是固定开销，长历史会让 TTFT（首字延迟）线性变长，弱网关下更容易读断。
   static const int _maxHistoryMessages = 16;
   static const int _maxToolContentLength = 2000;
 
   /// 读工具结果短期缓存：key 为「工具名|参数JSON」，value 为 (结果, 写入时间)。
-  /// 同一轮对话或相邻消息中重复查询相同参数时直接命中，省去重复查库。
+  /// 只在**单条消息**内复用（[sendMessage] 入口清空）：同一轮多轮工具往返里
+  /// 重复查询相同参数可直接命中；跨消息不复用，避免用户在其它页面改了数据后
+  /// 智能体仍读到旧快照。
   final Map<String, (String, DateTime)> _readCache = {};
   static const Duration _readCacheTtl = Duration(minutes: 5);
 
-  /// 合规例外：受单独门禁约束的读工具不参与缓存。
+  /// 合规例外：受单独门禁约束的读工具不参与缓存（见 agent_tools.dart 的 cacheable）。
   /// get_wearable_summary 依赖穿戴授权门禁，撤回授权必须立即生效，
   /// 缓存会导致撤回后 5 分钟内仍返回旧摘要（合规漏洞）。
-  static const Set<String> _noCacheTools = {'get_wearable_summary'};
 
   /// 单个工具执行超时。联网类（条码查询 lookup_food / 文献检索 search_literature）
   /// 与平台通道类（get_wearable_summary）端点无响应时会挂住整轮工具循环；
@@ -202,6 +205,9 @@ class AgentService {
     void Function(AgentToolStep step)? onToolStep,
     bool forceFullTools = false,
   }) async {
+    // 读缓存只服务本条消息内的重复查询；跨消息清空，保证用户刚在其它页面
+    // 记录的数据能被读到（此前仅在确认写入卡片时失效，跨页面写入会读到旧值）。
+    _readCache.clear();
     if (toolsUnsupported) {
       final text = await _sendWithInjection(
           history, userText, onStatus, onDelta,
@@ -209,13 +215,17 @@ class AgentService {
       return AgentReply(text);
     }
 
-    // 按意图下发工具子集（未命中意图时自动回退全量），见 [toolsForIntent]
+    // 设置页「全量工具」开启时直接下发全部 schema；
+    // 否则按意图下发子集（一个意图都没命中时自动回退全量），见 [toolsForIntent]
     final tools = forceFullTools
         ? toolSchemas
         : toolsForIntent(_routeText(history, userText));
 
     final messages = <Map<String, dynamic>>[
-      {'role': 'system', 'content': _systemPrompt()},
+      {
+        'role': 'system',
+        'content': '${_systemPrompt()}${expertPrompt(detectExpert(userText))}',
+      },
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
@@ -356,12 +366,14 @@ class AgentService {
     final context = p == null
         ? ''
         : '${p.getUserProfileText()}\n\n${p.getPersonalContext(days: 3)}';
+    final expert = expertPrompt(detectExpert(userText));
+    final base = '${_systemPrompt()}$expert';
     final messages = <Map<String, dynamic>>[
       {
         'role': 'system',
         'content': context.isEmpty
-            ? _systemPrompt()
-            : '${_systemPrompt()}\n\n以下是用户真实数据（简化模式自动附带）：\n$context',
+            ? base
+            : '$base\n\n以下是用户真实数据（简化模式自动附带）：\n$context',
       },
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
@@ -374,10 +386,40 @@ class AgentService {
   // System Prompt
   // ---------------------------------------------------------------------------
 
+  /// 当前不可用的能力（按实时配置生成）。
+  ///
+  /// 选择「在提示词里声明」而不是「从 schema 里删掉工具」，理由：
+  /// - 删 schema 要为每个工具维护一条可用性判定，配置项一多就容易漏；
+  /// - 模型不知道自己缺什么时，会先调用再收到报错，白白多跑一轮；
+  /// - 同一段话对「按意图路由」与「全量工具」两种模式同时生效。
+  String _unavailableCapabilities() {
+    final p = provider;
+    if (p == null) return '';
+    final notes = <String>[];
+    if (!p.evidenceOnlineSearch) {
+      notes.add('联网检索总开关已关闭（web_search、search_literature、'
+          'search_supplement_label、search_supplement_evidence 不可用，'
+          '食物条码联网查询也不可用）');
+    } else if (!p.anySearchConfigured) {
+      notes.add('未配置 AnySearch Key（web_search 不可用）');
+    }
+    final w = wearable;
+    if (w != null && (!w.available || !w.authorized)) {
+      notes.add('穿戴数据未授权（get_wearable_summary 不可用）');
+    }
+    if (notes.isEmpty) return '';
+    return '【当前不可用能力】${notes.join('；')}。'
+        '上述工具即使被调用也只会返回提示，不要尝试；'
+        '请直接在回答中告知用户到「设置」里开启或授权后再问。';
+  }
+
   String _systemPrompt() {
     final now = DateTime.now();
     final week = ['一', '二', '三', '四', '五', '六', '日'][now.weekday - 1];
     final today = '${now.year}-${_p2(now.month)}-${_p2(now.day)}';
+    final caps = _unavailableCapabilities();
+    // 无不可用能力时不插入空段，保持提示词长度稳定
+    final capBlock = caps.isEmpty ? '' : '\n$caps\n';
     return '你是"问道"App 的私人 AI 智能体——一位融合道家修炼、中医经络食疗、'
         '运动康复（苗振体系）与现代训练科学、营养学、财务规划的私人顾问。\n\n'
         '你可以调用工具查询用户的真实数据（训练/饮食/财务/健康指标/体检报告/穿戴数据/知识库/生活状态）。原则：\n'
@@ -389,8 +431,9 @@ class AgentService {
         '4. 回答用简体中文，Markdown 排版，简洁实用，不空谈\n'
         '5. 需要用户穿戴设备数据（步数/静息心率/睡眠/体重体脂趋势/锻炼次数）时调用 get_wearable_summary；'
         '若返回"尚未授权"，如实说明并引导用户到「设置 → 运动健康数据」阅读同意并授权，'
-        '严禁编造或凭常识估算用户的穿戴数据\n\n'
-        '健康档案规范（涉及体检报告、化验结果、复查安排、就医准备时必须遵守）：\n'
+        '严禁编造或凭常识估算用户的穿戴数据\n'
+        '$capBlock'
+        '\n健康档案规范（涉及体检报告、化验结果、复查安排、就医准备时必须遵守）：\n'
         '1. 回答健康档案问题（上次某项多少、什么灯、有哪些异常、复查安排）必须先调用 '
         'get_health_reports / get_health_metrics 获取事实；档案无数据时明确说明「档案中暂无记录」，'
         '严禁编造数值或灯色\n'
@@ -1378,49 +1421,8 @@ class AgentService {
     };
   }
 
-  /// 工具中文名（UI 状态展示用）
-  static const Map<String, String> _toolLabels = {
-    'get_user_profile': '用户档案',
-    'get_today_summary': '今日摘要',
-    'get_recent_workouts': '训练记录',
-    'get_recent_diets': '饮食记录',
-    'get_finance_overview': '财务概况',
-    'get_health_metrics': '健康指标',
-    'get_health_reports': '体检报告',
-    'search_knowledge': '知识库',
-    'get_life_status': '生活状态',
-    'search_medical_evidence': '循证文献',
-    'query_met': 'MET 强度',
-    'query_exercise': '动作库',
-    'lookup_food': '食物营养',
-    'get_wearable_summary': '穿戴数据',
-    'search_literature': '文献检索',
-    'web_search': '网页搜索',
-    'search_supplement_evidence': '补剂循证',
-    'search_supplement_label': '补剂配料表',
-    'search_condition_exercise': '疾病运动',
-    'search_otc_safety': '用药安全',
-    'lookup_supplement': '补剂常识',
-    // P6-D 开放数据
-    'query_ontology': '本体术语',
-    'query_exercise_catalog': '开放动作库',
-    'list_open_datasets': '数据源登记表',
-    // FIT-2 写工具
-    'propose_workout_plan': '生成训练计划',
-    'propose_diet_plan': '生成饮食方案',
-    'log_workout': '记录训练',
-    'log_diet': '记录饮食',
-    'delete_diet_records': '删除饮食记录',
-    // 截图归纳写工具
-    'propose_health_metrics': '整理健康指标',
-    'propose_finance_records': '整理收支记录',
-    'propose_workout_records': '整理训练记录',
-    // 档案新增写工具
-    'add_food_item': '新增食物',
-    'log_life_status': '记录生活状态',
-    'add_knowledge_entry': '新增知识条目',
-    'archive_health_report': '归档体检报告',
-  };
+  /// 工具中文名（UI 状态展示用），由注册表派生
+  static final Map<String, String> _toolLabels = agentToolLabels;
 
   String toolLabel(String name) => _toolLabels[name] ?? name;
 
@@ -1428,11 +1430,8 @@ class AgentService {
   // 意图路由：按用户消息只下发相关工具子集
   // ---------------------------------------------------------------------------
 
-  /// 任何意图都会附带的基础工具：用户档案与今日摘要语义最通用，几乎每次问答都可能用到
-  static const List<String> _baseToolNames = [
-    'get_user_profile',
-    'get_today_summary',
-  ];
+  /// 任何意图都会附带的基础工具（用户档案与今日摘要），由注册表派生
+  static final List<String> _baseToolNames = agentBaseToolNames;
 
   /// 意图 → 关键词（小写比对；命中任一关键词即算命中该意图）。
   ///
@@ -1635,67 +1634,13 @@ class AgentService {
     ],
   };
 
-  /// 意图 → 该意图下需要下发的工具名（与 [_intentKeywords] 的 key 一一对应）
-  static const Map<String, List<String>> _intentTools = {
-    'workout': [
-      'get_recent_workouts',
-      'query_exercise',
-      'query_met',
-      'propose_workout_plan',
-      'propose_workout_records',
-      'log_workout',
-    ],
-    'diet': [
-      'get_recent_diets',
-      'lookup_food',
-      'propose_diet_plan',
-      'log_diet',
-      'delete_diet_records',
-      'add_food_item',
-      'search_supplement_label',
-    ],
-    'health': [
-      'get_health_metrics',
-      'get_health_reports',
-      'get_wearable_summary',
-      'propose_health_metrics',
-      'archive_health_report',
-    ],
-    'medical': [
-      'search_medical_evidence',
-      'search_literature',
-      'web_search',
-      'search_supplement_evidence',
-      'search_supplement_label',
-      'search_condition_exercise',
-      'search_otc_safety',
-      'lookup_supplement',
-      'query_met',
-      'query_ontology',
-      'search_knowledge',
-    ],
-    'finance': ['get_finance_overview', 'propose_finance_records'],
-    'life': ['get_life_status', 'log_life_status', 'get_wearable_summary'],
-    'knowledge': [
-      'search_knowledge',
-      'add_knowledge_entry',
-      'list_open_datasets',
-      'query_ontology',
-      'query_exercise_catalog',
-      'web_search',
-    ],
-    'overview': [
-      'get_recent_workouts',
-      'get_recent_diets',
-      'get_finance_overview',
-      'get_health_metrics',
-      'get_life_status',
-    ],
-  };
+  /// 意图 → 该意图下需要下发的工具名（由 agent_tools.dart 注册表派生，
+  /// 与 [_intentKeywords] 的 key 一一对应）
+  static final Map<String, List<String>> _intentTools = agentIntentTools;
 
   /// 按意图挑选工具子集。
   ///
-  /// 动机：此前每轮请求体都固定携带全部 33 个工具 schema（数千 token），
+  /// 动机：此前每轮请求体都固定携带全部 36 个工具 schema（数千 token），
   /// 这份固定开销直接摊在首字延迟上；而一次问答实际通常只用到 1~3 个工具。
   ///
   /// 做法：关键词判定命中的意图 → 下发「基础工具 ∪ 命中意图工具」；
@@ -1807,10 +1752,10 @@ class AgentService {
   }
 
   /// 读工具带缓存入口：5 分钟内同名同参直接返回缓存结果。
-  /// 门禁类工具（见 [_noCacheTools]）绕过缓存，保证状态变化立即生效。
+  /// 门禁类工具（见 agent_tools.dart 的 cacheable）绕过缓存，保证状态变化立即生效。
   Future<String> _runReadToolCached(
       String name, Map<String, dynamic> args) async {
-    if (_noCacheTools.contains(name)) {
+    if (agentNoCacheTools.contains(name)) {
       return _runReadTool(name, args);
     }
     final key = '$name|${jsonEncode(args)}';
@@ -2420,9 +2365,31 @@ class AgentService {
     return null;
   }
 
+  /// 工具结果裁剪。
+  ///
+  /// 超长时按**行**截断，并显式告知「共多少行、实际展示多少行」，而不是硬切
+  /// 字符——硬切会让模型看不到后半段条目，却以为数据已经完整，进而给出
+  /// 「只有这几条」的错误结论。提示语同时要求模型说明数据不完整。
   String _clip(String text) {
     if (text.length <= _maxToolContentLength) return text;
-    return '${text.substring(0, _maxToolContentLength)}…（内容已截断）';
+    final lines = text.split('\n');
+    // 预留提示语占位，避免拼接后再次超出上限
+    const reserve = 90;
+    const budget = _maxToolContentLength - reserve;
+    final buf = StringBuffer();
+    var shown = 0;
+    for (final line in lines) {
+      if (buf.length + line.length + 1 > budget) break;
+      buf.writeln(line);
+      shown++;
+    }
+    const tail = '，可缩小时间范围或指定条件后重试；注意数据不完整，勿据此断言总量';
+    if (shown == 0) {
+      // 单行超长文本（如知识库片段）：退化为按字符截断，但仍明确告知
+      return '${text.substring(0, budget)}\n…（内容过长已截断$tail）';
+    }
+    return '${buf.toString().trimRight()}\n'
+        '…（共 ${lines.length} 行，仅显示前 $shown 行$tail）';
   }
 
   String _fmtDate(DateTime d) => '${d.year}-${_p2(d.month)}-${_p2(d.day)}';

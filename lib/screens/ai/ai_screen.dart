@@ -491,7 +491,7 @@ class _AIScreenState extends State<AIScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('开启新会话'),
-        content: const Text('当前对话将被清空，确定继续吗？'),
+        content: const Text('当前对话会保留在历史中，将开启一个新会话。确定继续吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -505,6 +505,103 @@ class _AIScreenState extends State<AIScreen> {
       ),
     );
     if (ok == true) await agent.startNewSession();
+  }
+
+  /// 历史会话列表：切换、删除或开启新会话
+  Future<void> _showSessions(AgentProvider agent) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add_comment_outlined),
+              title: const Text('开启新会话'),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _confirmNewSession(agent);
+              },
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: agent.sessions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('暂无历史会话'),
+                    )
+                  : ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final s in agent.sessions)
+                          ListTile(
+                            leading: Icon(
+                              s.id == agent.sessionId
+                                  ? Icons.chat_bubble
+                                  : Icons.chat_bubble_outline,
+                              color: s.id == agent.sessionId
+                                  ? TaoistTheme.jadeGreen
+                                  : null,
+                            ),
+                            title: Text(
+                              s.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(_fmtSessionTime(s.updatedAt)),
+                            trailing: IconButton(
+                              tooltip: '删除',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                Navigator.pop(sheetCtx);
+                                await _confirmDeleteSession(agent, s);
+                              },
+                            ),
+                            onTap: () {
+                              Navigator.pop(sheetCtx);
+                              agent.loadSession(s.id);
+                            },
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteSession(
+      AgentProvider agent, AgentSession session) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除会话'),
+        content: Text('将删除「${session.title}」的全部消息，且不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await agent.deleteSession(session.id);
+  }
+
+  String _fmtSessionTime(DateTime t) {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final hm = '${two(t.hour)}:${two(t.minute)}';
+    if (t.year == now.year && t.month == now.month && t.day == now.day) {
+      return '今天 $hm';
+    }
+    return '${t.year}-${two(t.month)}-${two(t.day)} $hm';
   }
 
   @override
@@ -540,6 +637,11 @@ class _AIScreenState extends State<AIScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: '历史会话',
+            icon: const Icon(Icons.history),
+            onPressed: agent.sending ? null : () => _showSessions(agent),
+          ),
           IconButton(
             tooltip: '新会话',
             icon: const Icon(Icons.add_comment_outlined),

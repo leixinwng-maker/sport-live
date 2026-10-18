@@ -114,6 +114,14 @@ class AppProvider extends ChangeNotifier {
   bool evidenceOnlineSearch = false;
   static const String _kEvidenceOnline = 'evidence_online_search';
 
+  /// 智能体工具下发范围。
+  ///
+  /// false（默认）：按意图路由，只下发相关工具子集，请求体小、首字快；
+  /// true：每轮下发全量工具 schema，由模型完全自主选择，响应稍慢，
+  /// 但不会因关键词未命中而缺少本该可用的工具。
+  bool agentFullTools = false;
+  static const String _kAgentFullTools = 'agent_full_tools';
+
   /// AnySearch 网页检索是否已配置 Key（Key 本体在安全存储，不入内存快照）
   bool anySearchConfigured = false;
 
@@ -574,8 +582,10 @@ class AppProvider extends ChangeNotifier {
     try {
       final sp = await SharedPreferences.getInstance();
       evidenceOnlineSearch = sp.getBool(_kEvidenceOnline) ?? false;
+      agentFullTools = sp.getBool(_kAgentFullTools) ?? false;
     } catch (_) {
       evidenceOnlineSearch = false;
+      agentFullTools = false;
     }
     // FIT-7 饮食目标 / 断食设置（Store 内部已吞异常回落默认值）
     try {
@@ -594,6 +604,18 @@ class AppProvider extends ChangeNotifier {
     try {
       final sp = await SharedPreferences.getInstance();
       await sp.setBool(_kEvidenceOnline, value);
+    } catch (_) {
+      // 持久化失败不影响本次会话生效
+    }
+  }
+
+  /// 切换智能体工具下发范围（默认按意图路由；开启后下发全量工具）
+  Future<void> setAgentFullTools(bool value) async {
+    agentFullTools = value;
+    notifyListeners();
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setBool(_kAgentFullTools, value);
     } catch (_) {
       // 持久化失败不影响本次会话生效
     }

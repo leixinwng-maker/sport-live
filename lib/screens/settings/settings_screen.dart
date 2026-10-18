@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/agent_provider.dart';
 import '../../theme/taoist_theme.dart';
 import '../../models/user_profile.dart';
 import '../../services/agreement_consent.dart';
@@ -87,6 +88,24 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
+          // 智能体工具范围（默认按意图路由，可切全量交由模型自主选择）
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.tune,
+                  color: TaoistTheme.bambooGreen),
+              title: const Text('智能体工具范围'),
+              subtitle: Text(
+                provider.agentFullTools
+                    ? '全量工具：每轮下发全部工具，由模型自主选择，响应稍慢'
+                    : '自动路由（默认）：只下发相关工具，响应更快；'
+                        '若出现「该查到却查不到」，可切到全量工具',
+              ),
+              value: provider.agentFullTools,
+              onChanged: (val) => provider.setAgentFullTools(val),
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // 智慧知识库
           Card(
             child: ListTile(
@@ -160,6 +179,19 @@ class SettingsScreen extends StatelessWidget {
                 onPressed: () => _confirmLogout(context, provider),
                 child: const Text('退出登录'),
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 注销账号（服务端级联删除 + 本地清库清凭据）
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person_remove_outlined,
+                  color: Colors.redAccent),
+              title: const Text('注销账号'),
+              subtitle: const Text('永久删除云端与本机的全部数据，不可恢复'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _confirmDeleteAccount(context, provider),
             ),
           ),
           const SizedBox(height: 12),
@@ -623,6 +655,98 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (ok == true) await provider.logout();
+  }
+
+  /// 注销账号：服务端级联删除云端全部数据，随后清空本机库、对话与登录凭据。
+  ///
+  /// 注意：AI 服务配置（Base URL / 模型名 / Key）属于本机设备配置，不随账号注销清除，
+  /// 便于重新注册后继续使用；这也是弹窗文案只承诺"数据库与登录凭据"的原因。
+  Future<void> _confirmDeleteAccount(
+      BuildContext context, AppProvider provider) async {
+    if (!CloudApi.instance.authenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先登录账号，再执行注销')),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('注销账号'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '注销将永久删除云端的全部数据：训练、饮食、健康指标与体检报告、'
+                  '财务、知识与书籍笔记、AI 配置，以及账号本身。\n\n'
+                  '本机加密数据库、对话记录与登录凭据会一并清除。'
+                  '服务端数据库备份最长保留 14 天后自动过期。\n\n'
+                  '此操作不可恢复，请输入登录密码确认。',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: '登录密码'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final pwd = controller.text;
+                if (pwd.isEmpty) return;
+                Navigator.pop(dialogContext, pwd);
+              },
+              child: const Text('永久注销'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (password == null) return;
+
+    try {
+      await CloudApi.instance.deleteAccount(password: password);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('注销失败：$e')));
+      }
+      return;
+    }
+
+    // 服务端已无该账号：本地必须同步清空，避免残留数据被下一位使用者看到
+    await provider.logout();
+    try {
+      await DatabaseHelper.instance.wipeLocalData();
+    } catch (_) {
+      // 本地清库失败不回滚云端注销（云端已删除，重试也无意义）
+    }
+    if (context.mounted) {
+      await context.read<AgentProvider>().clearAllHistory();
+    }
+    await provider.loadAllData();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('账号已注销，本机数据已清除')),
+      );
+    }
   }
 
   /// 开启/关闭应用锁（开启时设置 6 位数字 PIN）

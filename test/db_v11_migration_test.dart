@@ -125,9 +125,15 @@ void main() {
     });
     await old.close();
 
-    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→v15 真实升级 ----
+    // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→当前版本 真实升级 ----
     final db = await DatabaseHelper.instance.database;
-    expect(await db.getVersion(), 15);
+    expect(await db.getVersion(), 16);
+    // v15→v16 新增的智能体会话表也必须随升级建出来
+    final agentTables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' "
+      "AND name IN ('agent_sessions','agent_messages')",
+    );
+    expect(agentTables.length, 2);
 
     // ---- 3) 旧数据保留且新列带默认值 ----
     final rep = (await db

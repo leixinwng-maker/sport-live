@@ -88,7 +88,20 @@ void main() {
     expect(text, contains('出处：'));
   });
 
-  test('T2-5 MET 表与动作库模型解析正确', () {
+  test('T2-5 同义词扩展：口语「膝盖疼」能命中膝关节条目', () {
+    // 查询里没有「膝关节」三字，靠同义词表把「膝盖」扩展为「膝关节 / 膝」
+    final chunks = KnowledgeEngine.retrieve(
+      entries: const [],
+      books: const [],
+      evidence: evidence,
+      query: '膝盖疼 怎么练',
+      topN: 5,
+    );
+    expect(chunks.any((c) => c.title.contains('膝')), isTrue,
+        reason: '同义词扩展后应命中膝关节相关条目');
+  });
+
+  test('T2-6 MET 表与动作库模型解析正确', () {
     final walk = met.firstWhere((m) => m.activity.contains('快走'));
     expect(walk.met, greaterThan(0));
     expect(walk.intensity, anyOf('低强度', '中等强度', '高强度'));

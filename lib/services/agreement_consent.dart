@@ -44,7 +44,7 @@ class AgreementConsent {
 
 /// 协议版本：协议有实质变更时递增，旧同意视为失效需重新确认
 /// （与 legal_documents.dart 中协议文档的版本号保持一致）
-const String kAgreementVersion = '1.0';
+const String kAgreementVersion = '1.1';
 
 /// 同意留痕的本地存储（SharedPreferences，随卸载一并删除）
 class AgreementConsentStore {

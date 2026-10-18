@@ -120,9 +120,15 @@ python scripts/acceptance.py --base-url https://api.你的域名.com
 ```bash
 chmod +x scripts/backup_db.sh
 crontab -e
-# 每天 03:00 备份（脚本内置 14 天保留）：
+# 每天 03:00 备份（脚本内置 AES-256 加密 + 14 天保留）：
 0 3 * * * /opt/wendao/server/scripts/backup_db.sh /opt/wendao/backups >> /var/log/wendao_backup.log 2>&1
 ```
+
+备份产物是 `wendao_<时间戳>.sql.gz.enc`，由 `openssl enc -aes-256-cbc -pbkdf2` 加密。
+密钥默认生成在 `/srv/wendao/.backup.key`（可用 `BACKUP_KEY_FILE` 覆盖），首次运行自动创建、权限 600。
+
+**密钥必须离线另存一份**——密钥丢失等于全部备份不可恢复；也不要把密钥放进备份目录，
+否则目录整体泄露时密文等同明文。
 
 ---
 
@@ -135,7 +141,7 @@ crontab -e
 | 重启单服务 | `docker compose restart api` |
 | 进库排查 | `docker compose exec db psql -U wendao -d wendao` |
 | 停止全部 | `docker compose down`（数据在 `pgdata` 卷，不丢） |
-| 恢复备份 | `gunzip -c 备份.sql.gz \| docker compose exec -T db psql -U wendao -d wendao` |
+| 恢复备份 | `openssl enc -d -aes-256-cbc -pbkdf2 -in 备份.sql.gz.enc -pass file:/srv/wendao/.backup.key \| gunzip \| docker compose exec -T db psql -U wendao -d wendao` |
 
 ### 环境变量要点（`.env`）
 

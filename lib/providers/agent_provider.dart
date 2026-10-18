@@ -2,8 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../services/agent_service.dart';
+import '../services/database_helper.dart';
 import '../services/vision/vision_service.dart';
 import 'app_provider.dart';
 import 'wearable_provider.dart';
@@ -185,13 +188,38 @@ class ChatMessage {
   }
 }
 
+/// 一次智能体会话（仅存本地加密库，不入云同步）
+class AgentSession {
+  final String id;
+  final String title;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const AgentSession({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+}
+
 /// 智能体会话管理（P3-T4）：
 /// - 消息流与工具查询状态（"正在查询：…" / "已查询 N 项数据"）
-/// - 持久化最近 50 条到 SharedPreferences（key: agent_chat_history）
-/// - 新会话清空 / 失败重试
+/// - 多会话持久化到本地加密库（agent_sessions / agent_messages），不入云
+/// - 新会话保留旧记录，可切换/删除；旧版 SharedPreferences 记录首次加载时自动迁移
 class AgentProvider extends ChangeNotifier {
+  /// 旧版 SharedPreferences 键：仅用于一次性迁移
   static const String _storageKey = 'agent_chat_history';
-  static const int _maxStored = 50;
+  static const Uuid _uuid = Uuid();
+
+  String? _sessionId;
+  final List<AgentSession> _sessions = [];
+
+  /// 当前会话 id（未初始化时为 null）
+  String? get sessionId => _sessionId;
+
+  /// 历史会话（按更新时间倒序）
+  List<AgentSession> get sessions => List.unmodifiable(_sessions);
 
   AppProvider? _app;
   AgentService? _agentService;
@@ -409,6 +437,8 @@ class AgentProvider extends ChangeNotifier {
       reply = await service.sendMessage(
         history: history,
         userText: effectiveText,
+        // 设置页「全量工具」开启时不再按意图裁剪工具，交由模型自主选择
+        forceFullTools: _app?.agentFullTools ?? false,
         onStatus: (s) {
           _toolStatus = s;
           _addThinkingStep(s);
@@ -523,13 +553,92 @@ class AgentProvider extends ChangeNotifier {
     }
   }
 
-  /// 开启新会话（清空当前对话）
+  /// 开启新会话：旧会话保留在历史中，当前对话清空。
   Future<void> startNewSession() async {
-    if (_sending || _messages.isEmpty) return;
+    if (_sending) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final s = await _insertSession(db, title: '新会话');
+      _sessionId = s.id;
+      _sessions.insert(0, s);
+    } catch (_) {
+      // 库不可用时仍允许开启新会话（仅不落库）
+      _sessionId = null;
+    }
     _messages.clear();
     _toolStatus = null;
+    _thinkingSteps.clear();
+    _streamingAnswer = false;
     notifyListeners();
-    await _persist();
+  }
+
+  /// 切换到指定历史会话
+  Future<void> loadSession(String id) async {
+    if (_sending || id == _sessionId) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final msgs = await _readMessages(db, id);
+      _sessionId = id;
+      _messages
+        ..clear()
+        ..addAll(msgs);
+      _toolStatus = null;
+      _thinkingSteps.clear();
+      _streamingAnswer = false;
+      notifyListeners();
+    } catch (_) {
+      // 读取失败保持当前会话不变
+    }
+  }
+
+  /// 删除指定历史会话
+  Future<void> deleteSession(String id) async {
+    if (_sending) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('agent_messages',
+          where: 'session_id = ?', whereArgs: [id]);
+      await db.delete('agent_sessions', where: 'id = ?', whereArgs: [id]);
+    } catch (_) {
+      // 删除失败时至少保证内存态一致
+    }
+    _sessions.removeWhere((s) => s.id == id);
+    if (_sessionId == id) {
+      if (_sessions.isNotEmpty) {
+        await loadSession(_sessions.first.id);
+      } else {
+        await startNewSession();
+      }
+      return;
+    }
+    notifyListeners();
+  }
+
+  /// 注销账号时清空本地对话与持久化记录（不留空列表占位）。
+  Future<void> clearAllHistory() async {
+    _messages.clear();
+    _toolStatus = null;
+    _streamingAnswer = false;
+    _thinkingSteps.clear();
+    _sessions.clear();
+    _sessionId = null;
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.remove(_storageKey);
+    } catch (_) {
+      // 清理失败不阻断注销流程
+    }
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('agent_messages');
+      await db.delete('agent_sessions');
+      final s = await _insertSession(db, title: '新会话');
+      _sessionId = s.id;
+      _sessions.add(s);
+    } catch (_) {
+      // 库不可用时仅清空内存态
+    }
+    notifyListeners();
   }
 
   /// FIT-2：把第 [index] 条消息的待确认方案标记为「已保存」（卡片保存成功后调用）
@@ -573,36 +682,185 @@ class AgentProvider extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      final sp = await SharedPreferences.getInstance();
-      final raw = sp.getString(_storageKey);
-      if (raw == null || raw.isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      _messages
-        ..clear()
-        ..addAll([
-          for (final item in decoded)
-            if (item is Map)
-              ChatMessage.fromJson(Map<String, dynamic>.from(item)),
-        ]);
+      final db = await DatabaseHelper.instance.database;
+      await _migrateLegacyHistory(db);
+      await _refreshSessions(db);
+      if (_sessions.isEmpty) {
+        final s = await _insertSession(db, title: '新会话');
+        _sessionId = s.id;
+        _sessions.add(s);
+      } else {
+        _sessionId = _sessions.first.id;
+        _messages
+          ..clear()
+          ..addAll(await _readMessages(db, _sessionId!));
+      }
       notifyListeners();
     } catch (_) {
-      // 损坏的本地缓存直接忽略
+      // 库不可用时不阻塞聊天（仅失去历史）
     }
   }
 
   Future<void> _persist() async {
+    final sid = _sessionId;
+    if (sid == null) return;
     try {
-      final sp = await SharedPreferences.getInstance();
-      final trimmed = _messages.length > _maxStored
-          ? _messages.sublist(_messages.length - _maxStored)
-          : _messages;
-      await sp.setString(
-        _storageKey,
-        jsonEncode([for (final m in trimmed) m.toJson()]),
-      );
+      final db = await DatabaseHelper.instance.database;
+      final title = _deriveTitle(_messages);
+      final now = DateTime.now();
+      await db.transaction((txn) async {
+        await txn.delete('agent_messages',
+            where: 'session_id = ?', whereArgs: [sid]);
+        for (var i = 0; i < _messages.length; i++) {
+          await txn.insert('agent_messages', _messageRow(sid, i, _messages[i]));
+        }
+        await txn.update(
+          'agent_sessions',
+          {'title': title, 'updated_at': now.toIso8601String()},
+          where: 'id = ?',
+          whereArgs: [sid],
+        );
+      });
+      final idx = _sessions.indexWhere((s) => s.id == sid);
+      if (idx >= 0) {
+        final prev = _sessions[idx];
+        _sessions[idx] = AgentSession(
+          id: sid,
+          title: title,
+          createdAt: prev.createdAt,
+          updatedAt: now,
+        );
+        _sessions.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      }
     } catch (_) {
       // 持久化失败不影响当前会话
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 本地加密库读写
+  // ---------------------------------------------------------------------------
+
+  Future<List<AgentSession>> _refreshSessions(Database db) async {
+    final rows = await db.query('agent_sessions', orderBy: 'updated_at DESC');
+    _sessions
+      ..clear()
+      ..addAll([
+        for (final r in rows)
+          AgentSession(
+            id: r['id'] as String,
+            title: (r['title'] ?? '新会话') as String,
+            createdAt: DateTime.parse(r['created_at'] as String),
+            updatedAt: DateTime.parse(r['updated_at'] as String),
+          ),
+      ]);
+    return _sessions;
+  }
+
+  Future<AgentSession> _insertSession(Database db,
+      {required String title}) async {
+    final now = DateTime.now();
+    final s = AgentSession(
+      id: _uuid.v4(),
+      title: title,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await db.insert('agent_sessions', {
+      'id': s.id,
+      'title': s.title,
+      'created_at': s.createdAt.toIso8601String(),
+      'updated_at': s.updatedAt.toIso8601String(),
+    });
+    return s;
+  }
+
+  Future<List<ChatMessage>> _readMessages(Database db, String sid) async {
+    final rows = await db.query(
+      'agent_messages',
+      where: 'session_id = ?',
+      whereArgs: [sid],
+      orderBy: 'seq ASC',
+    );
+    return [for (final r in rows) _messageFromRow(r)];
+  }
+
+  Map<String, Object?> _messageRow(String sid, int seq, ChatMessage m) => {
+        'session_id': sid,
+        'seq': seq,
+        'role': m.role,
+        'content': m.content,
+        'time': m.time.millisecondsSinceEpoch,
+        'tool_count': m.toolCount,
+        'error': m.error ? 1 : 0,
+        'payload': m.payload == null ? null : jsonEncode(m.payload),
+        'image_paths': m.imagePaths.isEmpty ? null : jsonEncode(m.imagePaths),
+        'reasoning': m.reasoning,
+        'tool_steps': m.toolSteps.isEmpty
+            ? null
+            : jsonEncode([for (final s in m.toolSteps) s.toJson()]),
+      };
+
+  ChatMessage _messageFromRow(Map<String, Object?> row) => ChatMessage.fromJson({
+        'role': row['role'],
+        'content': row['content'],
+        'time': row['time'],
+        'toolCount': row['tool_count'],
+        'error': (row['error'] as int? ?? 0) != 0,
+        if (row['payload'] != null) 'payload': jsonDecode(row['payload'] as String),
+        if (row['image_paths'] != null)
+          'imagePaths': jsonDecode(row['image_paths'] as String),
+        if (row['reasoning'] != null) 'reasoning': row['reasoning'],
+        if (row['tool_steps'] != null)
+          'toolSteps': jsonDecode(row['tool_steps'] as String),
+      });
+
+  /// 会话标题：取第一条用户消息，超长截断
+  String _deriveTitle(List<ChatMessage> messages) {
+    for (final m in messages) {
+      if (m.role == 'user' && m.content.trim().isNotEmpty) {
+        final t = m.content.trim().replaceAll(RegExp(r'\s+'), ' ');
+        return t.length <= 20 ? t : '${t.substring(0, 20)}…';
+      }
+    }
+    return '新会话';
+  }
+
+  /// 旧版 SharedPreferences 明文记录 → 加密库（仅迁移一次）
+  Future<void> _migrateLegacyHistory(Database db) async {
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getString(_storageKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final countRows =
+          await db.rawQuery('SELECT COUNT(*) AS c FROM agent_sessions');
+      final existing = (countRows.first['c'] as int?) ?? 0;
+      if (existing == 0) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final msgs = [
+            for (final item in decoded)
+              if (item is Map)
+                ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+          ];
+          if (msgs.isNotEmpty) {
+            final now = DateTime.now();
+            final sid = _uuid.v4();
+            await db.insert('agent_sessions', {
+              'id': sid,
+              'title': _deriveTitle(msgs),
+              'created_at': now.toIso8601String(),
+              'updated_at': now.toIso8601String(),
+            });
+            for (var i = 0; i < msgs.length; i++) {
+              await db.insert('agent_messages', _messageRow(sid, i, msgs[i]));
+            }
+          }
+        }
+      }
+      await sp.remove(_storageKey);
+    } catch (_) {
+      // 迁移失败保留旧 key，下次启动再试
     }
   }
 }

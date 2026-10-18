@@ -291,7 +291,7 @@
           <div class="report-intro__meta">
             <span><b>形态</b> Flutter 应用（本地优先 / 离线可用）</span>
             <span><b>包名</b> ai_planner · v1.2.0+3</span>
-            <span><b>智能体工具</b> 24 个</span>
+            <span><b>智能体工具</b> 36 个</span>
             <span><b>知识资产</b> 2 类 / 约 2.8 MB</span>
           </div>
         </div>
@@ -310,7 +310,7 @@
             工程上，项目采用 Flutter 单端多平台（Android 为主）+ 可选自托管 FastAPI 云的架构：数据默认落在本机的 SQLCipher 加密 SQLite 中，通过版本向量同步引擎与云端做增量对齐。截至本次梳理，代码基线为 <code>lib/</code> 90 个 Dart 文件、约 3.47 万行，测试 23 个文件、约 6.3 千行。
           </p>
           <div class="metric-grid">
-            <div class="metric"><div class="metric__value">24<small>个</small></div><div class="metric__label">智能体工具（20 只读 + 4 写入）</div></div>
+            <div class="metric"><div class="metric__value">36<small>个</small></div><div class="metric__label">智能体工具（24 只读 + 12 写入）</div></div>
             <div class="metric"><div class="metric__value">2,428<small>条</small></div><div class="metric__label">开放动作库条目</div></div>
             <div class="metric"><div class="metric__value">433<small>条</small></div><div class="metric__label">运动医学 / 康复本体术语</div></div>
             <div class="metric"><div class="metric__value">372<small>项</small></div><div class="metric__label">单元 / 集成测试全通过</div></div>
@@ -334,7 +334,7 @@
               <tbody>
                 <tr><td>P1</td><td>后端平台</td><td>FastAPI + SQLite 云端服务、鉴权、部署脚本</td><td><span class="tag tag--done">已交付</span></td></tr>
                 <tr><td>P2</td><td>云端客户端</td><td>UUID 主键、SQLCipher 加密、生物识别锁、增量同步</td><td><span class="tag tag--done">已交付</span></td></tr>
-                <tr><td>P3</td><td>AI 智能体</td><td>24 工具编排、写工具只产待确认动作、多轮工具循环</td><td><span class="tag tag--done">已交付</span></td></tr>
+                <tr><td>P3</td><td>AI 智能体</td><td>36 工具编排、写工具只产待确认动作、多轮工具循环</td><td><span class="tag tag--done">已交付</span></td></tr>
                 <tr><td>P4</td><td>运动健康数据接入</td><td>Health Connect / HealthKit 通道、体成分拍照识别、PIPL 同意页</td><td><span class="tag tag--done">已交付</span></td></tr>
                 <tr><td>P5</td><td>疾病—运动知识库</td><td>文献检索、疾病—运动两层关联、居家健康条目</td><td><span class="tag tag--done">已交付</span></td></tr>
                 <tr><td>P6-A</td><td>家庭用药安全</td><td>64 条用药安全条目（指南 26 / 专家 38）</td><td><span class="tag tag--done">已交付</span></td></tr>
@@ -405,10 +405,10 @@ flowchart TB
         <section>
           <h2>智能体工具矩阵</h2>
           <p>
-            智能体以「工具调用」为唯一对外能力面，共登记 <strong>24 个工具</strong>（20 只读 + 4 写入），并在三个位置保持同步：JSON Schema 定义（<code>toolSchemas</code>）、中文标签表（<code>_toolLabels</code>）与执行分派（<code>executeTool</code>）。运行时常量为单轮最多 6 次工具循环、最多 24 条历史消息、工具结果最多 2,000 字符。
+            智能体以「工具调用」为唯一对外能力面，共登记 <strong>36 个工具</strong>（24 只读 + 12 写入），并在三个位置保持同步：JSON Schema 定义（<code>toolSchemas</code>）、中文标签表（<code>_toolLabels</code>）与执行分派（<code>executeTool</code>）。运行时常量为单轮最多 4 次工具循环、最多 16 条历史消息、工具结果最多 2,000 字符；默认按意图只下发相关工具子集，设置页可切换为全量工具。
           </p>
           <p>
-            关键安全设计：<strong>写工具绝不直接落库</strong>——<code>propose_workout_plan</code> / <code>propose_diet_plan</code> / <code>log_workout</code> / <code>log_diet</code> 只生成 <code>PendingAction</code> 待用户在界面确认；其余 20 个读工具统一走只读通道。
+            关键安全设计：<strong>写工具绝不直接落库</strong>——<code>propose_workout_plan</code> / <code>propose_diet_plan</code> / <code>log_workout</code> / <code>log_diet</code> 等 12 个写工具只生成 <code>PendingAction</code> 待用户在界面确认；其余 24 个读工具统一走只读通道。
           </p>
           <div class="table-wrap">
             <table>

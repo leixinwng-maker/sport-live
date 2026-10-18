@@ -50,7 +50,7 @@ class DatabaseHelper {
   /// 加密端与桌面 ffi 端必须共用同一个版本号：两端若不一致，同一份库文件
   /// 在不同平台打开会跑到不同的升级分支（一端建表、一端 ALTER），
   /// 直接表现为「换平台启动后表结构对不上」。
-  static const int _schemaVersion = 15;
+  static const int _schemaVersion = 16;
 
   DatabaseHelper._();
 
@@ -486,6 +486,34 @@ class DatabaseHelper {
       )
     ''');
 
+    // ---- 智能体会话（仅本地，不入云：对话可能含健康描述，按隐私政策只存本机）----
+
+    await db.execute('''
+      CREATE TABLE agent_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE agent_messages (
+        session_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        time INTEGER NOT NULL,
+        tool_count INTEGER NOT NULL DEFAULT 0,
+        error INTEGER NOT NULL DEFAULT 0,
+        payload TEXT,
+        image_paths TEXT,
+        reasoning TEXT,
+        tool_steps TEXT,
+        PRIMARY KEY (session_id, seq)
+      )
+    ''');
+
     // ---- 索引 ----
     await db.execute('CREATE INDEX idx_workouts_date ON workouts(date)');
     await db.execute('CREATE INDEX idx_diet_date ON diet_records(date)');
@@ -504,6 +532,10 @@ class DatabaseHelper {
         'CREATE INDEX idx_wearable_type ON wearable_samples(data_type)');
     await db.execute(
         'CREATE INDEX idx_queue_table ON sync_queue(table_name, row_id)');
+    await db.execute(
+        'CREATE INDEX idx_agent_msg_session ON agent_messages(session_id, seq)');
+    await db.execute(
+        'CREATE INDEX idx_agent_sessions_updated ON agent_sessions(updated_at)');
     // v15：补齐高频过滤/排序列的索引（见 [_addHotIndexes]）
     await _addHotIndexes(db);
     resetColumnCache();
@@ -635,6 +667,40 @@ class DatabaseHelper {
     // 老库不会重跑 _createTables，索引必须在这里单独补一次，否则升级后依旧全表扫描。
     if (oldVersion < 15) {
       await _addHotIndexes(db);
+    }
+    // v15 → v16：智能体对话从 SharedPreferences 明文迁入加密库，并支持多会话。
+    // 新表用 IF NOT EXISTS，升级中断重试安全；旧数据由 AgentProvider 首次加载时迁移。
+    if (oldVersion < 16) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS agent_sessions (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS agent_messages (
+          session_id TEXT NOT NULL,
+          seq INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          time INTEGER NOT NULL,
+          tool_count INTEGER NOT NULL DEFAULT 0,
+          error INTEGER NOT NULL DEFAULT 0,
+          payload TEXT,
+          image_paths TEXT,
+          reasoning TEXT,
+          tool_steps TEXT,
+          PRIMARY KEY (session_id, seq)
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_agent_msg_session '
+          'ON agent_messages(session_id, seq)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_agent_sessions_updated '
+          'ON agent_sessions(updated_at)');
     }
     // 表结构/索引变更后必须失效列表缓存，避免 pull 落库沿用升级前的旧列集合。
     resetColumnCache();

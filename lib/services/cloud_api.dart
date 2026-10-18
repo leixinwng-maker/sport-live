@@ -187,6 +187,21 @@ class CloudApi {
     }
   }
 
+  /// DELETE /auth/account：注销账号（服务端级联删除该用户全部云端数据）。
+  ///
+  /// 需要二次输入密码，防止 token 被盗后直接销毁账号。
+  /// 成功后服务端已无该账号，调用方必须自行清除本地会话、本地库与凭据。
+  Future<void> deleteAccount({required String password}) async {
+    try {
+      await dio.delete<Map<String, dynamic>>(
+        '/auth/account',
+        data: {'password': password},
+      );
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
   // ---------- 同步（P2-T5）----------
 
   /// POST /sync/push：批量上传变更。

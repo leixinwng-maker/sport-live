@@ -14,7 +14,7 @@
 | P4 | 循证知识库与 4 个循证工具、Health Connect 接入、体成分录入与拍照识别、PIPL 同意与撤回闭环 | `assets/data/evidence_kb.json`、`lib/services/{wearable_aggregator,body_composition_parser}.dart` |
 | P5 | 开源文献检索（Europe PMC / OpenAlex）、疾病—运动两层关联库 | `lib/services/literature_lookup_service.dart` |
 
-工程现状：智能体工具 25 个（21 只读 + 4 写入，写入一律只产 `PendingAction`、经用户确认后落库）；单测 384 项通过（另有 10 项既有失败为历史遗留，与 P7 无关）；`flutter analyze lib test` 无问题；Android release APK 138.9 MB（P7 后实测，较 136.2 MB 增加 2.7 MB：pdfx/pdfium、flutter_local_notifications、core library desugaring）。证据资产由 `scripts/import_knowledge.py`（v1.5.0）从种子统一生成，当前产物为 `evidence_kb.json`（84 条证据、73 条 MET、201 条动作、8 条疾病—运动条目、24 条补剂、64 条用药安全、19 条来源登记、433 条本体术语、82 条数据源登记）与独立资产 `exercise_catalog.json`（2428 条开放动作）。
+工程现状：智能体工具 36 个（23 只读 + 13 写入，写入一律只产 `PendingAction`、经用户确认后落库），工具声明集中在 `lib/services/agent_tools.dart` 单一注册表，派生 schema 名称集合、意图路由、写工具与免缓存集合；单测 532 项通过（无历史遗留失败）；`flutter analyze lib test` 无问题；Android release APK 138.9 MB（P7 后实测，较 136.2 MB 增加 2.7 MB：pdfx/pdfium、flutter_local_notifications、core library desugaring）。证据资产由 `scripts/import_knowledge.py`（v1.6.0）从种子统一生成，当前产物为 `evidence_kb.json`（126 条证据含中医 44 条、73 条 MET、201 条动作、8 条疾病—运动条目、24 条补剂、64 条用药安全、24 条来源登记、433 条本体术语、97 条数据源登记）与独立资产 `exercise_catalog.json`（2428 条开放动作）。
 
 对标训记的训练闭环分期（FIT-1 ~ FIT-8）见 `specs/2026-10-08-xunji-parity-fit1-fit2-design.md`，已完成 FIT-1（逐组明细 + 计划库）、FIT-2（智能体写工具 → 确认 → 落库）、FIT-3（官方计划模板 + 计划库列表/详情/编辑 + 预填训练）、FIT-4（统计与日历可视化）、FIT-5（身体数据与趋势：围度类型扩展 + `body_stats_service` 纯计算层 + 非零基线趋势图 + 独立趋势页）、FIT-6（组间休息计时：`rest_timer` 控制器 + 打勾自动触发 + 训练页倒计时圆环 + 设置页开关）、FIT-7（饮食增强：每日营养目标与达成度 `diet_target`/`diet_target_service` + 首页目标卡、条码扫码页接入 `FoodLookupService`、语音快速记录 `voice_diet_parser`/`voice_diet_screen` 双入口 + 草稿合并、断食 `fasting`/`fasting_service`/`fasting_settings` + 圆环页与进行中卡、三份新增单测）。
 
@@ -31,7 +31,7 @@
 | 华为 Health Service Kit | `specs/2026-10-07-p4-health-data-design.md` §1 | 资质门槛：实缴注册资本 ≥50 万且成立满 1 年 |
 | 云康宝 BLE 直连体脂秤 | 同上 | 申请制 SDK，条款未知 |
 | 环境与天气 API（和风、彩云） | `research/2026-10-07-p4-data-sources-research.md` §7 | 未调研 |
-| 中医数据集 RAG | 同上 | 未调研；现有中医域仅 3 条证据 |
+| 中医数据集 RAG | 同上 | **已交付**（P8，44 条结构化条目：十二经脉、五输穴、五味食疗；古籍原文取公有领域底本，`domain='中医'`，走通用循证工具 `search_medical_evidence`） |
 | iOS 平台与 HealthKit | 仓库无 `ios/` 目录 | 未建立，`health` 插件的 iOS 分支从未验证 |
 | 真机验收 | `plans/2026-10-07-p4-health-data-plan.md` 实施结论 | APK 已产出，主流程未在真机跑过 |
 | schema 增量迁移（替换清库重建） | 会话中提出 | 见 §8 岔路口；云同步可用前不阻塞 |

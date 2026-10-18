@@ -1,0 +1,219 @@
+# 中医知识域 来源合规调研（P8 前置）
+
+日期：2026-10-18
+范围：`docs/ROADMAP.md` §5「P8 中医知识域」动手前的来源合规核验。**本文件只做判定与登记，不改动任何代码、资产或线上行为。**
+
+核验方法：所有结论均来自对仓库内实际文件与**已构建 APK**的直接核验（解开 APK 逐条点验 `assets/flutter_assets/`），以及对候选源的**实际 HTTP 调用**。不采信 README / ROADMAP 的自述作为结论依据——本次核验恰好在自述与实际之间发现了冲突（见 §2.2、§2.5）。
+
+---
+
+## 0. 结论摘要
+
+1. **P0（必须立刻处置）：`assets/books/` 把 18 本现代版权书籍打进了发布 APK。** 实测已构建的 `app-release.apk` 中逐个命中 `assets/flutter_assets/assets/books/*.txt`，合计约 18.9 MB。其中 `tcm_1.txt`（徐文兵讲《黄帝内经》系列，共 10 册）、`tcm_2.txt`（知微版黄帝内经大合集）正是 P8 要区分的「现代整理本」；另有 finance 5 本、fitness 3 本现代商业出版物。项目自定的闸门（`extract_books.py` 白名单 + README 声明）本意是「只允许公有领域」，但**实际发布包违反了自己的规则**。此项与 P9-D（上架 vs 自用）强耦合，需先拍板。
+2. **P1（需修订表述）：README 第 166 行「《黄帝内经》等中医典籍｜古籍，公有领域｜译文为自撰改写」与实际打包内容口径冲突**，须同步修订。
+3. **结构化证据仅 3 条，且全部合规**，可以保留；其中 1 条存在溯源链接错配（§2.1）。
+4. **结构化扩容的候选源已实测出 2 个可用**（中文维基文库 MediaWiki API、Wikidata，§4），均为可商用或公有领域口径，足以支撑 P8 的经络—穴位—古籍原文需求；WHO 针灸经穴标准因 NC 条款排除。
+
+---
+
+## 1. 合规判定口径
+
+沿用项目既有三问，并叠加本项目铁律：
+
+| # | 判据 | 出处 |
+|---|---|---|
+| Q1 | 上游是谁——官方原厂 / 开源社区 / 转手第三方 | 既定三问 |
+| Q2 | 数据来源是否获得授权 | 既定三问 |
+| Q3 | 许可与条款是否明确（是否允许再分发与商用） | 既定三问 |
+| 铁律 1 | 不编写抓取第三方站点的脚本，数据获取一律走官方公开文本、开放接口或授权许可 | ROADMAP §8 |
+| 铁律 2 | NC（禁商用）、ND（禁演绎）一律降级或排除 | `2026-10-08-supplement-database-research.md` §1 |
+| 铁律 3 | **凡是没实测过连通性的端点，不得写进方案** | 项目约定 |
+| 铁律 4 | **「不上传 GitHub」不构成豁免**——`.gitignore` 只保护仓库，不保护发布包；分发 APK 中的全文同样构成复制与发行 | `extract_books.py` docstring |
+
+---
+
+## 2. 现有中医资产逐条盘点
+
+### 2.1 结构化证据（`scripts/knowledge_sources/evidence_seed.json`，`domain = 中医`）
+
+共 3 条，全文核验：
+
+| id | 内容 | 上游 | 许可 | 判定 |
+|---|---|---|---|---|
+| `tcm-baduanjin` | 八段锦导引（3-4 MET、每日 1-2 遍、动作与呼吸配合） | 中国疾控中心《中国人群身体活动指南（2021）》· 传统运动 | 「官方公开资料，条目化引用」 | **保留**。属条目化改写 + 署名，未照搬表达 |
+| `tcm-taichi-balance` | 太极拳与平衡（每周 3-5 次、站桩起步、膝不超过脚尖） | 美国身体活动指南第 2 版（2018）· 老年人章节 | 美国政府作品，公有领域 | **保留** |
+| `tcm-zhengqi` | 子午流注与作息（十二时辰各当令经脉 + 实践要点） | 中医经典《黄帝内经》· 子午流注学说（养生实践用） | 「古籍公有领域；本条为现代实践摘要」 | **保留，但需修链接** |
+
+**发现（P1，非合规问题）**：`tcm-zhengqi` 的 `source` 写《黄帝内经》· 子午流注学说，而 `url` 却指向 `https://www.chinacdc.cn/`（中国疾控中心首页）。来源与链接错配，用户点进去无法溯源。建议或改为维基文库《黃帝內經》/《難經》对应篇目链接（§4.1），或在 link 字段如实留空。
+
+**覆盖度结论**：中医域结构化条目 3 条，占 `evidence_seed.json` 全量的极小比例；ROADMAP §5 所述「经络、穴位、食疗四气五味主要靠书籍全文检索支撑，没有结构化条目」与本盘点一致。
+
+### 2.2 内置书籍通道（`assets/books/`）——P0 高风险
+
+#### 实测证据链
+
+| 环节 | 实测结果 |
+|---|---|
+| `pubspec.yaml` assets 段 | `- assets/images/`、`- assets/data/`、**`- assets/books/`** → books 是打包资产 |
+| 工作区 `assets/books/` 内容 | 18 个 `.txt` + `index.json` + `.gitkeep`，`.txt` 合计约 **18.9 MB** |
+| **已构建 APK 内** | 解开 `build/app/outputs/flutter-apk/app-release.apk`，`assets/flutter_assets/assets/books/` 下**逐个命中**上述 18 个 `.txt`（`tcm_2.txt` 5,674.5 KB、`tcm_1.txt` 3,749.6 KB、`finance_3.txt` 2,503.5 KB …） |
+| `assets/books/index.json` | 登记 18 本书的 `file/title/author/domain` |
+| `scripts/extract_books.py` | `ALLOWED_SOURCES = {}` **为空集**；未列入白名单一律 `SKIP …（版权闸门）` |
+| `README.md` §内置书籍通道 | 「`assets/books/` 仅允许公有领域或允许分发的开放许可来源……现代版权书籍不得放入」 |
+| `.gitignore` | `assets/books/*` + `!assets/books/.gitkeep` → **这些书籍不在 Git 仓库内** |
+| 运行时消费方 | `lib/services/book_seeder.dart` 首启读取 `assets/books/index.json`，把每本书全文 `loadString` 后入库为「内置书籍」（`book_library_screen.dart` 展示） |
+
+**关键推论**：`.gitignore` 让仓库看起来干净，但 `pubspec.yaml` 把整个目录声明为资产 → **只要这些文件在工作区存在，每次 release 构建都会被打包分发**。这是铁律 4 所针对的典型盲区。另：`books/` 源目录**已不存在**，`assets/books/*.txt` 是这批内容的唯一副本。
+
+#### 18 本逐条判定
+
+| 文件 | 书名 | 署名 | 类别 | 判定 |
+|---|---|---|---|---|
+| `tcm_1.txt` | 徐文兵讲黄帝内经系列（10 册） | 徐文兵 & 梁冬 | **A 现代版权商业出版物** | **禁止随包分发**（首行含「孙俪微博、抖音推荐」等商业推广文案，为电子版全文） |
+| `tcm_2.txt` | 知微版黄帝内经大合集（完整整合版） | 佚名（整理） | **B 现代人编纂整理本** | **禁止随包分发**。底本（素問/靈樞/太素/甲乙經/类经）属公有领域，但**互证体系的编排、校点、断句出自现代整理者**，编排与校点成果受保护；其中「太乙版黃帝內經」真伪存疑（托名） |
+| `finance_1.txt` | 巴菲特致股东的信 1970-2017 | 沃伦·巴菲特 | A | 禁止随包分发 |
+| `finance_2.txt` | 巴菲特致股东的信：投资者和公司高管教程 | 沃伦·巴菲特 | A | 禁止随包分发 |
+| `finance_3.txt` | 滚雪球：巴菲特和他的财富人生 | 艾丽斯·施罗德 | A | 禁止随包分发 |
+| `finance_4.txt` | 穷查理宝典 | 查理·芒格 | A | 禁止随包分发 |
+| `finance_5.txt` | 财务自由之路系列（全六册） | 博多·舍费尔 | A | 禁止随包分发 |
+| `fitness_2.txt` | BodyMindCORE 呼吸与身体意识 | Noah Karrasch | A | 禁止随包分发 |
+| `fitness_10.txt` | 筋膜释放技术：身体结构平衡调整 | James Earls, Thomas Myers | A（中文译本，译者另享权利） | 禁止随包分发 |
+| `fitness_11.txt` | 行走的天性：运动中的肌筋膜和身体 | 詹姆斯·厄尔斯 | A（中文译本） | 禁止随包分发 |
+| `fitness_1.txt` | 呼吸的原理 | 苗振体系 | A（现代作者讲义） | 来源与授权均不明 |
+| `fitness_3/4/5/6/7/9.txt` | 苗振系列（一周4分化 / 力量训练 / 医健心整合 / 理念对比 / 无划船版 / 实战要点） | 苗振 | A + **D 空壳** | 授权不明；且实测仅 0～5 KB，**提取失败的空壳**，入库即为空书 |
+| `fitness_8.txt` | 苗振-骨盆侧倾 | 苗振 | A | 14 KB，内容亦不完整（需复核） |
+
+**结论**：18 本中**没有一本**符合 README 自述的「仅限公有领域」。这与 `extract_books.py` 白名单为空（即「无任何来源通过闸门」）在逻辑上自洽——**现有文件是先于闸门存在、或绕过脚本手工放入的存量**。
+
+### 2.3 数据集登记（`scripts/knowledge_sources/dataset_registry_seed.json`）
+
+| 条目 | 规模 | 许可 | 获取状态 | 判定 |
+|---|---|---|---|---|
+| 传统功法指令集 | 57,843 条指令 | `未确认（ScienceDB 页面须核实）` | `登记题录` | **维持登记，不下载、不打包**（属 SFT 语料，非端上消费场景） |
+| `tcm-yangsheng-corpus` 中医养生图文语料 | — | `未确认（平台注册申请制）` | `登记题录` | **维持登记**（仅记线索，不收录媒体） |
+
+两条均**未通过 Q2/Q3**（授权未确认），因此当前形态（只登记题录、单测硬断言不下载正文）是正确且必须保持的。
+
+### 2.4 用药安全种子中的中医提及（`otc_safety_seed.json`）
+
+2 条涉及中医：`中成药退热`（风寒/风热辨证，不适用清热解毒类）、`咽痛`（清咽滴丸忌与温补类同服）。上游均为国家卫健委《新冠病毒感染者居家治疗常用药参考表》（2022-12-08），政府公开发布 + 条目化改写 → **合规，保留**。
+
+### 2.5 README 声明一致性核对
+
+| 位置 | 现行表述 | 与实测是否一致 |
+|---|---|---|
+| README 行 135-136 | `books/` 原始文件、`assets/books/` 提取文本（**打包资产，仅限公有领域来源**） | ❌ `books/` 目录已不存在；`assets/books/` 实为 18 本现代版权书 |
+| README 行 166 | 《黄帝内经》等中医典籍｜古籍，公有领域｜译文为自撰改写 | ⚠️ 就「自撰改写」而言无误，但读者会连带认为 `assets/books/` 即此类内容，与 2.2 冲突 |
+| README 行 184 | 「现代版权书籍不得放入；`extract_books.py` 已内置来源白名单闸门」 | ⚠️ 闸门确实存在且为空，但**存量文件未被清理**，声明描述的应然状态与实然状态不符 |
+
+---
+
+## 3. 风险分级
+
+| 级别 | 事项 | 说明 |
+|---|---|---|
+| **P0** | `assets/books/` 18 本现代版权书随 APK 分发 | 侵权风险与是否公开分发直接相关；同时占约 18.9 MB 包体。需用户拍板处置方式（§6.1） |
+| **P1** | README 三处表述与实况不符；`tcm-zhengqi` 溯源链接错配 | 不改功能，但影响合规自证与外审可信度 |
+| P2 | `fitness_3/4/5/6/7/9` 空壳文件入库为空书 | 影响「内置书籍」体验，非合规问题 |
+
+---
+
+## 4. 结构化扩容候选源（含实测状态）
+
+> 仅登记**本次实际调用过**的源；未实测者单独列于 §4.3，明确标注「仅线索」。
+
+### 4.1 中文维基文库（MediaWiki API）——✅ 实测可用
+
+- 端点：`https://zh.wikisource.org/w/api.php`（标准 MediaWiki Action API，非抓取页面）
+- 实测：`action=query&prop=revisions&rvslots=main&titles=黃帝內經` → 返回完整篇目结构，**素問 81 篇 + 靈樞 81 篇**，正文为 wikitext；`list=search&srsearch=經脈 穴` → 命中 **1,783** 条，含《經穴匯解》（68,934 字）、《靈樞經脈翼》、《欽定古今圖書集成·藝術典》针灸门等
+- 许可：古籍原文本身属**公有领域**；站点转录与校勘标记按站内声明（Wikimedia 项目文本默认 CC BY-SA 4.0）。用于**条目化改写并署名**与项目既有口径一致
+- 判定：**可采用**。作为 P8 的古籍原文底本主源，取经文与篇目，条文以自撰摘要入库（不逐字大段搬运）
+- 注意：`Textquality|25%` 等质量标记说明部分篇目校对率低，导入前需人工过一遍
+
+### 4.2 Wikidata——✅ 实测可用
+
+- 端点：`https://www.wikidata.org/w/api.php`（`wbsearchentities`）与 `https://query.wikidata.org/sparql`
+- 实测：`wbsearchentities search="acupuncture point"` → `Q3197706`（acupuncture point）；SPARQL `SELECT (COUNT(DISTINCT ?p) AS ?n) WHERE { ?p wdt:P31 wd:Q3197706 }` → **219** 条
+- 许可：**CC0 1.0**（公共领域贡献），可商用、可再分发、无署名义务
+- 判定：**可采用**。适合做**穴名跨语言对齐、别名、经络归属、外链锚点**；219 条无法覆盖《经穴汇解》所述 365 穴全量，属**对齐层**而非**内容层**，需与 §4.1 搭配使用
+
+### 4.3 未实测 / 已排除的候选
+
+| 源 | 状态 | 理由 |
+|---|---|---|
+| WHO《标准针灸经穴定位（西太平洋地区）》 | **排除**（未做连通性测试，据许可直接排除） | WHO 出版物为 CC BY-NC-SA 3.0 IGO，**NC 与项目口径冲突**（铁律 2），且为权威标准文本，不宜整段转述 |
+| GB/T 12346《经穴名称与定位》等国家标准 | **仅线索，未实测** | 标准文本由标准委发布，全文获取与再分发条件不明；仅「穴名 + 定位数值」可考虑作为事实性数据引用，需先核验条款 |
+| 中国哲学书电子化计划（ctext.org） | **仅线索，未实测** | 其 API 部分端点需申请 Key，本次未验证；且站点数据许可需逐项确认 |
+| 中国中医科学院中医药信息研究所数据库 | **仅线索，未实测** | 属注册授权制，须先申请 |
+
+---
+
+## 5. 内容边界与文案要求
+
+1. **非医疗建议声明**：涉及穴位定位、针刺、推拿、食疗性味的内容，一律附「本内容为传统文化与养生知识，不构成医疗诊断或治疗建议」。
+2. **严禁针刺操作指导**：《素問·刺禁論》一类篇目只可作**学说介绍**，不得输出「刺某穴治某病」的可执行指引。
+3. **学说标注**：子午流注、五行配属等属**传统学说**，须以「传统理论认为……」表述，不得与循证结论混列（现有 `tcm-zhengqi` 已按此处理，可作模板）。
+4. **不搬运整本古籍**：维基文库用于**取篇目与核对原文**，入库仍是条目化摘要，与 `evidence_seed.json` 现有 3 条同构。
+
+---
+
+## 6. 行动项
+
+### 6.1 P0 合规处置（**已按方案甲执行**，2026-10-18）
+
+用户拍板「按最合规的方案」，已执行方案甲：
+
+| 动作 | 状态 |
+|---|---|
+| `pubspec.yaml` 移除 `- assets/books/`，并加注释说明只有公有领域底本可按需显式声明 | ✅ 已完成 |
+| `assets/books/` 下 18 个 `.txt` 与 `index.json` 全部移出项目目录（归档至 `%TEMP%\sport_live_books_removed_20261018`，未销毁） | ✅ 已完成，目录仅剩 `.gitkeep` |
+| `book_seeder` 降级行为 | ✅ 无需改码——`seedIfNeeded` 已 try/catch，索引缺失时返回 0 并静默跳过 |
+| `extract_books.py` 白名单闸门 | ✅ 保持 `ALLOWED_SOURCES = {}` 为空 |
+| README 两处表述修订 | ✅ 已完成（目录清单 + 内置书籍通道段） |
+| `evidence_seed.json` 的 `tcm-zhengqi` 溯源链接错配 | ✅ 已改为维基文库《子午流注鍼經》 |
+
+**未做**：本机已有的旧 APK 仍含旧内容，属历史产物，不在仓库内分发，无需处理；下次构建即生效。
+
+原三选一方案保留备查：
+
+- **方案甲（最小改动，推荐先行）**：从 `pubspec.yaml` 移除 `- assets/books/`，改由 `extract_books.py` 闸门通过后**按需**声明；立即移出工作区 18 个 `.txt` 与 `index.json`，`book_seeder` 在无索引时静默降级。效果：发布包立即去除 18.9 MB 侵权内容。
+- **方案乙（保功能）**：仅保留**公有领域底本**——以 §4.1 维基文库《黃帝內經》《難經》等原文重新生成书籍资产，登记进 `ALLOWED_SOURCES`，其余 15 本删除。效果：保住「内置书籍」但内容缩水。
+- **方案丙（暂缓）**：若确定为**纯自用、永不公开分发**，可暂不处置，但须在 README 与本文件明确记录该前提；一旦上架即升级为 P0。
+
+> 无论选哪个，`extract_books.py` 的白名单机制都应保留，并把「构建期校验发布包内无未授权资产」纳入 P9-B 的 CI（当前 CI 只跑 analyze/test/build，不做资产合规校验）。
+
+### 6.2 P1 表述修订
+
+- 修正 README 行 135-136（`books/` 已不存在）、行 184（存量未清理）之表述。
+- 修正 `evidence_seed.json` 中 `tcm-zhengqi` 的 `url` 错配。
+- 在 ROADMAP §5 P8 条目补一句指向本文件。
+
+### 6.3 P8 结构化扩容（待 6.1 落定后开工）
+
+按 ROADMAP §5 原定目标推进，数据源用 §4.1 + §4.2 组合，`domain` 取 `中医`，复用 evidence 管线。规模建议分两批：先「经络—穴位对应」约 30-50 条，再「食疗性味归经 + 四季起居」约 30 条。
+
+---
+
+## 7. 附：本次核验的原始证据与可复现命令
+
+```powershell
+# 1) 确认 books 是打包资产
+Select-String -Path pubspec.yaml -Pattern 'assets/books'
+
+# 2) 点验已构建 APK 内实际打包了哪些书
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$z=[System.IO.Compression.ZipFile]::OpenRead('build\app\outputs\flutter-apk\app-release.apk')
+$z.Entries | Where-Object { $_.FullName -like '*books*' } | Select-Object FullName,Length
+$z.Dispose()
+
+# 3) 确认闸门白名单为空
+Select-String -Path scripts\extract_books.py -Pattern 'ALLOWED_SOURCES'
+
+# 4) 候选源实测
+#   维基文库篇目：https://zh.wikisource.org/w/api.php?action=query&prop=revisions&rvslots=main&titles=黃帝內經&format=json&formatversion=2
+#   维基文库检索：https://zh.wikisource.org/w/api.php?action=query&list=search&srsearch=經脈 穴&format=json
+#   Wikidata 检索：https://www.wikidata.org/w/api.php?action=wbsearchentities&search=acupuncture point&language=en&format=json
+#   Wikidata SPARQL：https://query.wikidata.org/sparql?format=json&query=SELECT (COUNT(DISTINCT ?p) AS ?n) WHERE { ?p wdt:P31 wd:Q3197706 }
+```
+
+核验日期：2026-10-18。全部结论基于当日仓库与构建产物的实际状态。

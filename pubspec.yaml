@@ -59,4 +59,7 @@ flutter:
   assets:
     - assets/images/
     - assets/data/
-    - assets/books/
+    # 注意：assets/books/ 已不再声明为打包资产。
+    # 该目录下的书籍全文随 APK 分发即构成复制与发行，只有公有领域或开放许可来源
+    # 才可放入（见 scripts/extract_books.py 白名单闸门与 README「内置书籍通道」）。
+    # 待 P8 用维基文库公有领域底本重建资产后，再按需在下方显式声明具体文件。

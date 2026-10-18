@@ -132,8 +132,8 @@ Flutter · Provider · sqflite（SQLCipher 加密）· dio · local_auth · heal
 - `scripts/` 知识库导入脚本（`import_knowledge.py` v1.5.0）与种子（`scripts/knowledge_sources/`，含疾病—运动两层种子、用药安全种子、补剂种子、本体种子与开放动作库种子）
 - `docs/` 调研报告、设计规格、实施计划（`docs/superpowers/`）、**PIA 评估（`docs/research/`）**
 - `server/` FastAPI 云端服务（账号 auth + 双向同步 sync，Docker 一键部署）
-- `books/` 内置书籍资源（原始文件）
-- `assets/books/` 提取后的书籍文本（**打包资产，仅限公有领域来源**，见下方第三方内容声明）
+- `books/` 内置书籍原始文件目录（**当前为空，内置书籍通道已下线**）
+- `assets/books/` 提取后的书籍文本（**已不再声明为打包资产**；仅允许公有领域来源，见下方第三方内容声明）
 
 ## 📝 说明
 - 数据本地加密缓存 + 云端同步，离线全功能可用，登录后自动多端同步
@@ -181,6 +181,6 @@ MIT 为「按现状（AS IS）」授权，不对内容准确性与使用后果�
 
 **关于开放数据集**：`dataset_registry_seed.json` 中的条目分三种获取状态——`已接入`（数据已随包分发）、`可接入`、`登记题录`。**`登记题录` 仅记录线索，不下载任何正文数据**，单测对此有硬断言。体量较大的语料型数据集（如道教知识 RAG 约 9.6 万条、健身气功指令集 5.7 万条）属训练语料而非端上消费场景，**一律不下载、不打包**，如需完整使用应在自建服务器侧接入。
 
-**内置书籍通道**：`books/`（原始文件）与 `assets/books/`（提取文本）**仅允许公有领域或允许分发的开放许可来源**（如《黄帝内经》等古籍）。`assets/books/` 是打包资产，其中的文本会随 APK 分发，而 `.gitignore` 只保护代码仓库、不保护发布包，因此现代版权书籍不得放入；`scripts/extract_books.py` 已内置来源白名单闸门。
+**内置书籍通道（已下线）**：`books/`（原始文件）与 `assets/books/`（提取文本）**仅允许公有领域或允许分发的开放许可来源**。2026-10-18 的来源合规审计发现，`assets/books/` 下 18 本现代版权书籍曾被 `pubspec.yaml` 声明为打包资产并实际随 APK 分发（其中含现代整理本与商业出版物），虽被 `.gitignore` 挡在仓库外，但**发布包不受 `.gitignore` 保护**，分发 APK 中的全文同样构成复制与发行。现已处置：从 `pubspec.yaml` 移除该资产声明、清空目录内全部书籍文本、`scripts/extract_books.py` 白名单闸门保持为空。审计详情与重建计划见 `docs/research/2026-10-18-tcm-source-compliance-research.md`。
 
 **第三方软件**：Flutter 及所用 pub 包、FastAPI 等依赖均按其自身许可（MIT / BSD / Apache-2.0 等）使用，详见 `pubspec.lock` 与 `server/requirements.txt`。

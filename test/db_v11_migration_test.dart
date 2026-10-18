@@ -127,13 +127,17 @@ void main() {
 
     // ---- 2) 通过 DatabaseHelper 打开同名库，触发 v10→当前版本 真实升级 ----
     final db = await DatabaseHelper.instance.database;
-    expect(await db.getVersion(), 16);
+    expect(await db.getVersion(), 18);
     // v15→v16 新增的智能体会话表也必须随升级建出来
     final agentTables = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' "
-      "AND name IN ('agent_sessions','agent_messages')",
+      "AND name IN ('agent_sessions','agent_messages','agent_memories')",
     );
-    expect(agentTables.length, 2);
+    expect(agentTables.length, 3);
+    // v16→v17 的滚动摘要列必须存在（老库升级后可直接写入摘要）
+    final cols = await db.rawQuery('PRAGMA table_info(agent_sessions)');
+    final names = cols.map((c) => c['name']).toList();
+    expect(names, containsAll(['summary', 'summary_seq']));
 
     // ---- 3) 旧数据保留且新列带默认值 ----
     final rep = (await db

@@ -50,7 +50,7 @@ class DatabaseHelper {
   /// 加密端与桌面 ffi 端必须共用同一个版本号：两端若不一致，同一份库文件
   /// 在不同平台打开会跑到不同的升级分支（一端建表、一端 ALTER），
   /// 直接表现为「换平台启动后表结构对不上」。
-  static const int _schemaVersion = 16;
+  static const int _schemaVersion = 18;
 
   DatabaseHelper._();
 
@@ -493,7 +493,9 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        summary_seq INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -511,6 +513,17 @@ class DatabaseHelper {
         reasoning TEXT,
         tool_steps TEXT,
         PRIMARY KEY (session_id, seq)
+      )
+    ''');
+
+    // ---- 智能体长期记忆（仅本地，不入云）----
+    await db.execute('''
+      CREATE TABLE agent_memories (
+        id TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )
     ''');
 
@@ -536,6 +549,8 @@ class DatabaseHelper {
         'CREATE INDEX idx_agent_msg_session ON agent_messages(session_id, seq)');
     await db.execute(
         'CREATE INDEX idx_agent_sessions_updated ON agent_sessions(updated_at)');
+    await db.execute(
+        'CREATE INDEX idx_agent_memories_updated ON agent_memories(updated_at)');
     // v15：补齐高频过滤/排序列的索引（见 [_addHotIndexes]）
     await _addHotIndexes(db);
     resetColumnCache();
@@ -701,6 +716,36 @@ class DatabaseHelper {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_agent_sessions_updated '
           'ON agent_sessions(updated_at)');
+    }
+    // v16 → v17：会话滚动摘要（长对话压缩，避免超出上下文窗口）。
+    // summary 存压缩后的摘要文本，summary_seq 记录已摘要到第几条消息。
+    if (oldVersion < 17) {
+      const alters = [
+        "ALTER TABLE agent_sessions ADD COLUMN summary TEXT NOT NULL DEFAULT ''",
+        'ALTER TABLE agent_sessions ADD COLUMN summary_seq INTEGER NOT NULL DEFAULT 0',
+      ];
+      for (final sql in alters) {
+        try {
+          await db.execute(sql);
+        } catch (e) {
+          if (!e.toString().contains('duplicate column')) rethrow;
+        }
+      }
+    }
+    // v17 → v18：智能体长期记忆（跨会话稳定事实，仅存本地加密库）。
+    if (oldVersion < 18) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS agent_memories (
+          id TEXT PRIMARY KEY,
+          category TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_agent_memories_updated '
+          'ON agent_memories(updated_at)');
     }
     // 表结构/索引变更后必须失效列表缓存，避免 pull 落库沿用升级前的旧列集合。
     resetColumnCache();

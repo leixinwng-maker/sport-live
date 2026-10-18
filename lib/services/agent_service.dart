@@ -6,7 +6,9 @@ import '../models/evidence.dart';
 import '../models/health_report.dart';
 import '../providers/app_provider.dart';
 import '../providers/wearable_provider.dart';
+import 'agent_context.dart';
 import 'agent_experts.dart';
+import 'agent_memory.dart';
 import 'agent_tools.dart';
 import 'ai_engine.dart';
 import 'any_search_service.dart';
@@ -159,6 +161,11 @@ class AgentService {
   /// 历史窗口（条数）。收窄到 16 条：每轮的 system prompt + 36 个工具 schema
   /// 已是固定开销，长历史会让 TTFT（首字延迟）线性变长，弱网关下更容易读断。
   static const int _maxHistoryMessages = 16;
+
+  /// 历史窗口（字符预算）。条数只挡住"条"，挡不住单条超长
+  /// （用户粘长文、某轮回答很长）；这里按 1 字≈1 token 保守估算，
+  /// 与条数限制同时生效，二者先到先裁。
+  static const int _maxHistoryChars = 12000;
   static const int _maxToolContentLength = 2000;
 
   /// 读工具结果短期缓存：key 为「工具名|参数JSON」，value 为 (结果, 写入时间)。
@@ -195,9 +202,13 @@ class AgentService {
   /// [onReasoning] 思维链增量回调（累计文本；仅推理类模型有）
   /// [onToolStep] 每次工具执行完成后的结构化步骤回调
   /// [forceFullTools] 强制下发全量工具 schema（带图消息等无法用关键词路由时使用）
+  /// [sessionSummary] 本会话较早对话的滚动摘要（为空则不注入）
+  /// [memories] 跨会话长期记忆（如「目标：半年减到 75kg」），为空则不注入
   Future<AgentReply> sendMessage({
     required List<Map<String, dynamic>> history,
     required String userText,
+    String sessionSummary = '',
+    List<String> memories = const [],
     void Function(String status)? onStatus,
     void Function(String cumulativeText)? onDelta,
     void Function(String thought)? onThought,
@@ -211,7 +222,9 @@ class AgentService {
     if (toolsUnsupported) {
       final text = await _sendWithInjection(
           history, userText, onStatus, onDelta,
-          onReasoning: onReasoning);
+          onReasoning: onReasoning,
+          sessionSummary: sessionSummary,
+          memories: memories);
       return AgentReply(text);
     }
 
@@ -221,11 +234,23 @@ class AgentService {
         ? toolSchemas
         : toolsForIntent(_routeText(history, userText));
 
+    final memoryBlock = memories.isEmpty
+        ? ''
+        : '【长期记忆（用户长期事实，回答时优先遵守）】\n'
+            '${memories.map((m) => '- $m').join('\n')}';
+
     final messages = <Map<String, dynamic>>[
       {
         'role': 'system',
         'content': '${_systemPrompt()}${expertPrompt(detectExpert(userText))}',
       },
+      if (sessionSummary.trim().isNotEmpty)
+        {
+          'role': 'system',
+          'content': '【本会话早前摘要】${sessionSummary.trim()}',
+        },
+      if (memoryBlock.isNotEmpty)
+        {'role': 'system', 'content': memoryBlock},
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
@@ -360,6 +385,8 @@ class AgentService {
     void Function(String status)? onStatus,
     void Function(String cumulativeText)? onDelta, {
     void Function(String cumulativeReasoning)? onReasoning,
+    String sessionSummary = '',
+    List<String> memories = const [],
   }) async {
     onStatus?.call('简化模式生成中…');
     final p = provider;
@@ -368,6 +395,10 @@ class AgentService {
         : '${p.getUserProfileText()}\n\n${p.getPersonalContext(days: 3)}';
     final expert = expertPrompt(detectExpert(userText));
     final base = '${_systemPrompt()}$expert';
+    final memoryBlock = memories.isEmpty
+        ? ''
+        : '【长期记忆（用户长期事实，回答时优先遵守）】\n'
+            '${memories.map((m) => '- $m').join('\n')}';
     final messages = <Map<String, dynamic>>[
       {
         'role': 'system',
@@ -375,6 +406,13 @@ class AgentService {
             ? base
             : '$base\n\n以下是用户真实数据（简化模式自动附带）：\n$context',
       },
+      if (sessionSummary.trim().isNotEmpty)
+        {
+          'role': 'system',
+          'content': '【本会话早前摘要】${sessionSummary.trim()}',
+        },
+      if (memoryBlock.isNotEmpty)
+        {'role': 'system', 'content': memoryBlock},
       ..._trimHistory(history),
       {'role': 'user', 'content': userText},
     ];
@@ -1690,8 +1728,13 @@ class AgentService {
   // 工具执行
   // ---------------------------------------------------------------------------
 
-  /// 执行工具并兜住异常与超时：任一失败/超时都转成可读文本回传模型，
-  /// 绝不让单个工具把整轮工具循环拖死（[Future.timeout] 见 [_toolTimeout]）。
+  /// 工具执行中间件链：可用性 → 缓存 → 超时 → 执行 → 错误归一 → 裁剪。
+  ///
+  /// 统一入口的价值：新增工具自动继承一致行为，不必在每个分支重复判断；
+  /// 也避免「提示词声明不可用、实际仍被调用」的不一致。
+  ///
+  /// 缓存位于 [executeTool] 的读工具分支（[_runReadToolCached]）；
+  /// 缓存命中的耗时可忽略，因此超时包装放在其外层不影响语义。
   ///
   /// [toolLimit] 覆盖默认超时：由调用方按总预算剩余时长下发，保证工具阶段
   /// 不会越过硬墙（默认 [_toolTimeout]）。
@@ -1701,14 +1744,60 @@ class AgentService {
     Duration? toolLimit,
   }) async {
     final limit = toolLimit ?? _toolTimeout;
+
+    // 1) 可用性：与 system prompt 的「不可用能力」保持同一判据
+    final blocked = _unavailableReason(name);
+    if (blocked != null) {
+      return ToolResult(blocked, ok: false);
+    }
+
+    // 2) 超时 + 执行 + 错误归一
+    final ToolResult result;
     try {
-      return await executeTool(name, args).timeout(limit);
+      result = await executeTool(name, args).timeout(limit);
     } on TimeoutException {
       return ToolResult(
           '工具「${toolLabel(name)}」执行超时（${limit.inSeconds} 秒），已跳过',
           ok: false);
     } catch (e) {
       return ToolResult('工具执行失败：$e', ok: false);
+    }
+
+    // 3) 结果裁剪：读工具兜底（写工具是短确认文案，不能套用"数据不完整"提示）
+    if (!agentWriteTools.contains(name) &&
+        result.text.length > _maxToolContentLength) {
+      return ToolResult(_clip(result.text), ok: result.ok, action: result.action);
+    }
+    return result;
+  }
+
+  /// 工具级可用性判据，与 [_unavailableCapabilities] 保持同一口径。
+  ///
+  /// 返回 null 表示可用；否则返回回传模型的可读原因。
+  String? _unavailableReason(String name) {
+    final p = provider;
+    final onlineOff = p != null && !p.evidenceOnlineSearch;
+
+    switch (name) {
+      case 'web_search':
+        if (onlineOff) return '联网检索已关闭，web_search 不可用';
+        if (p != null && !p.anySearchConfigured) {
+          return '未配置 AnySearch Key，web_search 不可用';
+        }
+        return null;
+      case 'search_literature':
+      case 'search_supplement_label':
+      case 'search_supplement_evidence':
+        return onlineOff ? '联网检索已关闭，$name 不可用' : null;
+      case 'get_wearable_summary':
+        final w = wearable;
+        if (w != null && (!w.available || !w.authorized)) {
+          return '穿戴数据未授权，请到「设置 → 运动健康数据」授权后再查询';
+        }
+        return null;
+      default:
+        // lookup_food 的条码查询会自行降级到本地库，不在入口拦截
+        return null;
     }
   }
 
@@ -3029,9 +3118,96 @@ class AgentService {
   // 上下文窗口
   // ---------------------------------------------------------------------------
 
-  /// 保留最近 [_maxHistoryMessages] 条历史
+  /// 把一段较早的对话压成不超过 500 字的摘要（失败返回 null）。
+  ///
+  /// 独立于主回答链路：由 AgentProvider 在回复结束后异步调用，
+  /// 超时或网络失败都静默，不影响正常问答。
+  Future<String?> summarizeHistory({
+    required List<Map<String, dynamic>> messages,
+    String previous = '',
+  }) async {
+    if (messages.isEmpty) return null;
+
+    final buf = StringBuffer();
+    for (final m in messages) {
+      final role = m['role'] == 'user' ? '用户' : '助手';
+      buf.writeln('$role：${m['content'] ?? ''}');
+    }
+    var transcript = buf.toString();
+    // 摘要请求本身也不能超窗口：只取尾部（最近的内容更重要）
+    const maxInput = 8000;
+    if (transcript.length > maxInput) {
+      transcript = transcript.substring(transcript.length - maxInput);
+    }
+
+    final prev = previous.trim();
+    final prompt = '请把下面的对话压缩成不超过 400 字的中文摘要，保留：'
+        '用户的目标与偏好、已达成的结论或决定、未解决的问题、需要持续遵守的约束。'
+        '不要编造，不要评价，只输出摘要正文。\n'
+        '${prev.isEmpty ? '' : '\n已有摘要（可在此基础上合并更新）：\n$prev\n'}'
+        '\n对话：\n$transcript';
+
+    try {
+      final text = await engine.chat([
+        {'role': 'system', 'content': '你是对话摘要器，只输出摘要正文，不要寒暄或解释。'},
+        {'role': 'user', 'content': prompt},
+      ]).timeout(const Duration(seconds: 25));
+      final t = text.trim();
+      if (t.isEmpty) return null;
+      return t.length > 500 ? t.substring(0, 500) : t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 从一段对话中抽取「跨会话仍然成立」的长期事实（失败返回空列表）。
+  ///
+  /// 与摘要同一触发时机，但只保留稳定信息；一次性事件、当天数据一律丢弃。
+  Future<List<MemoryFact>> extractMemories({
+    required List<Map<String, dynamic>> messages,
+  }) async {
+    if (messages.isEmpty) return const [];
+
+    final buf = StringBuffer();
+    for (final m in messages) {
+      final role = m['role'] == 'user' ? '用户' : '助手';
+      buf.writeln('$role：${m['content'] ?? ''}');
+    }
+    var transcript = buf.toString();
+    const maxInput = 6000;
+    if (transcript.length > maxInput) {
+      transcript = transcript.substring(transcript.length - maxInput);
+    }
+
+    final prompt = '从下面的对话中抽取「跨会话仍然成立」的长期事实，只保留：\n'
+        '- 长期目标（如减脂/增肌/马拉松）\n'
+        '- 训练与饮食偏好\n'
+        '- 忌口、过敏\n'
+        '- 伤病史、身体限制\n'
+        '- 作息习惯\n'
+        '- 器械或场地条件\n'
+        '不要抽取：一次性事件、某天的数据、临时情绪、推测与建议本身。\n'
+        '输出严格 JSON 数组，最多 5 条，每条 '
+        '{"category":"目标|偏好|忌口|伤病|作息|条件","content":"不超过 40 字"}；'
+        '没有可抽取内容时输出 []。\n\n对话：\n$transcript';
+
+    try {
+      final text = await engine.chat([
+        {'role': 'system', 'content': '你是信息抽取器，只输出 JSON 数组，不要解释。'},
+        {'role': 'user', 'content': prompt},
+      ]).timeout(const Duration(seconds: 25));
+      return parseMemoryFacts(text);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// 保留最近 [_maxHistoryMessages] 条，且不超过 [_maxHistoryChars] 字符
   List<Map<String, dynamic>> _trimHistory(List<Map<String, dynamic>> history) {
-    if (history.length <= _maxHistoryMessages) return history;
-    return history.sublist(history.length - _maxHistoryMessages);
+    return trimHistory(
+      history,
+      maxMessages: _maxHistoryMessages,
+      maxChars: _maxHistoryChars,
+    );
   }
 }

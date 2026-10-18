@@ -29,6 +29,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
+    final agent = Provider.of<AgentProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -102,6 +103,23 @@ class SettingsScreen extends StatelessWidget {
               ),
               value: provider.agentFullTools,
               onChanged: (val) => provider.setAgentFullTools(val),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 长期记忆（模型自动抽取，仅存本机，可查看与删除）
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.memory,
+                  color: TaoistTheme.bambooGreen),
+              title: const Text('长期记忆'),
+              subtitle: Text(
+                agent.memories.isEmpty
+                    ? '暂无记忆（对话达到一定长度后自动提取）'
+                    : '已记住 ${agent.memories.length} 条 · 仅存本机',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showMemories(context, agent),
             ),
           ),
           const SizedBox(height: 12),
@@ -655,6 +673,80 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (ok == true) await provider.logout();
+  }
+
+  /// 长期记忆列表：查看与逐条删除（仅本机，不入云）
+  Future<void> _showMemories(
+      BuildContext context, AgentProvider agent) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) => AnimatedBuilder(
+        animation: agent,
+        builder: (ctx, _) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('长期记忆'),
+                subtitle: const Text('智能体从对话中自动提取，仅保存在本机'),
+                trailing: TextButton(
+                  onPressed: agent.memories.isEmpty
+                      ? null
+                      : () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (d) => AlertDialog(
+                              title: const Text('清空长期记忆'),
+                              content: const Text('将删除全部已记住的事实，不可恢复。'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(d, false),
+                                  child: const Text('取消'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(d, true),
+                                  child: const Text('清空'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok == true) await agent.clearMemories();
+                        },
+                  child: const Text('清空'),
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: agent.memories.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('暂无记忆。对话达到一定长度后，会自动提取目标、'
+                            '偏好、忌口、伤病等稳定事实。'),
+                      )
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final m in agent.memories)
+                            ListTile(
+                              leading: const Icon(Icons.psychology_outlined),
+                              title: Text(m.content),
+                              subtitle: Text(m.category),
+                              trailing: IconButton(
+                                tooltip: '删除',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => agent.deleteMemory(m.id),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// 注销账号：服务端级联删除云端全部数据，随后清空本机库、对话与登录凭据。

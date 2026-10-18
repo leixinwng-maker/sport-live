@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../services/agent_memory.dart';
 import '../services/agent_service.dart';
 import '../services/database_helper.dart';
 import '../services/vision/vision_service.dart';
@@ -195,11 +196,19 @@ class AgentSession {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// 滚动摘要：对较早对话的压缩结果（≤500 字），随每轮请求注入
+  final String summary;
+
+  /// 已摘要到第几条消息（对应 [_messages] 的下标）
+  final int summarySeq;
+
   const AgentSession({
     required this.id,
     required this.title,
     required this.createdAt,
     required this.updatedAt,
+    this.summary = '',
+    this.summarySeq = 0,
   });
 }
 
@@ -214,12 +223,16 @@ class AgentProvider extends ChangeNotifier {
 
   String? _sessionId;
   final List<AgentSession> _sessions = [];
+  final List<AgentMemory> _memories = [];
 
   /// 当前会话 id（未初始化时为 null）
   String? get sessionId => _sessionId;
 
   /// 历史会话（按更新时间倒序）
   List<AgentSession> get sessions => List.unmodifiable(_sessions);
+
+  /// 跨会话长期记忆（仅本机，按更新时间倒序）
+  List<AgentMemory> get memories => List.unmodifiable(_memories);
 
   AppProvider? _app;
   AgentService? _agentService;
@@ -437,6 +450,8 @@ class AgentProvider extends ChangeNotifier {
       reply = await service.sendMessage(
         history: history,
         userText: effectiveText,
+        sessionSummary: _currentSummary,
+        memories: [for (final m in _memories) '${m.category}：${m.content}'],
         // 设置页「全量工具」开启时不再按意图裁剪工具，交由模型自主选择
         forceFullTools: _app?.agentFullTools ?? false,
         onStatus: (s) {
@@ -512,6 +527,14 @@ class AgentProvider extends ChangeNotifier {
     _streamingAnswer = false;
     notifyListeners();
     await _persist();
+    // 长对话压缩：不阻塞本轮回复，失败静默
+    await _maybeSummarize();
+  }
+
+  /// 当前会话摘要（无会话或未生成时为空）
+  String get _currentSummary {
+    final idx = _sessions.indexWhere((s) => s.id == _sessionId);
+    return idx >= 0 ? _sessions[idx].summary : '';
   }
 
   /// 记录一个思考步骤（相邻重复状态不重复入列，避免同一提示刷屏）
@@ -632,6 +655,8 @@ class AgentProvider extends ChangeNotifier {
       final db = await DatabaseHelper.instance.database;
       await db.delete('agent_messages');
       await db.delete('agent_sessions');
+      await db.delete('agent_memories');
+      _memories.clear();
       final s = await _insertSession(db, title: '新会话');
       _sessionId = s.id;
       _sessions.add(s);
@@ -685,6 +710,7 @@ class AgentProvider extends ChangeNotifier {
       final db = await DatabaseHelper.instance.database;
       await _migrateLegacyHistory(db);
       await _refreshSessions(db);
+      await _refreshMemories(db);
       if (_sessions.isEmpty) {
         final s = await _insertSession(db, title: '新会话');
         _sessionId = s.id;
@@ -729,6 +755,8 @@ class AgentProvider extends ChangeNotifier {
           title: title,
           createdAt: prev.createdAt,
           updatedAt: now,
+          summary: prev.summary,
+          summarySeq: prev.summarySeq,
         );
         _sessions.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       }
@@ -752,6 +780,8 @@ class AgentProvider extends ChangeNotifier {
             title: (r['title'] ?? '新会话') as String,
             createdAt: DateTime.parse(r['created_at'] as String),
             updatedAt: DateTime.parse(r['updated_at'] as String),
+            summary: (r['summary'] ?? '') as String,
+            summarySeq: (r['summary_seq'] as int?) ?? 0,
           ),
       ]);
     return _sessions;
@@ -771,8 +801,153 @@ class AgentProvider extends ChangeNotifier {
       'title': s.title,
       'created_at': s.createdAt.toIso8601String(),
       'updated_at': s.updatedAt.toIso8601String(),
+      'summary': '',
+      'summary_seq': 0,
     });
     return s;
+  }
+
+  /// 长对话滚动摘要：超过阈值时把较早的消息压成一段摘要。
+  ///
+  /// - 只摘要到「最近 10 条」之前，保留最近上下文原文；
+  /// - 每次覆盖旧摘要（把旧摘要一并交给模型延续），避免摘要无限增长；
+  /// - 失败静默，下轮再试，绝不影响正常回复。
+  static const int _summaryThreshold = 30;
+  bool _summarizing = false;
+
+  Future<void> _maybeSummarize() async {
+    if (_summarizing) return;
+    final sid = _sessionId;
+    final svc = _agentService;
+    if (sid == null || svc == null) return;
+    final idx = _sessions.indexWhere((s) => s.id == sid);
+    if (idx < 0) return;
+    final session = _sessions[idx];
+
+    final end = _messages.length - 10;
+    if (end - session.summarySeq < _summaryThreshold) return;
+
+    _summarizing = true;
+    try {
+      final slice = [
+        for (var i = session.summarySeq; i < end; i++) _messages[i].toJson(),
+      ];
+      final summary = await svc.summarizeHistory(
+        messages: slice,
+        previous: session.summary,
+      );
+      if (summary == null) return;
+
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'agent_sessions',
+        {'summary': summary, 'summary_seq': end},
+        where: 'id = ?',
+        whereArgs: [sid],
+      );
+      final i = _sessions.indexWhere((s) => s.id == sid);
+      if (i >= 0) {
+        final old = _sessions[i];
+        _sessions[i] = AgentSession(
+          id: old.id,
+          title: old.title,
+          createdAt: old.createdAt,
+          updatedAt: old.updatedAt,
+          summary: summary,
+          summarySeq: end,
+        );
+      }
+      // 同一批对话顺带抽取长期事实（失败静默，不额外加重试）
+      await _extractMemories(slice);
+    } catch (_) {
+      // 摘要失败静默
+    } finally {
+      _summarizing = false;
+    }
+  }
+
+  Future<void> _refreshMemories(Database db) async {
+    final rows = await db.query('agent_memories', orderBy: 'updated_at DESC');
+    _memories
+      ..clear()
+      ..addAll([
+        for (final r in rows)
+          AgentMemory(
+            id: r['id'] as String,
+            category: (r['category'] ?? '其他') as String,
+            content: (r['content'] ?? '') as String,
+            createdAt: DateTime.parse(r['created_at'] as String),
+            updatedAt: DateTime.parse(r['updated_at'] as String),
+          ),
+      ]);
+  }
+
+  /// 把抽取到的候选事实写入本地库：去重、上限 50 条
+  Future<void> _extractMemories(List<Map<String, dynamic>> slice) async {
+    final svc = _agentService;
+    if (svc == null || slice.isEmpty) return;
+    try {
+      final facts = await svc.extractMemories(messages: slice);
+      if (facts.isEmpty) return;
+
+      final db = await DatabaseHelper.instance.database;
+      final now = DateTime.now();
+      var added = 0;
+      for (final f in facts) {
+        if (isMemoryDuplicate(f.content, _memories.map((m) => m.content))) {
+          continue;
+        }
+        final m = AgentMemory(
+          id: _uuid.v4(),
+          category: f.category,
+          content: f.content,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await db.insert('agent_memories', {
+          'id': m.id,
+          'category': m.category,
+          'content': m.content,
+          'created_at': m.createdAt.toIso8601String(),
+          'updated_at': m.updatedAt.toIso8601String(),
+        });
+        _memories.insert(0, m);
+        added++;
+      }
+      // 上限 50 条，超出按最旧删除，避免无限增长
+      while (_memories.length > 50) {
+        final oldest = _memories.removeLast();
+        await db.delete('agent_memories',
+            where: 'id = ?', whereArgs: [oldest.id]);
+      }
+      if (added > 0) notifyListeners();
+    } catch (_) {
+      // 抽取失败静默
+    }
+  }
+
+  /// 删除一条长期记忆
+  Future<void> deleteMemory(String id) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('agent_memories', where: 'id = ?', whereArgs: [id]);
+    } catch (_) {
+      // 库不可用时至少保证内存态一致
+    }
+    _memories.removeWhere((m) => m.id == id);
+    notifyListeners();
+  }
+
+  /// 清空全部长期记忆
+  Future<void> clearMemories() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('agent_memories');
+    } catch (_) {
+      // 忽略
+    }
+    _memories.clear();
+    notifyListeners();
   }
 
   Future<List<ChatMessage>> _readMessages(Database db, String sid) async {

@@ -3,9 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:ai_planner/providers/agent_provider.dart';
 import 'package:ai_planner/providers/app_provider.dart';
 import 'package:ai_planner/screens/settings/settings_screen.dart';
 import 'package:ai_planner/services/cloud_api.dart';
+
+/// 设置页依赖 AppProvider 与 AgentProvider（后者用于「长期记忆」入口）
+Widget _screen(AppProvider provider) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<AppProvider>.value(value: provider),
+      ChangeNotifierProvider<AgentProvider>(create: (_) => AgentProvider()),
+    ],
+    child: const MaterialApp(home: SettingsScreen()),
+  );
+}
 
 /// 设置页「智能体工具范围」开关：
 /// 默认按意图路由（false），点击后切到全量工具（true）并写入本地设置。
@@ -14,12 +26,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final provider = AppProvider();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppProvider>.value(
-        value: provider,
-        child: const MaterialApp(home: SettingsScreen()),
-      ),
-    );
+    await tester.pumpWidget(_screen(provider));
     await tester.pump();
 
     expect(provider.agentFullTools, isFalse, reason: '默认应为自动路由');
@@ -40,12 +47,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     CloudApi.instance.authenticated = false;
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppProvider>.value(
-        value: AppProvider(),
-        child: const MaterialApp(home: SettingsScreen()),
-      ),
-    );
+    await tester.pumpWidget(_screen(AppProvider()));
     await tester.pump();
 
     final tile = find.text('注销账号');
@@ -65,12 +67,7 @@ void main() {
     CloudApi.instance.authenticated = true;
     addTearDown(() => CloudApi.instance.authenticated = false);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppProvider>.value(
-        value: AppProvider(),
-        child: const MaterialApp(home: SettingsScreen()),
-      ),
-    );
+    await tester.pumpWidget(_screen(AppProvider()));
     await tester.pump();
 
     final tile = find.text('注销账号');

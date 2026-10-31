@@ -1,4 +1,4 @@
-"""数据模型注册表：20 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
+"""数据模型注册表：23 张业务表（与 App 本地 sqflite 表一一镜像）+ 元数据表。
 
 设计要点：
 - 每张业务表统一追加同步字段：
@@ -77,7 +77,7 @@ def _t(name: str, type_: Any, required: bool = False, db_name: str = "") -> Colu
     return ColumnSpec(name=name, type=type_, required=required, db_name=db_name)
 
 
-# ------------------------------------------------------- 20 张业务表规格
+# ------------------------------------------------------- 23 张业务表规格
 
 BUSINESS_TABLES: dict[str, TableSpec] = {
     spec.name: spec
@@ -229,6 +229,19 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
             ),
         ),
         TableSpec(
+            "state_checkins",
+            (
+                _t("date", Text, True),
+                _t("phase", Text, True),
+                _t("workout_id", Text),
+                _t("answers", Text, True),
+                _t("scores", Text, True),
+                _t("advice", Text, True),
+                _t("ai_summary", Text),
+                _t("created_at", Text, True),
+            ),
+        ),
+        TableSpec(
             "ai_advice",
             (
                 _t("created_at", Text, True),
@@ -300,6 +313,34 @@ BUSINESS_TABLES: dict[str, TableSpec] = {
                 _t("recording_method", Text),
                 _t("extra", Text),
                 _t("created_at", Text, True),
+            ),
+        ),
+        # v1.3.0 阴阳动态平衡：目标修正留痕（含 v1.3.2 引擎建议来源 suggest）
+        TableSpec(
+            "adjustment_logs",
+            (
+                _t("created_at", Text, True),
+                _t("field", Text, True),
+                _t("old_value", Text),
+                _t("new_value", Text),
+                _t("reason", Text, True),
+                _t("observation", Text),
+                _t("source", Text, True),
+            ),
+        ),
+        # v1.3.0 周聚合快照；weekly_quiz 为 v1.3.2 主观周问 JSON（未答为 null）
+        TableSpec(
+            "weekly_summaries",
+            (
+                _t("week_start", Text, True),
+                _t("week_end", Text, True),
+                _t("weight_slope", Float),
+                _t("weight_delta", Float),
+                _t("avg_intake", Float),
+                _t("train_volume", Float),
+                _t("real_tdee", Float),
+                _t("status", Text, True),
+                _t("weekly_quiz", Text),
             ),
         ),
     )

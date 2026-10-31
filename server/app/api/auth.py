@@ -1,4 +1,4 @@
-"""鉴权路由：注册 / 登录 / 刷新 token / 注销账号。"""
+"""鉴权路由：注册 / 登录 / 刷新 token / 改密 / 注销账号。"""
 
 from __future__ import annotations
 
@@ -27,7 +27,12 @@ from app.models.tables import (
     sync_applied,
 )
 from app.models.tables import users as users_tbl
-from app.schemas.common import LoginIn, RegisterIn, TokenOut
+from app.schemas.common import (
+    ChangePasswordIn,
+    LoginIn,
+    RegisterIn,
+    TokenOut,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -97,6 +102,43 @@ async def me(user_id: CurrentUser, session: SessionDep) -> dict:
     if row is None:
         raise AppError.unauthorized("用户不存在")
     return {"id": row.id, "email": row.email, "display_name": row.display_name}
+
+
+@router.put("/password")
+async def change_password(
+    body: ChangePasswordIn, user_id: CurrentUser, session: SessionDep
+) -> dict:
+    """改密：需当前登录态 + 旧密码校验，流程与注销账号同型。
+
+    说明：与注销账号一致不引入令牌吊销表——旧 access token 最长 60 分钟
+    自然失效；refresh token 不主动失效，即其他已登录设备的会话不受影响。
+    """
+    if not login_limiter.check(f"password:{user_id}"):
+        raise AppError.rate_limited("操作过于频繁，请稍后再试")
+
+    row = (
+        await session.execute(
+            select(users_tbl.c.password_hash).where(users_tbl.c.id == user_id)
+        )
+    ).first()
+    if row is None:
+        raise AppError.unauthorized("用户不存在")
+    if not verify_password(body.old_password, row.password_hash):
+        raise AppError.unauthorized("旧密码错误")
+    if body.old_password == body.new_password:
+        raise AppError(
+            code="same_password",
+            message="新密码不能与旧密码相同",
+            status_code=400,
+        )
+
+    await session.execute(
+        users_tbl.update()
+        .where(users_tbl.c.id == user_id)
+        .values(password_hash=hash_password(body.new_password))
+    )
+    await session.commit()
+    return {"changed": True}
 
 
 class DeleteAccountIn(BaseModel):

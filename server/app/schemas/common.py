@@ -43,6 +43,13 @@ class TokenOut(BaseModel):
     user_id: str
 
 
+class ChangePasswordIn(BaseModel):
+    """改密必须校验旧密码：防止 token 被盗后直接接管账号。"""
+
+    old_password: str
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 # ---------- sync ----------
 
 class SyncItemIn(BaseModel):
